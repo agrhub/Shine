@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+server_dist
+gcp-service-account.json
+.DS_Store
+*~
+compare_results.json
+implementation_plan.md
+mirco-drama-features.md
+tmp
