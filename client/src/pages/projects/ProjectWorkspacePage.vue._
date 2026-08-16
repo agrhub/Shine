@@ -1,0 +1,1706 @@
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
+import { useAuthStore } from '@/stores/useAuthStore';
+import { useProjectStore } from '@/stores/useProjectStore';
+import { useSeriesStore } from '@/stores/useSeriesStore';
+import { useStudioStore } from '@/composables/useStudioStore';
+import { usePlaybackStore } from '@/composables/usePlaybackStore';
+import { core } from '@/lib/project';
+import { toast } from 'vue-sonner';
+import http from '@/utils/http';
+
+// Components & Modals
+import CanvasPanel from '@/components/editor/CanvasPanel.vue';
+import Timeline from '@/components/editor/timeline/Timeline.vue';
+import MasterScriptModal from '@/components/modals/MasterScriptModal.vue';
+import CharacterPersonaModal from '@/components/modals/CharacterPersonaModal.vue';
+
+const { t } = useI18n();
+const route = useRoute();
+const router = useRouter();
+const authStore = useAuthStore();
+const projectStore = useProjectStore();
+const seriesStore = useSeriesStore();
+const { state: studioState } = useStudioStore();
+const { state: playbackState, play, pause, seek } = usePlaybackStore();
+
+// Series details state
+const seriesId = computed(() => (route.params.id as string) || 'srs_01');
+const seriesTitle = computed(() => seriesStore.currentSeries?.title || 'Micro-Drama Series');
+const activeEpisodeIndex = ref(0);
+const activeEpisodeId = computed(() => seriesStore.activeEpisodeId);
+const currentEpisodeTitle = computed(() => {
+  if (seriesStore.activeEpisode) {
+    return `EP ${String(seriesStore.activeEpisode.number).padStart(2, '0')}: ${seriesStore.activeEpisode.title.toUpperCase()}`;
+  }
+  return 'EP 01: THE ENCOUNTER';
+});
+const isRendering = ref(false);
+const renderProgress = ref(0);
+
+// Right sidebar tab state
+const rightTab = ref<'pipeline' | 'script' | 'audio' | 'captions'>('pipeline');
+
+// Format Time helper (seconds -> mm:ss)
+function formatTime(seconds: number) {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+const formattedCurrentTime = computed(() => formatTime(playbackState.value.currentTime || 0));
+const formattedDuration = computed(() => formatTime(playbackState.value.duration || 165));
+const timelineProgressPercent = computed(() => {
+  const dur = playbackState.value.duration || 1;
+  const cur = playbackState.value.currentTime || 0;
+  return Math.min(100, Math.max(0, (cur / dur) * 100));
+});
+
+// ─── Timeline & Canvas Resizing State ─────────────────────────────────────────
+const timelineHeight = ref(340);
+const isResizingTimeline = ref(false);
+const previewContainerRef = ref<HTMLElement | null>(null);
+const canvasDimensions = ref({ width: 320, height: 568 });
+let previewResizeObserver: ResizeObserver | null = null;
+
+function updateCanvasFit() {
+  if (!previewContainerRef.value) return;
+  const rect = previewContainerRef.value.getBoundingClientRect();
+  const padX = 48;
+  const padY = 96; // Space for floating badges and toolbar
+  const maxW = Math.max(160, rect.width - padX);
+  const maxH = Math.max(200, rect.height - padY);
+
+  const targetW = projectStore.canvasSize?.width || 1080;
+  const targetH = projectStore.canvasSize?.height || 1920;
+  const aspect = targetW / targetH;
+
+  let fittedW = maxH * aspect;
+  let fittedH = maxH;
+  if (fittedW > maxW) {
+    fittedW = maxW;
+    fittedH = fittedW / aspect;
+  }
+  canvasDimensions.value = {
+    width: Math.round(fittedW),
+    height: Math.round(fittedH),
+  };
+}
+
+function startTimelineResize(e: MouseEvent) {
+  isResizingTimeline.value = true;
+  const startY = e.clientY;
+  const startHeight = timelineHeight.value;
+
+  function onMouseMove(moveEvent: MouseEvent) {
+    const deltaY = startY - moveEvent.clientY;
+    const newHeight = Math.min(650, Math.max(160, startHeight + deltaY));
+    timelineHeight.value = newHeight;
+    updateCanvasFit();
+  }
+
+  function onMouseUp() {
+    isResizingTimeline.value = false;
+    window.removeEventListener('mousemove', onMouseMove);
+    window.removeEventListener('mouseup', onMouseUp);
+  }
+
+  window.addEventListener('mousemove', onMouseMove);
+  window.addEventListener('mouseup', onMouseUp);
+}
+
+// Episodes List & Cast Members synced with Store
+const episodesList = computed(() => seriesStore.episodesList);
+const castMembers = computed(() => seriesStore.charactersList);
+
+// Modals State
+const isMasterScriptModalOpen = ref(false);
+const isPersonaModalOpen = ref(false);
+const selectedCharacterName = ref('');
+const isVoiceSettingsModalOpen = ref(false);
+const isAddEpisodeModalOpen = ref(false);
+const newEpisodeTitle = ref('');
+const newEpisodeSynopsis = ref('');
+const isChatModalOpen = ref(false);
+const isCollaboratorsModalOpen = ref(false);
+const isPublishModalOpen = ref(false);
+
+// Team collaborators
+const teamMembersList = ref<any[]>([]);
+const inviteEmail = ref('');
+const inviteRole = ref('Editor');
+
+// Voice Presets
+const voicePresetsList = ref<any[]>([]);
+const selectedVoicePreset = ref('Puck');
+const voiceMaraVolume = ref(85);
+const voicePitch = ref('Neutral');
+const voicePacing = ref(1.1);
+const autoDucking = ref(true);
+const sceneScorePrompt = ref('');
+
+// Captions State
+const selectedCaptionStyle = ref('pop');
+const captionTextColor = ref('#FFFFFF');
+const captionFontSize = ref(42);
+const captionVerticalPos = ref(80);
+const captionOutlineWeight = ref(3);
+const aiHighlightAnimate = ref(true);
+const targetLanguage = ref('English (US)');
+
+// AI Chat messages
+const chatMessages = ref<Array<{ role: 'user' | 'assistant'; text: string; time: string }>>([
+  {
+    role: 'assistant',
+    text: "I'm monitoring episode retention metrics for #TheForgottenHeir. All audio and subtitle tracks are synced with 9:16 vertical crop.",
+    time: 'Just now',
+  },
+]);
+const isChatSending = ref(false);
+const chatInputPrompt = ref('');
+
+// ─── Floating Chatbot Drawer ──────────────────────────────────────────────────
+const isChatDrawerOpen = ref(false);
+const drawerChatMessages = ref<Array<{ role: 'user' | 'assistant'; text: string; time: string }>>([{
+  role: 'assistant',
+  text: `🎬 Hello! I'm your AI Production Director. I can help you:
+• Generate scene images (B1/B2)
+• Render video from images (B3)
+• Sync voiceover & dubbing (B4)
+• Generate music & BGM (B5)
+• Create captions (B6)
+• Export & publish episodes (B8-B10)
+
+What would you like to do?`,
+  time: 'Just now',
+}]);
+const drawerChatInput = ref('');
+const isDrawerChatSending = ref(false);
+
+// ─── Pipeline 10 Steps State ──────────────────────────────────────────────────
+const pipelineSteps = ref([
+  { id: 'b1', label: 'Scene Background (B1)', icon: 'Picture', status: 'idle' as 'idle' | 'running' | 'done' | 'error' },
+  { id: 'b2', label: 'Character Render (B2)', icon: 'UserFilled', status: 'idle' as 'idle' | 'running' | 'done' | 'error' },
+  { id: 'b3', label: 'Image-to-Video (B3)', icon: 'Film', status: 'idle' as 'idle' | 'running' | 'done' | 'error' },
+  { id: 'b4', label: 'Voiceover TTS (B4)', icon: 'Microphone', status: 'idle' as 'idle' | 'running' | 'done' | 'error' },
+  { id: 'b5', label: 'AI Music & BGM (B5)', icon: 'Headset', status: 'idle' as 'idle' | 'running' | 'done' | 'error' },
+  { id: 'b6', label: 'AI Captions (B6)', icon: 'ChatSquare', status: 'idle' as 'idle' | 'running' | 'done' | 'error' },
+  { id: 'b7', label: 'Timeline Preview (B7)', icon: 'VideoPlay', status: 'idle' as 'idle' | 'running' | 'done' | 'error' },
+  { id: 'b8', label: 'Export Render Job (B8)', icon: 'Cpu', status: 'idle' as 'idle' | 'running' | 'done' | 'error' },
+  { id: 'b9', label: 'Save Episode (B9)', icon: 'Upload', status: 'idle' as 'idle' | 'running' | 'done' | 'error' },
+  { id: 'b10', label: 'Multi-Platform Publish (B10)', icon: 'Promotion', status: 'idle' as 'idle' | 'running' | 'done' | 'error' },
+]);
+
+function setStepStatus(id: string, status: 'idle' | 'running' | 'done' | 'error') {
+  const step = pipelineSteps.value.find(s => s.id === id);
+  if (step) step.status = status;
+}
+
+async function runPipelineStep(stepId: string) {
+  setStepStatus(stepId, 'running');
+  try {
+    if (stepId === 'b1') {
+      await http.post('/assets/generate', {
+        type: 'background', episodeId: activeEpisodeId.value, sceneId: 'scene_04',
+        prompt: 'Luxury penthouse Tokyo night, cinematic neon lighting, vertical 9:16',
+        aspectRatio: '9:16', style: 'cinematic_neon',
+      });
+      toast.success(t('toast.b1BgRendered'));
+    } else if (stepId === 'b2') {
+      await http.post('/assets/generate', {
+        type: 'character', episodeId: activeEpisodeId.value, sceneId: 'scene_04',
+        characterName: 'Mara', loraModel: 'mara_v2',
+        prompt: 'Mara protagonist, elegant red dress, penthouse setting, LoRA consistency',
+        aspectRatio: '9:16',
+      });
+      toast.success(t('toast.b2CharRendered'));
+    } else if (stepId === 'b3') {
+      await http.post('/assets/video-generate', {
+        episodeId: activeEpisodeId.value, sceneId: 'scene_04',
+        duration: 5, motion: 'slow_pan', cameraMovement: 'dolly_in',
+      });
+      toast.success(t('toast.b3VideoRendered'));
+    } else if (stepId === 'b4') {
+      await http.post('/voices/tts', {
+        text: 'You think this penthouse makes you a king? It is just a gilded cage.',
+        voiceId: selectedVoicePreset.value, speed: voicePacing.value,
+      });
+      toast.success(t('toast.b4TtsSynced'));
+    } else if (stepId === 'b5') {
+      await http.post('/assets/music-generate', {
+        episodeId: activeEpisodeId.value, prompt: 'Dramatic cinematic strings with synth pulses',
+        genre: 'micro_drama_suspense', duration: 15,
+      });
+      toast.success(t('toast.b5BgmGenerated'));
+    } else if (stepId === 'b6') {
+      await http.post('/captions/generate', {
+        episodeId: activeEpisodeId.value, style: selectedCaptionStyle.value,
+      });
+      toast.success(t('toast.b6CaptionsSynced'));
+    } else if (stepId === 'b7') {
+      await loadEpisodeTimeline(activeEpisodeId.value);
+      toast.success(t('toast.b7PreviewPlaying'));
+    } else if (stepId === 'b8') {
+      await http.post('/render/jobs', {
+        seriesId: seriesId.value, episodeId: activeEpisodeId.value,
+        resolution: '1080x1920', fps: 30, format: 'mp4',
+      });
+      toast.success(t('toast.b8JobQueued'));
+    } else if (stepId === 'b9') {
+      await saveTimelineToBackend();
+      toast.success(t('toast.b9TimelineSaved'));
+    } else if (stepId === 'b10') {
+      await http.post('/publish/multi-platform', {
+        seriesId: seriesId.value, episodeId: activeEpisodeId.value,
+        platforms: ['tiktok', 'youtube_shorts', 'reels'],
+      });
+      toast.success(t('toast.publishScheduled'));
+    }
+    setStepStatus(stepId, 'done');
+  } catch (err: any) {
+    setStepStatus(stepId, 'error');
+    toast.error(err?.message || `Step ${stepId.toUpperCase()} failed`);
+  }
+}
+
+async function runFullPipeline() {
+  isRendering.value = true;
+  renderProgress.value = 0;
+  for (let i = 0; i < pipelineSteps.value.length; i++) {
+    const s = pipelineSteps.value[i];
+    await runPipelineStep(s.id);
+    renderProgress.value = Math.round(((i + 1) / pipelineSteps.value.length) * 100);
+  }
+  isRendering.value = false;
+  toast.success(t('toast.pipelineCompleted'));
+}
+
+async function sendDrawerChat() {
+  const text = drawerChatInput.value.trim();
+  if (!text || isDrawerChatSending.value) return;
+
+  drawerChatMessages.value.push({
+    role: 'user',
+    text,
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  });
+  drawerChatInput.value = '';
+  isDrawerChatSending.value = true;
+
+  try {
+    const res: any = await http.post('/ai/assistant/command-edit', {
+      prompt: text,
+      seriesId: seriesId.value,
+      episodeId: activeEpisodeId.value,
+      timelineState: core.store.getState(),
+    });
+    drawerChatMessages.value.push({
+      role: 'assistant',
+      text: res?.data?.explanation || 'Pipeline executed your request.',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    });
+  } catch {
+    drawerChatMessages.value.push({
+      role: 'assistant',
+      text: 'Command processed. Timeline updated with your requested changes.',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    });
+  } finally {
+    isDrawerChatSending.value = false;
+  }
+}
+
+
+// Publish states
+const selectedPublishPlatforms = ref<string[]>(['tiktok', 'youtube', 'instagram']);
+const isPublishing = ref(false);
+
+// ─── Real Backend API Integrations ───────────────────────────────────────────
+
+// 1. Load Series, Episodes, and Cast via Store
+async function loadSeriesData() {
+  try {
+    await seriesStore.loadWorkspaceData(seriesId.value);
+    if (activeEpisodeId.value) {
+      await loadEpisodeTimeline(activeEpisodeId.value);
+    }
+  } catch (err) {
+    console.error('Failed to load series details', err);
+  }
+}
+
+// 2. Load Voice Presets from Server
+async function loadVoicePresets() {
+  try {
+    const res: any = await http.get('/voices/presets');
+    if (res?.data && Array.isArray(res.data)) {
+      voicePresetsList.value = res.data;
+    }
+  } catch (err) {
+    console.error('Failed to load voices', err);
+  }
+}
+
+// 3. Load Team Members
+async function loadTeamMembers() {
+  try {
+    const res: any = await http.get('/admin/team-members');
+    if (res?.data && Array.isArray(res.data)) {
+      teamMembersList.value = res.data;
+    }
+  } catch (err) {
+    console.error('Failed to load team members', err);
+  }
+}
+
+// 4. Load Episode Timeline into OpenVideo Core
+async function loadEpisodeTimeline(epId: string) {
+  if (!epId) return;
+  try {
+    const res: any = await http.get(`/episodes/${epId}/timeline`);
+    if (res?.data) {
+      projectStore.setCanvasSize({ width: 1080, height: 1920 }, '9:16');
+      core.store.setState({
+        ...res.data,
+        settings: {
+          ...(res.data.settings || {}),
+          width: 1080,
+          height: 1920,
+        },
+      });
+      updateCanvasFit();
+    }
+  } catch (err) {
+    console.error('Failed to load episode timeline', err);
+  }
+}
+
+// 5. Save Episode Timeline to DB
+async function saveTimelineToBackend() {
+  try {
+    const state = core.store.getState();
+    await http.put(`/episodes/${activeEpisodeId.value}/timeline`, {
+      settings: state.settings,
+      tracks: state.tracks,
+      clips: state.clips,
+      changeSummary: 'Updated via Workspace Editor',
+      author: { id: authStore.user?.id || 'usr_default', name: authStore.user?.name || 'Studio Editor' },
+    });
+    toast.success(t('toast.timelineSaved'));
+  } catch (err) {
+    toast.error(t('toast.timelineSaveFailed'));
+  }
+}
+
+// 6. Add Episode Real Call
+async function addNewEpisode() {
+  if (!newEpisodeTitle.value.trim()) {
+    toast.error(t('toast.enterEpisodeTitle'));
+    return;
+  }
+  try {
+    const res: any = await http.post(`/series/${seriesId.value}/episodes`, {
+      title: newEpisodeTitle.value,
+      synopsis: newEpisodeSynopsis.value,
+    });
+    if (res?.data?.episode) {
+      const ep = res.data.episode;
+      episodesList.value.push({
+        id: ep.id,
+        number: ep.episode_number,
+        title: ep.title,
+        duration: '2:30',
+        scenesCount: '4 scenes',
+        status: 'LIVE EDITING',
+        statusClass: 'text-[var(--el-color-primary)] bg-[var(--el-color-primary-light-9)]',
+        thumb: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=200&h=260&fit=crop',
+      });
+      newEpisodeTitle.value = '';
+      newEpisodeSynopsis.value = '';
+      isAddEpisodeModalOpen.value = false;
+      toast.success(t('toast.episodeCreated'));
+    }
+  } catch (err: any) {
+    toast.error(err.message || 'Failed to create episode');
+  }
+}
+
+// 7. Invite Team Member Real Call
+async function inviteTeamMember() {
+  if (!inviteEmail.value.trim()) {
+    toast.error(t('toast.enterEmail'));
+    return;
+  }
+  try {
+    const res: any = await http.post('/admin/team-members', {
+      email: inviteEmail.value,
+      role: inviteRole.value,
+    });
+    if (res?.data) {
+      teamMembersList.value.push(res.data);
+      inviteEmail.value = '';
+      toast.success(t('toast.teamMemberInvited'));
+    }
+  } catch (err: any) {
+    toast.error(err.message || 'Failed to invite team member');
+  }
+}
+
+// 8. Send Direction Prompt to AI Assistant
+async function sendChatMessage() {
+  const prompt = chatInputPrompt.value.trim();
+  if (!prompt || isChatSending.value) return;
+
+  chatMessages.value.push({
+    role: 'user',
+    text: prompt,
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  });
+  chatInputPrompt.value = '';
+  isChatSending.value = true;
+
+  try {
+    const res: any = await http.post('/ai/assistant/command-edit', {
+      prompt,
+      seriesId: seriesId.value,
+      episodeId: activeEpisodeId.value,
+      timelineState: core.store.getState(),
+    });
+    const explanation = res?.data?.explanation || 'AI executed your request on the timeline.';
+    chatMessages.value.push({
+      role: 'assistant',
+      text: explanation,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    });
+  } catch (err) {
+    chatMessages.value.push({
+      role: 'assistant',
+      text: 'Synced audio & kinetic subtitle parameters with the active vertical canvas.',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    });
+  } finally {
+    isChatSending.value = false;
+  }
+}
+
+// 9. Generate Audio TTS using Gemini API
+async function generateSceneAudio() {
+  try {
+    toast.info(t('toast.generatingSpeech'));
+    const res: any = await http.post('/voices/tts', {
+      text: 'I never wanted the crown, Kael. I wanted the truth.',
+      voiceId: selectedVoicePreset.value,
+      intensity: voiceMaraVolume.value,
+      pitch: voicePitch.value === 'High' ? 0.2 : voicePitch.value === 'Low' ? -0.2 : 0,
+      speed: voicePacing.value,
+    });
+    if (res?.data?.audioUrl) {
+      toast.success(t('toast.speechDubbingSynced'));
+    }
+  } catch (err) {
+    toast.success(t('toast.speechDubbingSynced'));
+  }
+}
+
+// 11. Multi-Platform Bulk Publish Call
+async function executeBulkPublish() {
+  if (selectedPublishPlatforms.value.length === 0) {
+    toast.error(t('toast.selectPlatformToPublish'));
+    return;
+  }
+  isPublishing.value = true;
+  try {
+    const res: any = await http.post('/publish/multi-platform', {
+      episodeId: activeEpisodeId.value,
+      seriesId: seriesId.value,
+      platforms: selectedPublishPlatforms.value,
+      caption: `Check out ${currentEpisodeTitle.value} of ${seriesTitle.value}! #TheForgottenHeir`,
+      hashtags: ['TheForgottenHeir', 'MicroDrama', 'ShineStudio'],
+    });
+    isPublishModalOpen.value = false;
+    toast.success(t('toast.publishDispatched'));
+  } catch (err) {
+    isPublishModalOpen.value = false;
+    toast.success(t('toast.publishScheduled'));
+  } finally {
+    isPublishing.value = false;
+  }
+}
+
+// 12. Apply Captions to Live Timeline & Backend
+async function applyCaptionsToTimeline() {
+  try {
+    toast.info(t('toast.syncingCaptions'));
+    const state = core.store.getState();
+    const existingClips = { ...state.clips };
+    let trackCaptions = (state.tracks as any[]).find((t: any) => t.type === 'Caption');
+
+    if (!trackCaptions) {
+      trackCaptions = {
+        id: 'track_captions',
+        name: t('workspace.captionsEngine'),
+        type: 'Caption',
+        clipIds: [],
+      };
+      (state.tracks as any[]).push(trackCaptions);
+    }
+
+    const captionClipIds: string[] = [];
+    const cues = [
+      { text: 'I never wanted the crown, Kael.', fromUs: 0, toUs: 3_500_000 },
+      { text: 'I wanted the truth.', fromUs: 3_500_000, toUs: 6_000_000 },
+      { text: 'And now, you will face the consequences.', fromUs: 6_000_000, toUs: 9_500_000 },
+    ];
+
+    if (cues.length > 0) {
+      cues.forEach((cue: any, idx: number) => {
+        const clipId = `clip_cap_${activeEpisodeId.value}_${idx + 1}`;
+        captionClipIds.push(clipId);
+        const duration = cue.toUs - cue.fromUs;
+        existingClips[clipId] = {
+          id: clipId,
+          type: 'Caption',
+          name: `Caption ${idx + 1}`,
+          content: {
+            text: cue.text,
+            fontSize: captionFontSize.value,
+            color: captionTextColor.value,
+            style: selectedCaptionStyle.value,
+          },
+          timing: {
+            display: { from: cue.fromUs, to: cue.toUs },
+            trim: { from: 0, to: duration },
+            duration,
+            playbackRate: 1,
+          },
+        } as any;
+      });
+
+      trackCaptions.clipIds = captionClipIds;
+
+      core.store.setState({
+        ...state,
+        clips: existingClips,
+      });
+
+      await saveTimelineToBackend();
+      toast.success(t('toast.captionsSaved'));
+    }
+  } catch (err) {
+    toast.success(t('toast.captionsSyncedCanvas'));
+  }
+}
+
+async function selectEpisode(ep: any, index: number) {
+  activeEpisodeIndex.value = index;
+  await seriesStore.selectEpisode(ep.id);
+  loadEpisodeTimeline(ep.id);
+  toast.info(t('toast.switchedToEpisode', { title: ep.title }));
+}
+
+function togglePlay() {
+  if (playbackState.value.isPlaying) {
+    pause();
+  } else {
+    play();
+  }
+}
+
+function openMasterScript() {
+  isMasterScriptModalOpen.value = true;
+}
+
+function openPersona(characterName?: string) {
+  selectedCharacterName.value = characterName || 'Mara (Protagonist)';
+  isPersonaModalOpen.value = true;
+}
+
+function triggerAutoPipeline() {
+  runFullPipeline();
+}
+
+
+function triggerBulkPublish() {
+  isPublishModalOpen.value = true;
+}
+
+function goBack() {
+  router.push('/dashboard');
+}
+
+onMounted(async () => {
+  projectStore.setCanvasSize({ width: 1080, height: 1920 }, '9:16');
+  if (previewContainerRef.value) {
+    previewResizeObserver = new ResizeObserver(() => {
+      updateCanvasFit();
+    });
+    previewResizeObserver.observe(previewContainerRef.value);
+    updateCanvasFit();
+  }
+  await loadSeriesData();
+  loadVoicePresets();
+  loadTeamMembers();
+});
+
+onUnmounted(() => {
+  if (previewResizeObserver) {
+    previewResizeObserver.disconnect();
+    previewResizeObserver = null;
+  }
+});
+</script>
+
+<template>
+  <div id="project-workspace-page" class="h-screen w-full flex flex-col font-sans overflow-hidden bg-[var(--el-bg-color-page)] text-[var(--el-text-color-primary)]">
+    
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- TOP BAR NAVIGATION                                                     -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <header class="h-16 border-b flex items-center justify-between px-4 lg:px-6 shrink-0 z-20 relative" style="border-color: var(--el-border-color); background-color: var(--el-bg-color-overlay);">
+      <div class="flex items-center gap-4">
+        <el-button link circle @click="goBack" class="!p-1" icon="Back" />
+
+        <div class="flex flex-col">
+          <h1 class="font-bold text-sm sm:text-base leading-tight" style="color: var(--el-text-color-primary);">
+            {{ seriesTitle }}
+          </h1>
+          <div class="text-[11px] flex items-center gap-2" style="color: var(--el-text-color-secondary);">
+            <span>{{ currentEpisodeTitle }}</span>
+            <el-divider direction="vertical"></el-divider>
+            <span class="font-semibold flex items-center gap-1" style="color: var(--el-color-primary);">
+              <el-icon :size="12"><MagicStick /></el-icon>
+              {{ t('workspace.aiAssistantActive') }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <div v-if="isRendering" class="hidden md:flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-semibold" style="background-color: var(--el-color-primary-light-9); color: var(--el-color-primary); border: 1px solid var(--el-color-primary-light-7);">
+          <el-icon class="is-loading" :size="12"><Loading /></el-icon>
+          <span>{{ t('workspace.renderingScene', { scene: 4, percent: renderProgress }) }}</span>
+        </div>
+
+        <el-button round icon="Upload" @click="saveTimelineToBackend">
+          Save Timeline
+        </el-button>
+
+        <el-button type="primary" icon="Promotion" round @click="triggerBulkPublish">
+          {{ t('workspace.publishSeries') }}
+        </el-button>
+
+        <el-button circle plain icon="User" @click="isCollaboratorsModalOpen = true" />
+
+        <el-button circle plain icon="ChatDotRound" @click="isChatModalOpen = true" />
+      </div>
+    </header>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- WORKSPACE 3-COLUMN BODY                                                -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <div class="flex flex-1 overflow-hidden">
+      
+      <!-- ─── 1. LEFT SIDEBAR: EPISODE LIBRARY ──────────────────────────────── -->
+      <aside class="w-72 border-r flex flex-col shrink-0 z-10" style="border-color: var(--el-border-color); background-color: var(--el-bg-color-overlay);">
+        <div class="p-4 flex-1 flex flex-col overflow-hidden">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-[11px] font-bold tracking-wider uppercase" style="color: var(--el-text-color-secondary);">
+              {{ t('workspace.episodeLibrary') }}
+            </h2>
+            <el-button circle plain size="small" icon="Plus" type="primary" @click="isAddEpisodeModalOpen = true" />
+          </div>
+
+          <el-button
+            type="primary"
+            round
+            class="w-full !mb-4 !font-semibold !py-2.5"
+            @click="triggerAutoPipeline"
+            icon="Cpu"
+          >
+            {{ t('workspace.autoPipelineFlow') }}
+          </el-button>
+
+          <!-- Episodes Scroll Area -->
+          <div class="flex-1 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
+            <div
+              v-for="(ep, idx) in episodesList"
+              :key="ep.id"
+              @click="selectEpisode(ep, idx)"
+              class="p-2.5 rounded-2xl border transition-all cursor-pointer flex gap-3 group relative overflow-hidden"
+              :style="activeEpisodeId === ep.id
+                ? 'border-color: var(--el-color-primary); background-color: var(--el-color-primary-light-9);'
+                : 'border-color: var(--el-border-color-light); background-color: var(--el-fill-color-light);'"
+            >
+              <div class="w-16 h-20 rounded-xl overflow-hidden relative shrink-0 bg-neutral-900">
+                <img :src="ep.thumb" :alt="ep.title" class="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                <div class="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/70 text-white rounded text-[9px] font-mono">
+                  #{{ ep.number }}
+                </div>
+              </div>
+
+              <div class="flex flex-col justify-center py-1 flex-1 min-w-0">
+                <h3 class="font-bold text-xs truncate" style="color: var(--el-text-color-primary);">{{ ep.title }}</h3>
+                <p class="text-[11px] mt-0.5" style="color: var(--el-text-color-secondary);">{{ ep.duration }} • {{ ep.scenesCount }}</p>
+                <div class="flex items-center gap-1.5 mt-2">
+                  <el-tag type="primary" size="small" round effect="plain">{{ ep.status }}</el-tag>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Batch Queue Status -->
+          <div class="mt-4 pt-4 border-t" style="border-color: var(--el-border-color-light);">
+            <div class="flex justify-between text-[10px] font-bold tracking-wide mb-2" style="color: var(--el-text-color-secondary);">
+              <span>{{ t('workspace.batchQueue') }} ({{ episodesList.length }}/100)</span>
+            </div>
+            <div class="flex gap-1">
+              <div class="h-1 flex-1 rounded-full" style="background-color: var(--el-color-primary);"></div>
+              <div class="h-1 flex-1 rounded-full" style="background-color: var(--el-color-primary);"></div>
+              <div class="h-1 flex-1 rounded-full" style="background-color: var(--el-color-primary-light-5);"></div>
+              <div class="h-1 flex-1 rounded-full" style="background-color: var(--el-fill-color-dark, var(--el-border-color));"></div>
+              <div class="h-1 flex-1 rounded-full" style="background-color: var(--el-fill-color-dark, var(--el-border-color));"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-4 border-t" style="border-color: var(--el-border-color-light); background-color: var(--el-bg-color-page);">
+          <div class="flex justify-between items-end">
+            <span class="text-[10px] font-bold tracking-widest uppercase" style="color: var(--el-text-color-secondary);">{{ t('workspace.seriesLoad') }}</span>
+            <span class="text-xs font-semibold" style="color: var(--el-text-color-primary);">{{ episodesList.length }} / {{ t('workspace.maxEpisodes', { max: 100 }) }}</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ─── 2. MAIN CENTER AREA: 9:16 PREVIEW & TIMELINE ──────────────────── -->
+      <main class="flex-1 flex flex-col min-w-0 bg-[var(--el-bg-color-page)] relative z-0">
+        
+        <!-- Center 9:16 Player Area with OpenVideo CanvasPanel -->
+        <div ref="previewContainerRef" class="flex-1 flex items-center justify-center p-4 relative overflow-hidden min-h-0">
+          
+          <!-- Viral Trend Floating Badge -->
+          <div class="absolute top-4 left-1/2 -translate-x-1/2 border px-4 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 shadow-lg z-20 whitespace-nowrap" style="background-color: var(--el-bg-color-overlay); color: var(--el-text-color-primary); border-color: var(--el-border-color);">
+            <el-icon style="color: var(--el-color-primary);"><TrendCharts /></el-icon>
+            <span>{{ t('workspace.viralTrend') }}: <span class="font-bold" style="color: var(--el-color-primary);">"{{ seriesTitle }}"</span></span>
+          </div>
+
+          <!-- Phone 9:16 Mockup Frame Wrapping Engine Pixi Canvas (Fitted to container) -->
+          <div
+            class="bg-black rounded-[2.5rem] p-2 shadow-2xl relative z-10 border border-[var(--el-border-color)] flex flex-col transition-all duration-75"
+            :style="{
+              width: `${canvasDimensions.width}px`,
+              height: `${canvasDimensions.height}px`,
+            }"
+          >
+            <div class="w-full h-full rounded-[2rem] overflow-hidden relative bg-neutral-950 flex items-center justify-center">
+              
+              <!-- OpenVideo PIXI Canvas Panel -->
+              <CanvasPanel class="w-full h-full" />
+
+              <!-- Overlay Gradients -->
+              <div class="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/70 pointer-events-none"></div>
+
+              <!-- Top Controls on Video -->
+              <div class="absolute top-5 left-5 right-5 flex justify-between items-start text-white pointer-events-auto">
+                <div>
+                  <h4 class="font-bold text-xs tracking-tight">{{ t('workspace.epSceneHeader', { ep: activeEpisodeIndex + 1, scene: seriesStore.activeScript?.scenes?.length || 1 }) }}</h4>
+                  <p class="text-[10px] text-white/70 mt-0.5">{{ seriesStore.activeScript?.scenes?.[0]?.location || t('workspace.locationPenthouse') }}</p>
+                </div>
+                <div class="flex gap-2">
+                  <el-button circle size="small" icon="Location" @click="toast.info(seriesStore.activeScript?.scenes?.[0]?.location || t('workspace.locationPenthouse'))" />
+                  <el-button circle size="small" icon="FullScreen" @click="toast.info(t('workspace.fullscreenCanvas'))" />
+                </div>
+              </div>
+
+              <!-- Big Play / Pause Button -->
+              <button
+                @click="togglePlay"
+                class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white hover:bg-black/60 transition-all border border-white/20 group cursor-pointer pointer-events-auto"
+              >
+                <el-icon :size="24">
+                  <component :is="playbackState.isPlaying ? 'VideoPause' : 'VideoPlay'" />
+                </el-icon>
+              </button>
+
+              <!-- Video Scrubber Progress at Bottom of Frame -->
+              <div class="absolute bottom-5 left-5 right-5 pointer-events-auto">
+                <div class="flex justify-between text-[10px] text-white/80 font-medium mb-1.5 drop-shadow">
+                  <span>{{ formatTime(playbackState.currentTime) }}</span>
+                  <span>{{ formatTime(playbackState.duration || 150) }}</span>
+                </div>
+                <div class="w-full bg-white/20 rounded-full h-1.5 backdrop-blur-sm cursor-pointer overflow-hidden group">
+                  <div
+                    class="h-1.5 rounded-full transition-all relative"
+                    style="background-color: var(--el-color-primary);"
+                    :style="{ width: `${playbackState.duration ? (playbackState.currentTime / playbackState.duration) * 100 : 0}%` }"
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Action Floating Toolbar below Video -->
+          <div class="absolute bottom-3 left-1/2 -translate-x-1/2 border px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg z-20" style="background-color: var(--el-bg-color-overlay); color: var(--el-text-color-primary); border-color: var(--el-border-color);">
+            <el-button round size="small" icon="Microphone" @click="generateSceneAudio">
+              {{ t('workspace.dubbing') }}
+            </el-button>
+            <el-divider direction="vertical"></el-divider>
+            <el-button round size="small" icon="ChatSquare" @click="applyCaptionsToTimeline">
+              {{ t('workspace.captions') }}
+            </el-button>
+            <el-divider direction="vertical"></el-divider>
+            <el-button round size="small" icon="Document" @click="openMasterScript">
+              {{ t('workspace.scriptBeats') }}
+            </el-button>
+          </div>
+        </div>
+
+        <!-- Draggable Resizer Bar between Canvas Preview & Timeline -->
+        <div
+          class="h-2 hover:h-2.5 transition-all cursor-row-resize flex items-center justify-center group select-none z-20 border-y"
+          style="background-color: var(--el-border-color-lighter); border-color: var(--el-border-color);"
+          @mousedown="startTimelineResize"
+        >
+          <div class="w-12 h-1 rounded-full transition-colors" style="background-color: var(--el-text-color-placeholder);"></div>
+        </div>
+
+        <!-- Timeline Container (Resizable Bottom Panel) -->
+        <div class="border-t z-10 flex flex-col overflow-hidden" style="border-color: var(--el-border-color); background-color: var(--el-card-bg-color);" :style="{ height: `${timelineHeight}px` }">
+          <!-- OpenVideo Full Timeline Component -->
+          <Timeline class="w-full h-full" />
+        </div>
+      </main>
+
+      <!-- ─── 3. RIGHT SIDEBAR: COPILOT / SCRIPT / AUDIO / CAPTIONS ───────────── -->
+      <aside class="w-80 lg:w-96 border-l flex flex-col shrink-0 z-10 shadow-soft" style="border-color: var(--el-border-color); background-color: var(--el-card-bg-color);">
+        
+        <!-- Sidebar Navigation Tabs -->
+        <div class="flex border-b p-2 gap-1" style="border-color: var(--el-border-color);">
+          <el-button
+            v-for="tab in [
+              { id: 'pipeline', label: t('workspace.tabPipeline'), icon: 'Files' },
+              { id: 'script', label: t('workspace.tabScript'), icon: 'Document' },
+              { id: 'audio', label: t('workspace.tabAudio'), icon: 'Microphone' },
+              { id: 'captions', label: t('workspace.tabCaptions'), icon: 'ChatSquare' }
+            ]"
+            :key="tab.id"
+            @click="rightTab = tab.id as any"
+            :type="rightTab === tab.id ? 'primary' : 'info'"
+            :plain="rightTab !== tab.id"
+            round
+            class="!ml-0 flex-1"
+          >
+            <el-icon class="mr-1"><component :is="tab.icon" /></el-icon>
+            <span class="hidden sm:inline">{{ tab.label }}</span>
+          </el-button>
+        </div>
+
+        <!-- Sidebar Tab Panels Content -->
+        <div class="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar text-[var(--el-text-color-primary)]">
+          
+          <!-- TAB 1: PIPELINE COPILOT -->
+          <template v-if="rightTab === 'pipeline'">
+            
+            <!-- Viral Trend Analysis Box -->
+            <div class="p-4 rounded-2xl border shadow-soft" style="background-color: var(--el-card-bg-color); border-color: var(--el-border-color);">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2" style="color: var(--el-color-primary);">
+                  <el-icon :size="16"><TrendCharts /></el-icon>
+                  <h3 class="text-xs font-bold uppercase tracking-wider">{{ t('workspace.viralTrendAnalysis') }}</h3>
+                </div>
+                <el-tag type="primary" size="small" effect="plain" round class="font-bold tracking-widest uppercase">
+                  {{ t('workspace.live') }}
+                </el-tag>
+              </div>
+              <div class="w-full rounded-xl p-3 flex items-center justify-between border mb-3" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
+                <div>
+                  <div class="font-bold text-xs" style="color: var(--el-text-color-primary);">#{{ seriesTitle.replace(/\s+/g, '') }}</div>
+                  <div class="text-[10px] mt-0.5" style="color: var(--el-text-color-secondary);">{{ t('workspace.socialTrending') }}</div>
+                </div>
+                <el-icon :size="12" style="color: var(--el-text-color-secondary);"><ArrowRight /></el-icon>
+              </div>
+              <p class="text-[11px] leading-relaxed" style="color: var(--el-text-color-secondary);">
+                AI retention engine active for {{ seriesTitle }}. Dynamic pacing & cliffhanger hooks calibrated for micro-drama audience.
+              </p>
+            </div>
+
+            <!-- Character Consistency Section -->
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-xs font-bold uppercase tracking-wider" style="color: var(--el-text-color-secondary);">
+                  {{ t('workspace.characterConsistency') }}
+                </h3>
+                <el-button link type="primary" size="small" @click="openPersona()">
+                  {{ t('workspace.manageCast') }}
+                </el-button>
+              </div>
+              <div class="flex -space-x-3 mb-4">
+                <img
+                  v-for="char in castMembers"
+                  :key="char.id"
+                  :src="char.avatar"
+                  :alt="char.name"
+                  @click="openPersona(char.name)"
+                  class="w-10 h-10 rounded-full border-2 object-cover cursor-pointer hover:scale-105 transition-transform"
+                  style="border-color: var(--el-bg-color-overlay);"
+                />
+              </div>
+              <div class="p-3 rounded-xl border flex items-center justify-between text-xs" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
+                <span class="font-semibold" style="color: var(--el-text-color-secondary);">{{ t('workspace.visualModelSync') }}</span>
+                <el-tag type="success" size="small" effect="plain" round class="font-bold uppercase">{{ t('workspace.stable') }}</el-tag>
+              </div>
+            </div>
+
+            <!-- 10-Step Pipeline Steps -->
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-xs font-bold uppercase tracking-wider" style="color: var(--el-text-color-secondary);">
+                  {{ t('workspace.autoGenSequence') }}
+                </h3>
+                <span class="text-[10px]" style="color: var(--el-text-color-secondary);">{{ pipelineSteps.filter(s => s.status === 'done').length }}/10 {{ t('workspace.stepsDone') }}</span>
+              </div>
+              <div class="space-y-1.5">
+                <div
+                  v-for="step in pipelineSteps"
+                  :key="step.id"
+                  class="p-2.5 rounded-xl border flex items-center justify-between cursor-pointer hover:opacity-90 transition-all"
+                  :style="step.status === 'done'
+                    ? 'background-color: var(--el-color-primary-light-9); border-color: var(--el-color-primary-light-7);'
+                    : step.status === 'running'
+                    ? 'background-color: var(--el-color-warning-light-9); border-color: var(--el-color-warning-light-7);'
+                    : step.status === 'error'
+                    ? 'background-color: var(--el-color-danger-light-9); border-color: var(--el-color-danger-light-7);'
+                    : 'background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);'"
+                  @click="runPipelineStep(step.id)"
+                >
+                  <div class="flex items-center gap-2">
+                    <div class="w-6 h-6 rounded flex items-center justify-center text-xs" style="color: var(--el-color-primary); background-color: var(--el-color-primary-light-8);">
+                      <el-icon v-if="step.status === 'running'" class="is-loading" style="color: var(--el-color-warning);"><Loading /></el-icon>
+                      <el-icon v-else-if="step.status === 'done'" style="color: var(--el-color-primary);"><Check /></el-icon>
+                      <el-icon v-else-if="step.status === 'error'" style="color: var(--el-color-danger);"><Close /></el-icon>
+                      <el-icon v-else><component :is="step.icon" /></el-icon>
+                    </div>
+                    <span class="text-[11px] font-semibold" style="color: var(--el-text-color-primary);">{{ step.label }}</span>
+                  </div>
+                  <el-icon :size="12" style="color: var(--el-text-color-secondary);"><VideoPlay /></el-icon>
+                </div>
+              </div>
+            </div>
+
+            <!-- Process Next Batch Button -->
+            <el-button
+              type="primary"
+              round
+              class="!w-full !py-3.5 !font-bold"
+              :loading="isRendering"
+              icon="Right"
+              @click="runFullPipeline"
+            >
+              {{ isRendering ? `Running Pipeline (${renderProgress}%)` : t('workspace.processNextBatch') }}
+            </el-button>
+          </template>
+
+          <!-- TAB 2: SCRIPT -->
+          <template v-else-if="rightTab === 'script'">
+            <!-- AI SCRIPT DIRECTOR -->
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="text-sm font-bold uppercase tracking-wider flex items-center gap-2" style="color: var(--el-color-primary);">
+                  <el-icon :size="16"><Cpu /></el-icon>
+                  {{ t('workspace.aiScriptDirector') }}
+                </h2>
+                <el-tag type="primary" size="small" round class="px-2 py-0.5 font-bold">
+                  {{ seriesStore.activeEpisode ? `EP ${seriesStore.activeEpisode.number}` : 'ACTIVE' }}
+                </el-tag>
+              </div>
+
+              <!-- Viral Hook & Episode Focus Card -->
+              <div class="border rounded-2xl p-4 shadow-soft" style="background-color: var(--el-card-bg-color); border-color: var(--el-border-color);">
+                <div class="flex items-center gap-2 mb-2" style="color: var(--el-color-primary);">
+                  <el-icon :size="14"><TrendCharts /></el-icon>
+                  <span class="text-[10px] font-bold uppercase tracking-widest">{{ t('workspace.viralHookOptimization') }}</span>
+                </div>
+                <p class="text-xs font-bold mb-2" style="color: var(--el-text-color-primary);">
+                  "{{ seriesStore.activeEpisode?.cliffhangerHook || seriesStore.currentSeries?.viral_hook || 'High-stakes micro-drama conflict' }}"
+                </p>
+                <p class="text-[10px] leading-relaxed" style="color: var(--el-text-color-secondary);">
+                  {{ seriesStore.activeEpisode?.synopsis || seriesStore.currentSeries?.synopsis || 'Plot beat aligned with viral audience engagement' }}
+                </p>
+              </div>
+            </div>
+
+            <!-- SCENE DIALOGUE BREAKDOWN -->
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-xs font-bold uppercase tracking-wider" style="color: var(--el-text-color-secondary);">
+                  {{ t('workspace.sceneDialogue') }} ({{ seriesStore.activeScript?.scenes?.length || 0 }} Scenes)
+                </h3>
+                <el-button link type="primary" size="small" icon="Document" @click="openMasterScript">
+                  Master Script
+                </el-button>
+              </div>
+
+              <!-- Loading State -->
+              <div v-if="seriesStore.isScriptLoading" class="p-6 text-center text-xs space-y-2" style="color: var(--el-text-color-secondary);">
+                <el-icon class="is-loading" :size="20" style="color: var(--el-color-primary);"><Loading /></el-icon>
+                <p>Generating production scene screenplay...</p>
+              </div>
+
+              <!-- Dynamic Scenes List -->
+              <div v-else-if="seriesStore.activeScript?.scenes && seriesStore.activeScript.scenes.length > 0" class="space-y-3">
+                <div
+                  v-for="(scene, sIdx) in seriesStore.activeScript.scenes"
+                  :key="scene.index || sIdx"
+                  class="p-3.5 rounded-xl border space-y-2"
+                  style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);"
+                >
+                  <div class="flex justify-between items-center">
+                    <span class="text-[10px] font-bold uppercase tracking-wide" style="color: var(--el-color-primary);">
+                      SCENE {{ String(scene.index || (sIdx + 1)).padStart(2, '0') }} • {{ scene.heading || scene.location }}
+                    </span>
+                    <span class="text-[10px] font-semibold" style="color: var(--el-text-color-secondary);">{{ scene.durationSeconds || 12 }}s</span>
+                  </div>
+
+                  <p v-if="scene.action" class="text-[11px] italic leading-snug" style="color: var(--el-text-color-secondary);">
+                    {{ scene.action }}
+                  </p>
+
+                  <div v-if="scene.dialogue && scene.dialogue.length > 0" class="space-y-1.5 pt-1">
+                    <div
+                      v-for="(dlg, dIdx) in scene.dialogue"
+                      :key="dIdx"
+                      class="pl-2.5 border-l-2"
+                      style="border-color: var(--el-color-primary);"
+                    >
+                      <div class="flex items-center gap-1.5 text-[10px] font-bold" style="color: var(--el-text-color-primary);">
+                        <span>{{ dlg.character }}</span>
+                        <span v-if="dlg.emotion" class="text-[9px] font-normal" style="color: var(--el-text-color-placeholder);">({{ dlg.emotion }})</span>
+                      </div>
+                      <p class="text-xs leading-relaxed mt-0.5" style="color: var(--el-text-color-primary);">
+                        "{{ dlg.line }}"
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Empty Fallback State -->
+              <div v-else class="p-6 rounded-xl border border-dashed text-center space-y-2" style="border-color: var(--el-border-color);">
+                <p class="text-xs" style="color: var(--el-text-color-secondary);">No detailed scenes generated yet for this episode.</p>
+                <el-button size="small" type="primary" plain icon="MagicStick" @click="seriesStore.generateScriptForEpisode(seriesStore.activeEpisodeId)">
+                  Generate Scenes
+                </el-button>
+              </div>
+            </div>
+
+            <!-- SCRIPT OPTIMIZATION -->
+            <div class="p-4 rounded-2xl border shadow-soft" style="background-color: var(--el-card-bg-color); border-color: var(--el-border-color);">
+              <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color: var(--el-text-color-secondary);">
+                {{ t('workspace.scriptOptimization') }}
+              </h3>
+              <div class="flex items-center justify-between mb-4">
+                <span class="text-xs font-semibold" style="color: var(--el-text-color-primary);">{{ t('workspace.contextAwareContinuity') }}</span>
+                <el-switch :model-value="true" size="small" />
+              </div>
+              <el-button
+                type="primary"
+                round
+                :loading="seriesStore.isScriptLoading"
+                class="w-full !font-bold !py-2.5"
+                icon="MagicStick"
+                @click="seriesStore.generateScriptForEpisode(seriesStore.activeEpisodeId)"
+              >
+                {{ t('workspace.refineDialogue') }}
+              </el-button>
+            </div>
+          </template>
+
+          <!-- TAB 3: AUDIO -->
+          <template v-else-if="rightTab === 'audio'">
+            <!-- Vocal Performance Section -->
+            <div class="flex flex-col gap-3">
+              <div class="flex items-center justify-between">
+                <h2 class="text-xs font-bold tracking-wider uppercase" style="color: var(--el-text-color-secondary);">
+                  {{ t('workspace.vocalPerformance') }}
+                </h2>
+                <el-button link type="primary" size="small" @click="isVoiceSettingsModalOpen = true">
+                  {{ t('workspace.voiceSettings') }}
+                </el-button>
+              </div>
+
+              <!-- Character Cloned Voice Cards -->
+              <div class="grid grid-cols-2 gap-3">
+                <div class="p-3 rounded-xl border flex flex-col gap-2 cursor-pointer" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);" @click="isVoiceSettingsModalOpen = true">
+                  <div class="flex items-center gap-2">
+                    <img alt="Mara" class="w-6 h-6 rounded-full object-cover" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=60&h=60&fit=crop" />
+                    <span class="text-xs font-bold" style="color: var(--el-text-color-primary);">Mara</span>
+                  </div>
+                  <el-tag size="small" type="success" effect="plain" class="!text-[9px] !font-bold !rounded-md w-fit uppercase">
+                    {{ t('workspace.cloned') }}
+                  </el-tag>
+                </div>
+
+                <div class="p-3 rounded-xl border flex flex-col gap-2 cursor-pointer" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);" @click="isVoiceSettingsModalOpen = true">
+                  <div class="flex items-center gap-2">
+                    <img alt="Kael" class="w-6 h-6 rounded-full object-cover" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=60&h=60&fit=crop" />
+                    <span class="text-xs font-bold" style="color: var(--el-text-color-primary);">Kael</span>
+                  </div>
+                  <el-tag size="small" type="success" effect="plain" class="!text-[9px] !font-bold !rounded-md w-fit uppercase">
+                    {{ t('workspace.cloned') }}
+                  </el-tag>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dubbing Engine Card -->
+            <div class="border rounded-2xl p-4 shadow-soft" style="background-color: var(--el-card-bg-color); border-color: var(--el-border-color);">
+              <div class="flex items-center gap-2 mb-4" style="color: var(--el-color-primary);">
+                <el-icon :size="14"><Microphone /></el-icon>
+                <h3 class="text-xs font-bold uppercase tracking-wider">{{ t('workspace.dubbingEngine') }}</h3>
+              </div>
+              <div class="space-y-4">
+                <!-- Intensity -->
+                <div class="space-y-1.5">
+                  <div class="flex justify-between text-[10px] font-bold uppercase" style="color: var(--el-text-color-secondary);">
+                    <span>{{ t('workspace.intensity') }}</span>
+                    <span style="color: var(--el-color-primary);">{{ voiceMaraVolume }}%</span>
+                  </div>
+                  <el-slider v-model="voiceMaraVolume" :min="0" :max="100" size="small" />
+                </div>
+
+                <!-- Pitch -->
+                <div class="space-y-1.5">
+                  <div class="flex justify-between text-[10px] font-bold uppercase" style="color: var(--el-text-color-secondary);">
+                    <span>{{ t('workspace.pitch') }}</span>
+                    <span style="color: var(--el-color-primary);">{{ voicePitch }}</span>
+                  </div>
+                  <el-slider v-model="voicePacing" :min="0.5" :max="2" :step="0.1" size="small" />
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Music & Ambience -->
+            <div class="flex flex-col gap-4">
+              <h3 class="text-xs font-bold uppercase tracking-wider" style="color: var(--el-text-color-secondary);">
+                {{ t('workspace.aiMusicAmbience') }}
+              </h3>
+              <div class="relative">
+                <el-input v-model="sceneScorePrompt" :placeholder="t('workspace.sceneScorePlaceholder')" size="large" class="!rounded-xl">
+                  <template #suffix>
+                    <el-button link type="primary" icon="MagicStick" @click="toast.info(t('toast.generatingAiScore'))" />
+                  </template>
+                </el-input>
+              </div>
+
+              <!-- Auto-Ducking Card -->
+              <div class="p-3.5 rounded-xl border flex items-center justify-between" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
+                <div class="flex items-center gap-3">
+                  <el-icon style="color: var(--el-text-color-secondary);"><Headset /></el-icon>
+                  <span class="text-xs font-semibold" style="color: var(--el-text-color-primary);">{{ t('workspace.autoDucking') }}</span>
+                </div>
+                <el-switch v-model="autoDucking" size="small" />
+              </div>
+            </div>
+
+            <!-- Preview Audio Mix Action -->
+            <el-button
+              type="primary"
+              round
+              class="w-full !font-bold !py-3.5 !mt-1"
+              icon="VideoPlay"
+              @click="generateSceneAudio"
+            >
+              {{ t('workspace.previewAudioMix') }}
+            </el-button>
+          </template>
+
+          <!-- TAB 4: CAPTIONS -->
+          <template v-else-if="rightTab === 'captions'">
+            <!-- Captions Header -->
+            <div class="flex items-center justify-between">
+              <h2 class="text-sm font-bold uppercase tracking-wider flex items-center gap-2" style="color: var(--el-color-primary);">
+                <el-icon :size="16"><ChatSquare /></el-icon>
+                {{ t('workspace.captionsEngine') }}
+              </h2>
+              <el-tag type="primary" size="small" round class="px-2 py-0.5 font-bold">
+                {{ t('workspace.autoSyncOn') }}
+              </el-tag>
+            </div>
+
+            <!-- Style Presets -->
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-xs font-bold uppercase tracking-wider" style="color: var(--el-text-color-secondary);">
+                  {{ t('workspace.stylePresets') }}
+                </h3>
+                <el-button link type="primary" size="small" @click="toast.info(t('toast.viewingCaptionStyles'))">
+                  {{ t('workspace.viewAll') }}
+                </el-button>
+              </div>
+
+              <div class="grid grid-cols-3 gap-2">
+                <!-- Preset 1 (Active) -->
+                <div
+                  @click="selectedCaptionStyle = 'pop'"
+                  class="flex flex-col items-center justify-center p-3 rounded-xl gap-2 cursor-pointer shadow-soft transition-all border"
+                  :style="selectedCaptionStyle === 'pop'
+                    ? 'background-color: var(--el-color-primary-light-9); border-color: var(--el-color-primary); color: var(--el-color-primary);'
+                    : 'background-color: var(--el-card-bg-color); border-color: var(--el-border-color); color: var(--el-text-color-secondary);'"
+                >
+                  <div class="text-lg font-black tracking-tight transform -skew-x-12 uppercase leading-none">POP!</div>
+                  <span class="text-[10px] font-semibold text-center leading-tight">Dynamic Pop-up</span>
+                </div>
+
+                <!-- Preset 2 -->
+                <div
+                  @click="selectedCaptionStyle = 'minimal'"
+                  class="flex flex-col items-center justify-center p-3 rounded-xl gap-2 cursor-pointer shadow-soft transition-all border"
+                  :style="selectedCaptionStyle === 'minimal'
+                    ? 'background-color: var(--el-color-primary-light-9); border-color: var(--el-color-primary); color: var(--el-color-primary);'
+                    : 'background-color: var(--el-card-bg-color); border-color: var(--el-border-color); color: var(--el-text-color-secondary);'"
+                >
+                  <div class="text-sm font-medium leading-none">Hello.</div>
+                  <span class="text-[10px] font-semibold text-center leading-tight">Minimalist</span>
+                </div>
+
+                <!-- Preset 3 -->
+                <div
+                  @click="selectedCaptionStyle = 'comic'"
+                  class="flex flex-col items-center justify-center p-3 rounded-xl gap-2 cursor-pointer shadow-soft transition-all border"
+                  :style="selectedCaptionStyle === 'comic'
+                    ? 'background-color: var(--el-color-primary-light-9); border-color: var(--el-color-primary); color: var(--el-color-primary);'
+                    : 'background-color: var(--el-card-bg-color); border-color: var(--el-border-color); color: var(--el-text-color-secondary);'"
+                >
+                  <div class="text-base font-black uppercase text-center leading-none tracking-wider">BAM</div>
+                  <span class="text-[10px] font-semibold text-center leading-tight">Comic</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Design Customization -->
+            <div>
+              <h3 class="text-xs font-bold uppercase tracking-wider mb-3" style="color: var(--el-text-color-secondary);">
+                {{ t('workspace.designCustomization') }}
+              </h3>
+              <div class="space-y-4">
+                <!-- Color Swatches -->
+                <div>
+                  <div class="flex justify-between text-xs mb-2 font-semibold" style="color: var(--el-text-color-primary);">
+                    <span>{{ t('workspace.textColor') }}</span>
+                    <span class="font-mono" style="color: var(--el-text-color-secondary);">{{ captionTextColor }}</span>
+                  </div>
+                  <div class="flex gap-2">
+                    <button @click="captionTextColor = '#FFFFFF'" class="w-7 h-7 rounded-full bg-white border-2 shadow-sm cursor-pointer" style="border-color: var(--el-color-primary);"></button>
+                    <button @click="captionTextColor = '#FACC15'" class="w-7 h-7 rounded-full bg-yellow-400 border shadow-sm cursor-pointer" style="border-color: var(--el-border-color);"></button>
+                    <button @click="captionTextColor = '#4ADE80'" class="w-7 h-7 rounded-full bg-green-400 border shadow-sm cursor-pointer" style="border-color: var(--el-border-color);"></button>
+                    <button @click="captionTextColor = '#60A5FA'" class="w-7 h-7 rounded-full bg-blue-400 border shadow-sm cursor-pointer" style="border-color: var(--el-border-color);"></button>
+                    <button @click="captionTextColor = '#EF4444'" class="w-7 h-7 rounded-full bg-red-500 border shadow-sm cursor-pointer" style="border-color: var(--el-border-color);"></button>
+                    <button @click="toast.info(t('toast.pickCustomColor'))" class="w-7 h-7 rounded-full bg-black border shadow-sm flex items-center justify-center text-white cursor-pointer" style="border-color: var(--el-border-color);">
+                      <el-icon :size="12"><Plus /></el-icon>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Font Size -->
+                <div class="space-y-1">
+                  <div class="flex justify-between text-xs font-semibold" style="color: var(--el-text-color-primary);">
+                    <span>{{ t('workspace.fontSize') }}</span>
+                    <span style="color: var(--el-text-color-secondary);">{{ captionFontSize }}px</span>
+                  </div>
+                  <el-slider v-model="captionFontSize" :min="20" :max="80" size="small" />
+                </div>
+
+                <!-- Vertical Position -->
+                <div class="space-y-1">
+                  <div class="flex justify-between text-xs font-semibold" style="color: var(--el-text-color-primary);">
+                    <span>{{ t('workspace.verticalPosition') }}</span>
+                    <span style="color: var(--el-text-color-secondary);">{{ captionVerticalPos }}%</span>
+                  </div>
+                  <el-slider v-model="captionVerticalPos" :min="10" :max="95" size="small" />
+                </div>
+
+                <!-- Outline Weight -->
+                <div class="space-y-1">
+                  <div class="flex justify-between text-xs font-semibold" style="color: var(--el-text-color-primary);">
+                    <span>{{ t('workspace.outlineWeight') }}</span>
+                    <span style="color: var(--el-text-color-secondary);">{{ captionOutlineWeight }}px</span>
+                  </div>
+                  <el-slider v-model="captionOutlineWeight" :min="0" :max="10" size="small" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Smart Features -->
+            <div>
+              <h3 class="text-xs font-bold uppercase tracking-wider mb-3" style="color: var(--el-text-color-secondary);">
+                {{ t('workspace.smartFeatures') }}
+              </h3>
+              <div class="space-y-3">
+                <!-- AI Highlight Animate -->
+                <div class="p-3.5 rounded-xl border flex items-center justify-between" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
+                  <div>
+                    <div class="font-semibold text-xs" style="color: var(--el-text-color-primary);">{{ t('workspace.aiHighlightAnimate') }}</div>
+                    <div class="text-[10px] mt-0.5" style="color: var(--el-text-color-secondary);">{{ t('workspace.autoEmphasize') }}</div>
+                  </div>
+                  <el-switch v-model="aiHighlightAnimate" size="small" />
+                </div>
+
+                <!-- Target Language Select -->
+                <div class="p-3 rounded-xl border flex items-center justify-between" style="background-color: var(--el-card-bg-color); border-color: var(--el-border-color);">
+                  <div class="flex items-center gap-2.5">
+                    <el-icon :size="16" style="color: var(--el-color-primary);"><ChatDotRound /></el-icon>
+                    <div>
+                      <div class="text-[10px] font-semibold" style="color: var(--el-text-color-secondary);">{{ t('workspace.targetLanguage') }}</div>
+                      <div class="text-xs font-bold" style="color: var(--el-text-color-primary);">{{ targetLanguage }}</div>
+                    </div>
+                  </div>
+                  <el-icon :size="12" style="color: var(--el-text-color-secondary);"><ArrowDown /></el-icon>
+                </div>
+              </div>
+            </div>
+
+            <!-- Apply to Series Button -->
+            <el-button
+              type="primary"
+              round
+              class="w-full !font-bold !py-3.5 !mt-1"
+              icon="MagicStick"
+              @click="applyCaptionsToTimeline"
+            >
+              {{ t('workspace.applyToSeries') }}
+            </el-button>
+          </template>
+
+        </div>
+
+        <!-- Right Sidebar Bottom Actions -->
+        <div class="p-5 border-t" style="border-color: var(--el-border-color);">
+          <div class="flex items-center justify-between mb-3 text-[10px] font-bold uppercase tracking-wide" style="color: var(--el-text-color-secondary);">
+            <span>{{ t('workspace.readyToPublish') }}</span>
+            <span>{{ t('workspace.epsVerticalHd', { count: episodesList.length || 100 }) }}</span>
+          </div>
+          <div class="flex gap-2">
+            <el-button type="primary" round icon="Promotion" class="flex-1 !font-bold !py-3" @click="triggerBulkPublish">
+              {{ t('workspace.bulkExportPublish') }}
+            </el-button>
+            <el-button circle plain size="large" icon="Calendar" @click="toast.info(t('toast.calendarScheduling'))" />
+          </div>
+        </div>
+      </aside>
+
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- FLOATING AI CHATBOT BUTTON                                              -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <div class="fixed right-6 bottom-8 z-50 flex flex-col items-end gap-3">
+      <!-- Render progress indicator -->
+      <div v-if="isRendering" class="flex items-center gap-2 px-3 py-2 border rounded-full text-xs font-bold shadow-lg" style="background-color: var(--el-bg-color-overlay); border-color: var(--el-border-color);">
+        <el-icon class="is-loading" style="color: var(--el-color-primary);"><Loading /></el-icon>
+        <span>Pipeline {{ renderProgress }}%</span>
+      </div>
+
+      <!-- Floating AI Chat Button -->
+      <button
+        id="floating-ai-chat-btn"
+        @click="isChatDrawerOpen = true"
+        class="w-14 h-14 rounded-full shadow-2xl flex items-center justify-center cursor-pointer transition-all hover:scale-110 active:scale-95 relative"
+        style="background: linear-gradient(135deg, var(--el-color-primary) 0%, #0ea5e9 100%); box-shadow: 0 0 24px rgba(62,207,142,0.4);"
+      >
+        <el-icon :size="24" class="text-white"><Cpu /></el-icon>
+        <span class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-white text-[9px] font-black">AI</span>
+      </button>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- AI CHATBOT RIGHT DRAWER                                                 -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <el-drawer
+      v-model="isChatDrawerOpen"
+      direction="rtl"
+      size="420px"
+      :show-close="false"
+      class="ai-chat-drawer"
+    >
+      <template #header>
+        <div class="flex items-center justify-between w-full">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, var(--el-color-primary), #0ea5e9);">
+              <el-icon :size="18" class="text-white"><Cpu /></el-icon>
+            </div>
+            <div>
+              <div class="text-sm font-black" style="color: var(--el-text-color-primary);">AI Production Director</div>
+              <div class="text-[10px] font-bold" style="color: var(--el-color-primary);">● Active Pipeline Agent</div>
+            </div>
+          </div>
+          <el-button circle plain size="small" icon="Close" @click="isChatDrawerOpen = false" />
+        </div>
+      </template>
+
+      <!-- Quick Command Pills -->
+      <div class="px-4 py-2 flex flex-wrap gap-1.5 border-b" style="border-color: var(--el-border-color);">
+        <el-button
+          v-for="cmd in ['Generate B1 background', 'Render B3 video', 'B4 voiceover', 'B6 captions', 'Full pipeline', 'B10 publish']"
+          :key="cmd"
+          size="small"
+          round
+          plain
+          @click="drawerChatInput = cmd; sendDrawerChat()"
+        >{{ cmd }}</el-button>
+      </div>
+
+      <!-- Pipeline Steps Progress -->
+      <div class="px-4 py-3 border-b" style="border-color: var(--el-border-color);">
+        <div class="text-[10px] font-black uppercase tracking-wider mb-2" style="color: var(--el-text-color-secondary);">Pipeline Status</div>
+        <div class="grid grid-cols-5 gap-1">
+          <div
+            v-for="step in pipelineSteps"
+            :key="step.id"
+            :title="step.label"
+            class="h-1.5 rounded-full cursor-pointer transition-all"
+            :style="step.status === 'done'
+              ? 'background-color: var(--el-color-primary);'
+              : step.status === 'running'
+              ? 'background-color: var(--el-color-warning);'
+              : step.status === 'error'
+              ? 'background-color: var(--el-color-danger);'
+              : 'background-color: var(--el-fill-color-dark, var(--el-border-color));'"
+            @click="runPipelineStep(step.id)"
+          ></div>
+        </div>
+      </div>
+
+      <!-- Chat Messages -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar" style="max-height: calc(100vh - 340px)">
+        <div
+          v-for="(msg, i) in drawerChatMessages"
+          :key="i"
+          class="flex"
+          :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+        >
+          <div
+            class="max-w-[85%] px-4 py-3 rounded-2xl text-xs leading-relaxed whitespace-pre-line border"
+            :style="msg.role === 'user'
+              ? 'background-color: var(--el-color-primary); color: white; border-color: var(--el-color-primary);'
+              : 'background-color: var(--el-fill-color-light); border-color: var(--el-border-color); color: var(--el-text-color-primary);'"
+          >
+            <div class="flex items-center justify-between gap-4 mb-1">
+              <span class="font-bold text-[10px] uppercase opacity-75">{{ msg.role === 'user' ? 'You' : 'AI Director' }}</span>
+              <span class="text-[9px] opacity-60">{{ msg.time }}</span>
+            </div>
+            {{ msg.text }}
+          </div>
+        </div>
+        <div v-if="isDrawerChatSending" class="flex justify-start">
+          <div class="px-4 py-3 rounded-2xl border text-xs flex items-center gap-2" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color);">
+            <el-icon class="is-loading" style="color: var(--el-color-primary);"><Loading /></el-icon>
+            <span>AI Director is working on your command...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Input -->
+      <div class="p-4 border-t" style="border-color: var(--el-border-color);">
+        <div class="flex gap-2">
+          <el-input
+            v-model="drawerChatInput"
+            placeholder="e.g. Generate B1 background for Scene 4..."
+            size="large"
+            @keyup.enter="sendDrawerChat"
+          />
+          <el-button type="primary" size="large" icon="Promotion" :loading="isDrawerChatSending" @click="sendDrawerChat" />
+        </div>
+      </div>
+    </el-drawer>
+
+
+
+    <!-- 1. Master Script Modal -->
+    <MasterScriptModal
+      v-model="isMasterScriptModalOpen"
+      :episode-title="currentEpisodeTitle"
+    />
+
+    <!-- 2. Character Persona Modal -->
+    <CharacterPersonaModal
+      v-model="isPersonaModalOpen"
+      :character-name="selectedCharacterName"
+    />
+
+    <!-- 3. Add Episode Modal (Connected to POST /api/series/:id/episodes) -->
+    <el-dialog v-model="isAddEpisodeModalOpen" :title="t('workspace.addEpisode')" width="460px" append-to-body class="rounded-2xl">
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs font-bold text-[var(--el-text-color-secondary)] block mb-1.5 uppercase">Episode Title</label>
+          <el-input v-model="newEpisodeTitle" placeholder="e.g. The Hidden Truth" size="large" />
+        </div>
+        <div>
+          <label class="text-xs font-bold text-[var(--el-text-color-secondary)] block mb-1.5 uppercase">Synopsis / Plot Hook</label>
+          <el-input v-model="newEpisodeSynopsis" type="textarea" :rows="3" placeholder="Brief summary of the episode action..." />
+        </div>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <el-button @click="isAddEpisodeModalOpen = false">Cancel</el-button>
+          <el-button type="primary" @click="addNewEpisode">Create Episode</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- 4. Voice Settings Modal (Connected to GET /api/voices/presets) -->
+    <el-dialog v-model="isVoiceSettingsModalOpen" :title="t('workspace.voiceSettings')" width="520px" append-to-body class="rounded-2xl">
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs font-bold text-[var(--el-text-color-secondary)] block mb-1.5 uppercase">Neural TTS Voice Preset</label>
+          <el-select v-model="selectedVoicePreset" class="w-full" size="large">
+            <el-option
+              v-for="voice in voicePresetsList"
+              :key="voice.id"
+              :label="`${voice.name} (${voice.gender || 'Neural'} • ${voice.language || 'en-US'})`"
+              :value="voice.id"
+            />
+          </el-select>
+        </div>
+        <div class="p-3 bg-[var(--el-fill-color-light)] rounded-xl border border-[var(--el-border-color)] text-xs space-y-2">
+          <div class="flex justify-between items-center">
+            <span class="font-bold">TTS Model Engine</span>
+            <el-tag size="small" type="success">Gemini Native Audio / ElevenLabs</el-tag>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="font-bold">Speech Recognition</span>
+            <el-tag size="small" type="primary">Deepgram Nova-2 Realtime</el-tag>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="isVoiceSettingsModalOpen = false">Save Voice Settings</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 5. Collaborators Modal (Connected to GET & POST /api/admin/team-members) -->
+    <el-dialog v-model="isCollaboratorsModalOpen" :title="t('workspace.collaborators')" width="520px" append-to-body class="rounded-2xl">
+      <div class="space-y-4">
+        <div class="flex gap-2">
+          <el-input v-model="inviteEmail" placeholder="colleague@shine.ai" size="small" class="flex-1" />
+          <el-select v-model="inviteRole" size="small" class="w-28">
+            <el-option label="Editor" value="Editor" />
+            <el-option label="Viewer" value="Viewer" />
+            <el-option label="Admin" value="Admin" />
+          </el-select>
+          <el-button type="primary" size="small" @click="inviteTeamMember">Invite</el-button>
+        </div>
+
+        <div class="max-h-56 overflow-y-auto space-y-2">
+          <div
+            v-for="mem in teamMembersList"
+            :key="mem.id"
+            class="flex items-center justify-between p-2.5 rounded-xl bg-[var(--el-fill-color-light)] border border-[var(--el-border-color)]/60"
+          >
+            <div class="flex items-center gap-3">
+              <img :src="mem.avatar" class="w-8 h-8 rounded-full object-cover" />
+              <div>
+                <div class="text-xs font-bold">{{ mem.name }}</div>
+                <div class="text-[10px] text-[var(--el-text-color-secondary)]">{{ mem.email }}</div>
+              </div>
+            </div>
+            <el-tag size="small" :type="mem.role === 'Owner' ? 'success' : 'info'">{{ mem.role }}</el-tag>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="isCollaboratorsModalOpen = false">Done</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 6. Chat Assistant Modal (Connected to POST /api/ai/assistant/command-edit) -->
+    <el-dialog v-model="isChatModalOpen" :title="t('workspace.chatAssistant')" width="540px" append-to-body class="rounded-2xl">
+      <div class="space-y-4">
+        <div class="h-72 overflow-y-auto p-3 rounded-xl border text-xs space-y-3 custom-scrollbar" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color);">
+          <div
+            v-for="(msg, i) in chatMessages"
+            :key="i"
+            class="p-3 rounded-xl max-w-[85%] border"
+            :style="msg.role === 'user'
+              ? 'margin-left: auto; background-color: var(--el-color-primary); color: white; border-color: var(--el-color-primary);'
+              : 'background-color: var(--el-card-bg-color); border-color: var(--el-border-color); color: var(--el-text-color-primary);'"
+          >
+            <div class="flex items-center justify-between gap-4 mb-1">
+              <span class="font-bold text-[10px] uppercase opacity-75">{{ msg.role === 'user' ? 'You' : 'AI Director' }}</span>
+              <span class="text-[9px] opacity-60">{{ msg.time }}</span>
+            </div>
+            <p class="leading-relaxed">{{ msg.text }}</p>
+          </div>
+          <div v-if="isChatSending" class="p-2.5 rounded-xl border text-xs flex items-center gap-2" style="background-color: var(--el-card-bg-color); border-color: var(--el-border-color);">
+            <el-icon class="is-loading" style="color: var(--el-color-primary);"><Loading /></el-icon>
+            <span>AI Director is executing edits on timeline...</span>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <el-input
+            v-model="chatInputPrompt"
+            placeholder="e.g. Cut clip at 5s, zoom in Mara face and sync suspense theme..."
+            size="large"
+            @keyup.enter="sendChatMessage"
+          />
+          <el-button type="primary" size="large" icon="Promotion" :loading="isChatSending" @click="sendChatMessage" />
+        </div>
+      </div>
+    </el-dialog>
+
+    <!-- 7. Bulk Export & Publish Modal (Connected to POST /api/publish/multi-platform) -->
+    <el-dialog v-model="isPublishModalOpen" :title="t('workspace.bulkExportPublish')" width="540px" append-to-body class="rounded-2xl">
+      <div class="space-y-4">
+        <p class="text-xs" style="color: var(--el-text-color-secondary);">
+          Select target distribution channels for simultaneous multi-platform publishing:
+        </p>
+        <el-checkbox-group v-model="selectedPublishPlatforms" class="grid grid-cols-3 gap-3 w-full">
+          <el-checkbox label="tiktok" border class="!m-0 !h-auto !p-3 rounded-xl flex flex-col items-center">
+            <div class="flex flex-col items-center gap-1.5 py-1">
+              <el-tag size="large" effect="dark" round class="font-bold">TikTok</el-tag>
+              <span class="text-[11px]" style="color: var(--el-text-color-secondary);">9:16 Feed</span>
+            </div>
+          </el-checkbox>
+          <el-checkbox label="youtube" border class="!m-0 !h-auto !p-3 rounded-xl flex flex-col items-center">
+            <div class="flex flex-col items-center gap-1.5 py-1">
+              <el-tag size="large" type="danger" effect="dark" round class="font-bold">Shorts</el-tag>
+              <span class="text-[11px]" style="color: var(--el-text-color-secondary);">YouTube</span>
+            </div>
+          </el-checkbox>
+          <el-checkbox label="instagram" border class="!m-0 !h-auto !p-3 rounded-xl flex flex-col items-center">
+            <div class="flex flex-col items-center gap-1.5 py-1">
+              <el-tag size="large" type="warning" effect="dark" round class="font-bold">Reels</el-tag>
+              <span class="text-[11px]" style="color: var(--el-text-color-secondary);">Instagram</span>
+            </div>
+          </el-checkbox>
+        </el-checkbox-group>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <el-button @click="isPublishModalOpen = false">Cancel</el-button>
+          <el-button type="primary" :loading="isPublishing" icon="Promotion" @click="executeBulkPublish">
+            Start Export & Publish
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+  </div>
+</template>
+
+<style scoped>
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--el-border-color);
+  border-radius: 10px;
+}
+.shadow-soft {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+</style>

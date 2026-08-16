@@ -1,0 +1,167 @@
+import { defineStore } from 'pinia';
+import { ref, computed } from 'vue';
+import { useDark, useToggle } from '@vueuse/core';
+import http from '@/utils/http';
+import i18n from '@/i18n';
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  avatar: string;
+  role?: string;
+  tier?: string;
+  credits?: number;
+  theme?: 'dark' | 'light' | string;
+  language?: string;
+}
+
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref<User | null>(
+    JSON.parse(localStorage.getItem('shine_user') || 'null')
+  );
+  const token = ref<string | null>(localStorage.getItem('shine_token'));
+  const isLoading = ref(false);
+
+  // VueUse standard theme management
+  const isDark = useDark({
+    storageKey: 'shine_theme',
+    valueDark: 'dark',
+    valueLight: 'light',
+  });
+  
+  const toggleDark = useToggle(isDark);
+
+  const isAuthenticated = computed(() => !!token.value);
+
+  function applyUserPreferences(usr: User | null) {
+    const theme = usr?.theme || localStorage.getItem('shine_theme') || 'dark';
+    const language = usr?.language || localStorage.getItem('shine_language') || localStorage.getItem('shine_locale') || 'en';
+
+    isDark.value = theme === 'dark';
+    localStorage.setItem('shine_language', language);
+    localStorage.setItem('shine_locale', language);
+
+    try {
+      if (i18n && i18n.global && i18n.global.locale) {
+        if (typeof i18n.global.locale === 'object' && 'value' in i18n.global.locale) {
+          (i18n.global.locale as any).value = language;
+        } else {
+          (i18n.global as any).locale = language;
+        }
+      }
+    } catch {
+      // safe fallback
+    }
+  }
+
+  // Initial call
+  applyUserPreferences(user.value);
+
+  async function fetchCurrentUser() {
+    if (!token.value) return null;
+    try {
+      const res: any = await http.get('/auth/me');
+      const data = res?.data || res;
+      if (data?.user) {
+        user.value = data.user;
+        localStorage.setItem('shine_user', JSON.stringify(data.user));
+        applyUserPreferences(data.user);
+      }
+      return data?.user || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function login(credentials: { email: string; password: string }) {
+    isLoading.value = true;
+    try {
+      const res: any = await http.post('/auth/login', credentials);
+      const data = res?.data || res;
+      token.value = data.token;
+      user.value = data.user;
+      localStorage.setItem('shine_token', data.token);
+      localStorage.setItem('shine_user', JSON.stringify(data.user));
+      applyUserPreferences(data.user);
+      return data;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  async function signup(payload: { email: string; password: string; name: string }) {
+    isLoading.value = true;
+    try {
+      const res: any = await http.post('/auth/signup', payload);
+      const data = res?.data || res;
+      token.value = data.token;
+      user.value = data.user;
+      localStorage.setItem('shine_token', data.token);
+      localStorage.setItem('shine_user', JSON.stringify(data.user));
+      applyUserPreferences(data.user);
+      return data;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  async function updatePreferences(prefs: { theme?: string; language?: string }) {
+    if (user.value) {
+      if (prefs.theme) user.value.theme = prefs.theme;
+      if (prefs.language) user.value.language = prefs.language;
+      localStorage.setItem('shine_user', JSON.stringify(user.value));
+      applyUserPreferences(user.value);
+    } else {
+      if (prefs.theme) localStorage.setItem('shine_theme', prefs.theme);
+      if (prefs.language) localStorage.setItem('shine_language', prefs.language);
+      applyUserPreferences({ theme: prefs.theme, language: prefs.language } as any);
+    }
+
+    if (token.value) {
+      try {
+        const res: any = await http.patch('/auth/preferences', prefs);
+        const data = res?.data || res;
+        if (data?.user) {
+          user.value = data.user;
+          localStorage.setItem('shine_user', JSON.stringify(data.user));
+          applyUserPreferences(data.user);
+        }
+      } catch {
+        // silent fallback
+      }
+    }
+  }
+
+  async function forgotPassword(email: string) {
+    isLoading.value = true;
+    try {
+      const res: any = await http.post('/auth/forgot-password', { email });
+      return res?.data || res;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  function logout() {
+    token.value = null;
+    user.value = null;
+    localStorage.removeItem('shine_token');
+    localStorage.removeItem('shine_user');
+  }
+
+  return {
+    user,
+    token,
+    isDark,
+    toggleDark,
+    isLoading,
+    isAuthenticated,
+    fetchCurrentUser,
+    login,
+    signup,
+    updatePreferences,
+    forgotPassword,
+    logout,
+  };
+});

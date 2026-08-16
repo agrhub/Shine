@@ -1,0 +1,336 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--bg-main);
+  --color-foreground: var(--text-primary);
+  --font-sans: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+  --color-border: var(--border-color);
+  --color-input: var(--input-border);
+  --color-primary: var(--primary-green);
+  --color-primary-foreground: #002112;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+}
+
+/* ==========================================================================
+   Element Plus & Shine Design System Tokens (Light Mode - Default)
+   ========================================================================== */
+:root {
+  /* Brand Tokens */
+  --primary-green: #3ecf8e;
+  --primary-dark-green: #006c45;
+  --bg-main: #fcfcfc;
+  --text-primary: #171717;
+  --text-secondary: #5a5f5c;
+  --text-muted: #707572;
+  --border-color: #e6e8e7;
+  --input-border: #e6e8e7;
+
+  /* Element Plus Global Tokens (Light Mode) */
+  --el-color-primary: #3ecf8e;
+  --el-color-primary-light-3: #71fcb6;
+  --el-color-primary-light-5: #9effce;
+  --el-color-primary-light-7: #cbfde2;
+  --el-color-primary-light-8: #e1feef;
+  --el-color-primary-light-9: #e8fbf3;
+  --el-color-primary-dark-2: #006c45;
+
+  --el-color-success: #3ecf8e;
+  --el-color-warning: #e6a23c;
+  --el-color-danger: #f56c6c;
+  --el-color-info: #909399;
+
+  --el-bg-color: #f5f6f5;
+  --el-bg-color-page: #fcfcfc;
+  --el-bg-color-overlay: #ffffff;
+  --el-fill-color-blank: #ffffff;
+  --el-fill-color-light: #f5f6f5;
+
+  --el-text-color-primary: #171717;
+  --el-text-color-regular: #5a5f5c;
+  --el-text-color-secondary: #707572;
+  --el-text-color-placeholder: #707572;
+
+  --el-border-color: #e6e8e7;
+  --el-border-color-light: #f0f2f1;
+  --el-border-color-lighter: #f5f6f5;
+  --el-border-radius-base: 0.75rem;
+  --el-border-radius-round: 9999px;
+
+  --el-card-bg-color: #ffffff;
+  --el-card-border-color: #e6e8e7;
+  --el-dialog-bg-color: #ffffff;
+
+  /* shadcn compat */
+  --background: 0.99 0 0;
+  --foreground: 0.145 0 0;
+  --card: 1 0 0;
+  --card-foreground: 0.145 0 0;
+  --popover: 1 0 0;
+  --popover-foreground: 0.145 0 0;
+  --primary: 0.48 0.16 160;
+  --primary-foreground: 0.99 0 0;
+  --secondary: 0.96 0 0;
+  --secondary-foreground: 0.145 0 0;
+  --muted: 0.96 0 0;
+  --muted-foreground: 0.55 0 0;
+  --accent: 0.96 0 0;
+  --accent-foreground: 0.145 0 0;
+  --destructive: 0.577 0.245 27.325;
+  --border: 0.92 0 0;
+  --input: 0.92 0 0;
+  --ring: 0.48 0.16 160;
+  --radius: 0.75rem;
+}
+
+/* ==========================================================================
+   Element Plus & Shine Design System Tokens (Dark Mode)
+   ========================================================================== */
+html.dark,
+body.dark,
+.dark {
+  --primary-green: #3ecf8e;
+  --primary-dark-green: #006c45;
+  --bg-main: #121414;
+  --text-primary: #f0f2f1;
+  --text-secondary: #b4b9b6;
+  --text-muted: #868c88;
+  --border-color: #282a29;
+  --input-border: #282a29;
+
+  --el-color-primary: #3ecf8e;
+  --el-color-primary-light-3: #71fcb6;
+  --el-color-primary-light-5: #006c45;
+  --el-color-primary-light-7: #004d31;
+  --el-color-primary-light-8: #003823;
+  --el-color-primary-light-9: #002718;
+  --el-color-primary-dark-2: #006c45;
+
+  --el-color-success: #3ecf8e;
+  --el-color-warning: #e6a23c;
+  --el-color-danger: #ffb4ab;
+  --el-color-info: #c8c6c5;
+
+  --el-bg-color: #1a1c1b;
+  --el-bg-color-page: #121414;
+  --el-bg-color-overlay: #1e2020;
+  --el-fill-color-blank: #1a1c1b;
+  --el-fill-color-light: #222423;
+
+  --el-text-color-primary: #f0f2f1;
+  --el-text-color-regular: #b4b9b6;
+  --el-text-color-secondary: #868c88;
+  --el-text-color-placeholder: #585f64;
+
+  --el-border-color: #282a29;
+  --el-border-color-light: #222423;
+  --el-border-color-lighter: #1a1c1b;
+  --el-border-radius-base: 0.75rem;
+
+  --el-card-bg-color: #1e2020;
+  --el-card-border-color: #282a29;
+  --el-dialog-bg-color: #1e2020;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --primary-green: #3ecf8e;
+    --primary-dark-green: #006c45;
+    --bg-main: #121414;
+    --text-primary: #f0f2f1;
+    --text-secondary: #b4b9b6;
+    --text-muted: #868c88;
+    --border-color: #282a29;
+    --input-border: #282a29;
+
+    --el-color-primary: #3ecf8e;
+    --el-color-primary-light-3: #71fcb6;
+    --el-color-primary-light-5: #006c45;
+    --el-color-primary-light-7: #004d31;
+    --el-color-primary-light-8: #003823;
+    --el-color-primary-light-9: #002718;
+    --el-color-primary-dark-2: #006c45;
+
+    --el-color-success: #3ecf8e;
+    --el-color-warning: #e6a23c;
+    --el-color-danger: #ffb4ab;
+    --el-color-info: #c8c6c5;
+
+    --el-bg-color: #1a1c1b;
+    --el-bg-color-page: #121414;
+    --el-bg-color-overlay: #1e2020;
+    --el-fill-color-blank: #1a1c1b;
+    --el-fill-color-light: #222423;
+
+    --el-text-color-primary: #f0f2f1;
+    --el-text-color-regular: #b4b9b6;
+    --el-text-color-secondary: #868c88;
+    --el-text-color-placeholder: #585f64;
+
+    --el-border-color: #282a29;
+    --el-border-color-light: #222423;
+    --el-border-color-lighter: #1a1c1b;
+    --el-border-radius-base: 0.75rem;
+
+    --el-card-bg-color: #1e2020;
+    --el-card-border-color: #282a29;
+    --el-dialog-bg-color: #1e2020;
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--el-border-color);
+  }
+  body {
+    background-color: var(--el-bg-color-page);
+    color: var(--el-text-color-primary);
+    font-family: var(--font-sans);
+  }
+}
+
+/* Custom Element Plus Component Overrides */
+/* .el-button--primary {
+  --el-button-bg-color: var(--el-color-primary);
+  --el-button-border-color: var(--el-color-primary);
+  --el-button-hover-bg-color: var(--el-color-primary-light-3);
+  --el-button-hover-border-color: var(--el-color-primary-light-3);
+  --el-button-active-bg-color: var(--el-color-primary-dark-2);
+  --el-button-active-border-color: var(--el-color-primary-dark-2);
+  font-weight: 700;
+} */
+
+/* .el-card {
+  border-radius: 1rem;
+  background-color: var(--el-card-bg-color);
+  border-color: var(--el-card-border-color);
+} */
+
+/* .el-input__wrapper {
+  background-color: var(--el-bg-color-overlay);
+  box-shadow: 0 0 0 1px var(--el-border-color) inset;
+} */
+
+/* .el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 2px var(--el-color-primary) inset !important;
+} */
+
+/* ==========================================================================
+   Modern Custom Scrollbar & Auto-Hide Behavior
+   ========================================================================== */
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
+}
+
+*:hover {
+  scrollbar-color: var(--el-border-color) transparent;
+}
+
+/* Webkit (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+  transition: background-color 0.3s ease;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background-color: var(--el-border-color);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--el-text-color-placeholder);
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom autohide scrollbar utility */
+.scrollbar-autohide {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.scrollbar-autohide::-webkit-scrollbar-thumb {
+  background-color: transparent;
+}
+
+.scrollbar-autohide:hover::-webkit-scrollbar-thumb {
+  background-color: var(--el-border-color);
+}
+
+/* Stitch Design Utilities */
+.bg-stitch-bg {
+  background-color: var(--el-bg-color-page);
+}
+.bg-stitch-surface {
+  background-color: var(--el-card-bg-color);
+}
+.bg-stitch-green {
+  background-color: var(--el-color-primary);
+}
+.text-stitch-green {
+  color: var(--el-color-primary);
+}
+
+/* Layer 6: Visual Feedback & UI Glow Highlight for AI Chatbot Edits */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+    outline: 2px solid #3b82f6;
+  }
+  50% {
+    box-shadow: 0 0 16px 4px rgba(59, 130, 246, 0.9);
+    outline: 3px solid #60a5fa;
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  border-radius: 6px;
+}
+
+/* Apexcharts custom styling for Creator Studio */
+.apexcharts-tooltip {
+  border: 1px solid var(--el-border-color) !important;
+  box-shadow: 0 10px 30px -16px rgba(0, 0, 0, 0.5) !important;
+  border-radius: 12px !important;
+  font-family: 'Outfit', sans-serif !important;
+  background-color: var(--el-card-bg-color) !important;
+  color: var(--el-text-color-primary) !important;
+}
+.apexcharts-tooltip-title {
+  background: var(--el-bg-color) !important;
+  border-bottom: 1px solid var(--el-border-color) !important;
+  color: var(--el-text-color-primary) !important;
+}
+.dark .apexcharts-text tspan {
+  fill: var(--el-text-color-secondary) !important;
+}
+.dark .apexcharts-gridline {
+  stroke: var(--el-border-color) !important;
+}
+
+
+
