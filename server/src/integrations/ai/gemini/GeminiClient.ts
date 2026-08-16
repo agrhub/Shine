@@ -1,0 +1,565 @@
+import { GoogleGenAI, FileState } from '@google/genai';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { fileURLToPath } from 'url';
+import { Logger } from '@/utils/logger.js';
+import { EnvConfig } from '@/config/env.js';
+import { emailService } from '~/services/EmailService.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export interface GeminiVoiceMetadata {
+  id: string;
+  name: string;
+  language: string;
+  gender: 'male' | 'female' | 'neutral';
+  provider: string;
+  description: string;
+  audioSampleUrl: string;
+}
+
+export const GEMINI_SUPPORTED_VOICES: GeminiVoiceMetadata[] = [
+  { id: 'Zephyr', name: 'Zephyr', language: 'auto', gender: 'neutral', provider: 'gemini', description: 'Bright, Higher Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Zephyr.wav' },
+  { id: 'Puck', name: 'Puck', language: 'auto', gender: 'neutral', provider: 'gemini', description: 'Upbeat, Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Puck.wav' },
+  { id: 'Charon', name: 'Charon', language: 'auto', gender: 'neutral', provider: 'gemini', description: 'Informative, Lower Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Charon.wav' },
+  { id: 'Kore', name: 'Kore', language: 'auto', gender: 'female', provider: 'gemini', description: 'Firm, Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Kore.wav' },
+  { id: 'Fenrir', name: 'Fenrir', language: 'auto', gender: 'male', provider: 'gemini', description: 'Excitable, Lower-Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Fenrir.wav' },
+  { id: 'Leda', name: 'Leda', language: 'auto', gender: 'female', provider: 'gemini', description: 'Youthful, Higher Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Leda.wav' },
+  { id: 'Orus', name: 'Orus', language: 'auto', gender: 'male', provider: 'gemini', description: 'Firm, Lower-Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Orus.wav' },
+  { id: 'Aoede', name: 'Aoede', language: 'auto', gender: 'female', provider: 'gemini', description: 'Breezy, Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Aoede.wav' },
+  { id: 'Callirrhoe', name: 'Callirrhoe', language: 'auto', gender: 'female', provider: 'gemini', description: 'Easy-going, Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Callirrhoe.wav' },
+  { id: 'Autonoe', name: 'Autonoe', language: 'auto', gender: 'female', provider: 'gemini', description: 'Bright, Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Autonoe.wav' },
+  { id: 'Enceladus', name: 'Enceladus', language: 'auto', gender: 'male', provider: 'gemini', description: 'Breathy, Lower Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Enceladus.wav' },
+  { id: 'Iapetus', name: 'Iapetus', language: 'auto', gender: 'male', provider: 'gemini', description: 'Clear, Lower-Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Iapetus.wav' },
+  { id: 'Umbriel', name: 'Umbriel', language: 'auto', gender: 'neutral', provider: 'gemini', description: 'Easy-going, Lower-Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Umbriel.wav' },
+  { id: 'Algieba', name: 'Algieba', language: 'auto', gender: 'female', provider: 'gemini', description: 'Smooth, Lower Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Algieba.wav' },
+  { id: 'Despina', name: 'Despina', language: 'auto', gender: 'female', provider: 'gemini', description: 'Smooth, Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Despina.wav' },
+  { id: 'Erinome', name: 'Erinome', language: 'auto', gender: 'female', provider: 'gemini', description: 'Clear, Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Erinome.wav' },
+  { id: 'Algenib', name: 'Algenib', language: 'auto', gender: 'male', provider: 'gemini', description: 'Gravelly, Lower Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Algenib.wav' },
+  { id: 'Rasalgethi', name: 'Rasalgethi', language: 'auto', gender: 'male', provider: 'gemini', description: 'Informative, Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Rasalgethi.wav' },
+  { id: 'Laomedeia', name: 'Laomedeia', language: 'auto', gender: 'female', provider: 'gemini', description: 'Upbeat, Higher Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Laomedeia.wav' },
+  { id: 'Achernar', name: 'Achernar', language: 'auto', gender: 'male', provider: 'gemini', description: 'Soft, Higher Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Achernar.wav' },
+  { id: 'Alnilam', name: 'Alnilam', language: 'auto', gender: 'neutral', provider: 'gemini', description: 'Firm, Lower-Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Alnilam.wav' },
+  { id: 'Schedar', name: 'Schedar', language: 'auto', gender: 'female', provider: 'gemini', description: 'Even, Lower-Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Schedar.wav' },
+  { id: 'Gacrux', name: 'Gacrux', language: 'auto', gender: 'male', provider: 'gemini', description: 'Mature, Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Gacrux.wav' },
+  { id: 'Pulcherrima', name: 'Pulcherrima', language: 'auto', gender: 'female', provider: 'gemini', description: 'Forward, Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Pulcherrima.wav' },
+  { id: 'Achird', name: 'Achird', language: 'auto', gender: 'female', provider: 'gemini', description: 'Friendly, Lower-Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Achird.wav' },
+  { id: 'Zubenelgenubi', name: 'Zubenelgenubi', language: 'auto', gender: 'male', provider: 'gemini', description: 'Casual, Lower-Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Zubenelgenubi.wav' },
+  { id: 'Vindemiatrix', name: 'Vindemiatrix', language: 'auto', gender: 'female', provider: 'gemini', description: 'Gentle, Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Vindemiatrix.wav' },
+  { id: 'Sadachbia', name: 'Sadachbia', language: 'auto', gender: 'neutral', provider: 'gemini', description: 'Lively, Lower Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Sadachbia.wav' },
+  { id: 'Sadaltager', name: 'Sadaltager', language: 'auto', gender: 'male', provider: 'gemini', description: 'Knowledgeable, Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Sadaltager.wav' },
+  { id: 'Sulafat', name: 'Sulafat', language: 'auto', gender: 'male', provider: 'gemini', description: 'Warm, Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Sulafat.wav' },
+];
+
+export class GeminiClient {
+  private apiKey?: string;
+  private serviceAccount?: string | Record<string, any>;
+  private googleGenAI?: GoogleGenAI;
+
+  private static instance?: GeminiClient;
+
+  public static getInstance(): GeminiClient {
+    if (!GeminiClient.instance) {
+      GeminiClient.instance = new GeminiClient();
+    }
+    return GeminiClient.instance;
+  }
+
+  constructor(options?: { apiKey?: string; serviceAccount?: string | Record<string, any>; keyFilename?: string }) {
+    this.apiKey = options?.apiKey || EnvConfig.geminiApiKey || process.env.GEMINI_API_KEY;
+
+    let saCandidate: string | Record<string, any> | undefined =
+      options?.serviceAccount || options?.keyFilename || process.env.GOOGLE_APPLICATION_CREDENTIALS;
+
+    if (typeof saCandidate === 'string') {
+      const candidatePaths = [
+        saCandidate,
+        path.resolve(process.cwd(), saCandidate),
+        path.resolve(process.cwd(), '../', saCandidate),
+        path.resolve(__dirname, '../../../', saCandidate),
+        path.resolve(__dirname, '../../../../', saCandidate),
+      ];
+      const found = candidatePaths.find((p) => p && fs.existsSync(p) && fs.statSync(p).isFile());
+      saCandidate = found ? path.resolve(found) : undefined;
+    }
+
+    this.serviceAccount = saCandidate;
+
+    if (this.serviceAccount && (typeof this.serviceAccount === 'object' || (typeof this.serviceAccount === 'string' && fs.existsSync(this.serviceAccount)))) {
+      this.setupServiceAccount(this.serviceAccount);
+    } else if (this.apiKey) {
+      this.googleGenAI = new GoogleGenAI({ apiKey: this.apiKey });
+    } else if (GeminiClient.detectADC()) {
+      this.setupADC();
+    }
+  }
+
+  private setupServiceAccount(serviceAccount: string | Record<string, any>) {
+    let projectId: string | undefined = EnvConfig.gcpProjectId || process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
+    let location = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
+
+    if (typeof serviceAccount === 'string' && fs.existsSync(serviceAccount)) {
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = path.resolve(serviceAccount);
+      try {
+        const content = JSON.parse(fs.readFileSync(serviceAccount, 'utf8'));
+        if (content.project_id) projectId = content.project_id;
+      } catch (e) {}
+    } else if (typeof serviceAccount === 'object' && serviceAccount !== null) {
+      projectId = (serviceAccount as any).project_id;
+      try {
+        const tempPath = path.join(os.tmpdir(), `gcp_sa_${Date.now()}.json`);
+        fs.writeFileSync(tempPath, JSON.stringify(serviceAccount, null, 2));
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = tempPath;
+      } catch (e) {}
+    }
+
+    if (projectId) {
+      try {
+        this.googleGenAI = new GoogleGenAI({ vertexai: true, project: projectId, location });
+        Logger.info(`[GeminiClient] Initialized GoogleGenAI with Service Account for project ${projectId}`);
+      } catch (e: any) {
+        Logger.warn(`[GeminiClient] Failed to initialize GoogleGenAI with Service Account: ${e.message}`);
+      }
+    }
+  }
+
+  private setupADC() {
+    const projectId = EnvConfig.gcpProjectId || process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT_ID;
+    const location = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
+    if (projectId) {
+      try {
+        this.googleGenAI = new GoogleGenAI({ vertexai: true, project: projectId, location });
+        Logger.info(`[GeminiClient] Initialized GoogleGenAI with Application Default Credentials for project ${projectId}`);
+      } catch (e: any) {
+        Logger.warn(`[GeminiClient] Failed to initialize GoogleGenAI with ADC: ${e.message}`);
+      }
+    }
+  }
+
+  private static detectADC(): boolean {
+    let credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    if (credPath && fs.existsSync(credPath)) return true;
+    return !!(process.env.K_SERVICE || process.env.GAE_SERVICE || process.env.CLOUD_RUN_JOB);
+  }
+
+  public static resolveLocationForModel(modelId?: string, configuredLocation?: string): string {
+    const model = (modelId || '').toLowerCase();
+    if (model.includes('2.5') || model.includes('gemini-2.5')) {
+      const envLoc = process.env.GOOGLE_CLOUD_LOCATION || process.env.GCP_LOCATION;
+      return envLoc && envLoc !== 'global' ? envLoc : 'us-central1';
+    }
+    if (model.includes('3.1') || model.includes('3.0') || model.includes('veo') || model.includes('lyria') || model.includes('narwhal')) {
+      return 'global';
+    }
+    if (configuredLocation) return configuredLocation;
+    const envLoc = process.env.GOOGLE_CLOUD_LOCATION || process.env.GCP_LOCATION;
+    return envLoc || 'global';
+  }
+
+  public async listVoices(language?: string): Promise<GeminiVoiceMetadata[]> {
+    if (!language || language === 'auto' || language === 'all') {
+      return GEMINI_SUPPORTED_VOICES;
+    }
+    const target = language.toLowerCase();
+    return GEMINI_SUPPORTED_VOICES.filter((v) => v.language.toLowerCase().startsWith(target) || v.language === 'auto');
+  }
+
+  private getClient(modelId?: string): GoogleGenAI {
+    if (this.googleGenAI) return this.googleGenAI;
+
+    const apiKey = this.apiKey || EnvConfig.geminiApiKey || process.env.GEMINI_API_KEY;
+    if (apiKey) {
+      return new GoogleGenAI({ apiKey });
+    }
+
+    const projectId = EnvConfig.gcpProjectId || process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT_ID;
+    const location = GeminiClient.resolveLocationForModel(modelId);
+    if (projectId) {
+      return new GoogleGenAI({ vertexai: true, project: projectId, location });
+    }
+
+    return new GoogleGenAI({});
+  }
+
+  public async generateText(options: { model?: string; prompt: string; systemInstruction?: string; jsonMode?: boolean }): Promise<string> {
+    const res = await this.generateContent(options.prompt, options.model || EnvConfig.geminiModelTextAnalysis, {
+      systemPrompt: options.systemInstruction,
+      generationConfig: { responseMimeType: options.jsonMode ? 'application/json' : 'text/plain' },
+    });
+    return res.text;
+  }
+
+  public async generateContent(prompt: string | any[], modelId: string = EnvConfig.geminiModelTextAnalysis, options: any = {}) {
+    try {
+      const client = this.getClient(modelId);
+      const parts: any[] = Array.isArray(prompt) ? prompt : [{ text: String(prompt) }];
+
+      if (options.image) {
+        parts.push({
+          inlineData: {
+            data: Buffer.isBuffer(options.image) ? options.image.toString('base64') : options.image,
+            mimeType: options.mimeType || 'image/png',
+          },
+        });
+      }
+
+      const response = await (client as any).models.generateContent({
+        model: modelId,
+        contents: [{ role: 'user', parts }],
+        config: {
+          systemInstruction: options.systemPrompt ? { parts: [{ text: options.systemPrompt }] } : undefined,
+          tools: options.grounding ? [{ googleSearch: {} }] : options.tools,
+          maxOutputTokens: options.maxTokens || 8192,
+          temperature: options.temperature ?? 0.7,
+          ...options.generationConfig,
+          thinkingConfig: options.thinkingConfig,
+        },
+      });
+
+      return {
+        text: response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '',
+        usage: response.usageMetadata,
+      };
+    } catch (error: any) {
+      Logger.error(`[GeminiClient] generateContent failed: ${error.message}`);
+      emailService.sendAdminSystemAlert('Gemini generateContent', error.message).catch(console.error);
+      throw error;
+    }
+  }
+
+  public async generateImage(options: { model?: string; prompt: string; aspectRatio?: '1:1' | '9:16' | '16:9' }) {
+    const res = await this._generateImage(options.prompt, options.model || EnvConfig.geminiModelImageGeneration, options);
+    return res?.url?.split('base64,')[1] || null;
+  }
+
+  public async _generateImage(prompt: string, modelId: string = EnvConfig.geminiModelImageGeneration, options: any = {}): Promise<{ url: string; mimeType: string } | null> {
+    try {
+      const client = this.getClient(modelId);
+      const isImagenModel = modelId.startsWith('imagen-');
+
+      if (isImagenModel) {
+        Logger.info(`[GeminiClient] Using generateImages() for Imagen model: ${modelId}`);
+        const response = await (client as any).models.generateImages({
+          model: modelId,
+          prompt: prompt,
+          config: {
+            numberOfImages: 1,
+            outputMimeType: 'image/png',
+            aspectRatio: options.aspectRatio || '1:1',
+            ...options.parameters,
+          },
+        });
+        if (response.generatedImages?.length > 0) {
+          const img = response.generatedImages[0];
+          return { url: `data:image/png;base64,${img.image.imageBytes}`, mimeType: 'image/png' };
+        }
+        throw new Error('No images returned from Imagen API');
+      } else {
+        Logger.info(`[GeminiClient] Using generateContent() for Gemini image model: ${modelId}`);
+        const parts = Array.isArray(prompt) ? prompt : [{ text: String(prompt) }];
+        const response = await (client as any).models.generateContent({
+          model: modelId,
+          contents: [{ role: 'user', parts }],
+          config: { responseModalities: ['IMAGE'] },
+        });
+        const responseParts = response?.candidates?.[0]?.content?.parts || [];
+        for (const part of responseParts) {
+          if (part?.inlineData?.data) {
+            const mimeType = part.inlineData.mimeType || 'image/png';
+            return { url: `data:${mimeType};base64,${part.inlineData.data}`, mimeType };
+          }
+        }
+        throw new Error('No image data in Gemini response');
+      }
+    } catch (error: any) {
+      Logger.error(`[GeminiClient] generateImage failed: ${error.message}`);
+      return null;
+    }
+  }
+
+  public async generateVideo(prompt: string, modelId: string = EnvConfig.geminiModelVideoGeneration, options: any = {}): Promise<{ url?: string; mimeType?: string; sceneId?: string; statusUrl?: string; jobId?: string; status?: string } | null> {
+    try {
+      const client = this.getClient(modelId);
+      const genConfig: any = {};
+      if (options.aspectRatio) genConfig.aspectRatio = options.aspectRatio;
+      if (options.resolution) genConfig.resolution = options.resolution;
+      if (options.durationSeconds) genConfig.durationSeconds = String(options.durationSeconds);
+      if (options.personGeneration) genConfig.personGeneration = options.personGeneration;
+
+      const generateParams: any = {
+        model: modelId,
+        prompt,
+      };
+
+      if (Object.keys(genConfig).length > 0) generateParams.config = genConfig;
+
+      let operation = await (client as any).models.generateVideos(generateParams);
+
+      if (options.async) {
+        return { jobId: operation.name, status: 'pending' };
+      }
+
+      const maxPolls = 60;
+      let pollCount = 0;
+      while (!operation.done && pollCount < maxPolls) {
+        await new Promise((resolve) => setTimeout(resolve, 10000));
+        operation = await (client as any).operations.getVideosOperation({ operation });
+        pollCount++;
+      }
+
+      if (!operation.done) throw new Error('Video generation timed out after 10 minutes');
+
+      const generatedVideos = operation.response?.generatedVideos || [];
+      if (generatedVideos.length === 0) throw new Error('No videos returned from Veo API');
+
+      const videoFile = generatedVideos[0].video;
+      const videoBytes = videoFile?.videoBytes || generatedVideos[0].videoBytes;
+      const videoUrl = videoFile?.uri || videoFile?.gcsUri || generatedVideos[0].uri || generatedVideos[0].gcsUri;
+
+      if (videoBytes) {
+        return { url: `data:${videoFile?.mimeType || 'video/mp4'};base64,${videoBytes}`, mimeType: videoFile?.mimeType || 'video/mp4' };
+      } else if (videoUrl) {
+        return { url: videoUrl, mimeType: videoFile?.mimeType || 'video/mp4' };
+      }
+      throw new Error('No video URI or bytes in Veo response');
+    } catch (error: any) {
+      Logger.error(`[GeminiClient] generateVideo failed: ${error.message}`);
+      return null;
+    }
+  }
+
+  public async generateAudio(text: string, voiceId: string = 'Puck', modelId: string = EnvConfig.geminiModelVoice, options: any = {}): Promise<{ url: string; mimeType: string }> {
+    try {
+      const client = this.getClient(modelId);
+      let speechConfig: any;
+      let finalText = text;
+
+      if (options.multiSpeaker && options.multiSpeaker.enabled && Array.isArray(options.multiSpeaker.speakers) && options.multiSpeaker.speakers.length > 0) {
+        const speakers = options.multiSpeaker.speakers;
+        const speakerNames = speakers.map((_: any, i: number) => `Speaker ${i + 1}`);
+        const intro = `TTS the following conversation between ${speakerNames.join(' and ')}:`;
+        const lines = text.split('\n').filter((l) => l.trim().length > 0);
+        const mappedLines = lines.map((line, idx) => {
+          const sName = speakerNames[idx % speakerNames.length];
+          return `${sName}: ${line.trim()}`;
+        });
+        finalText = [intro, ...mappedLines].join('\n');
+        speechConfig = {
+          multiSpeakerVoiceConfig: {
+            speakerVoiceConfigs: speakers.map((s: any, idx: number) => ({
+              speaker: `Speaker ${idx + 1}`,
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: s.voiceId || voiceId },
+              },
+            })),
+          },
+        };
+      } else {
+        speechConfig = {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName: voiceId,
+            },
+          },
+        };
+
+        const styleInstructions: string[] = [];
+        if (options.speed && options.speed !== 1.0) {
+          styleInstructions.push(options.speed > 1.0 ? `speak faster at ${options.speed}x speed` : `speak slower at ${options.speed}x speed`);
+        }
+        if (options.pitch && options.pitch !== 0) {
+          styleInstructions.push(options.pitch > 0 ? `use a higher pitch (+${options.pitch})` : `use a lower pitch (${options.pitch})`);
+        }
+        if (styleInstructions.length > 0) {
+          finalText = `Instructions: Please ${styleInstructions.join(' and ')} when reading the following text aloud.\n\nText:\n${text}`;
+        }
+      }
+
+      const response = await (client as any).models.generateContent({
+        model: modelId,
+        contents: [{ role: 'user', parts: [{ text: finalText }] }],
+        config: { responseModalities: ['AUDIO'], speechConfig },
+      });
+
+      const part = response.candidates?.[0]?.content?.parts?.[0];
+      let base64 = part?.inlineData?.data;
+      let mimeType = part?.inlineData?.mimeType || 'audio/L16;rate=24000';
+      if (!base64) throw new Error('No audio data returned from Gemini TTS API');
+
+      // PCM → WAV conversion
+      if (mimeType.toLowerCase().includes('l16') || mimeType.toLowerCase().includes('pcm')) {
+        try {
+          const audioBuffer = Buffer.from(base64, 'base64');
+          const sampleRate = 24000;
+          const numChannels = 1;
+          const wavBuffer = Buffer.allocUnsafe(44 + audioBuffer.length);
+          wavBuffer.write('RIFF', 0);
+          wavBuffer.writeUInt32LE(36 + audioBuffer.length, 4);
+          wavBuffer.write('WAVE', 8);
+          wavBuffer.write('fmt ', 12);
+          wavBuffer.writeUInt32LE(16, 16);
+          wavBuffer.writeUInt16LE(1, 20);
+          wavBuffer.writeUInt16LE(numChannels, 22);
+          wavBuffer.writeUInt32LE(sampleRate, 24);
+          wavBuffer.writeUInt32LE(sampleRate * numChannels * 2, 28);
+          wavBuffer.writeUInt16LE(numChannels * 2, 32);
+          wavBuffer.writeUInt16LE(16, 34);
+          wavBuffer.write('data', 36);
+          wavBuffer.writeUInt32LE(audioBuffer.length, 40);
+          audioBuffer.copy(wavBuffer, 44);
+          base64 = wavBuffer.toString('base64');
+          mimeType = 'audio/wav';
+        } catch (e: any) {
+          Logger.warn(`[GeminiClient] Failed to add WAV header: ${e.message}`);
+        }
+      }
+
+      return { url: `data:${mimeType};base64,${base64}`, mimeType };
+    } catch (error: any) {
+      Logger.error(`[GeminiClient] generateAudio failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  public async generateMusic(prompt: string, modelId: string = EnvConfig.geminiModelMusic, options: any = {}): Promise<{ url: string; mimeType: string }> {
+    try {
+      const client = this.getClient(modelId);
+      const isVertex = !!(client as any).project || !!(client as any).vertexai;
+
+      if (isVertex) {
+        Logger.info(`[GeminiClient] Using Vertex Interactions API for music generation: ${modelId}`);
+        const interaction = await (client as any).interactions.create({
+          model: modelId,
+          input: prompt,
+        });
+
+        let generatedAudio = interaction.outputAudio || interaction.output_audio;
+        if (!generatedAudio && Array.isArray(interaction.outputs)) {
+          const audioOutput = interaction.outputs.find((out: any) => out.data && (out.mime_type?.startsWith('audio/') || out.mimeType?.startsWith('audio/')));
+          if (audioOutput) {
+            generatedAudio = {
+              data: audioOutput.data,
+              mime_type: audioOutput.mime_type || audioOutput.mimeType || 'audio/mp3',
+            };
+          }
+        }
+
+        if (!generatedAudio) {
+          throw new Error('No audio data returned from Lyria via interactions');
+        }
+
+        return {
+          url: `data:${generatedAudio.mime_type || 'audio/mp3'};base64,${generatedAudio.data}`,
+          mimeType: generatedAudio.mime_type || 'audio/mp3',
+        };
+      } else {
+        Logger.info(`[GeminiClient] Using Gemini/AI Studio generateContent API for music generation: ${modelId}`);
+        const response = await (client as any).models.generateContent({
+          model: modelId,
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          config: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: 'Puck',
+                },
+              },
+            },
+          },
+        });
+
+        const part = response.candidates?.[0]?.content?.parts?.[0];
+        const base64 = part?.inlineData?.data;
+        const mimeType = part?.inlineData?.mimeType || 'audio/mp3';
+
+        if (!base64) {
+          throw new Error('No audio data returned from Lyria via generateContent');
+        }
+
+        return {
+          url: `data:${mimeType};base64,${base64}`,
+          mimeType,
+        };
+      }
+    } catch (error: any) {
+      Logger.error(`[GeminiClient] generateMusic failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  public async connectLive(config: {
+    model?: string;
+    systemInstruction?: string;
+    generationConfig?: any;
+    contextWindowCompression?: any;
+    sessionResumption?: any;
+    tools?: any[];
+    callbacks: {
+      onopen?: (session?: any) => void | Promise<void>;
+      onmessage?: (msg: any) => void;
+      onerror?: (err: any) => void;
+      onclose?: (event: any) => void;
+    };
+  }) {
+    const model = config.model || EnvConfig.geminiModelVoice;
+    const client = this.getClient(model);
+
+    try {
+      const session = await (client as any).live.connect({
+        model: model,
+        config: {
+          systemInstruction: config.systemInstruction,
+          responseModalities: config.generationConfig?.responseModalities,
+          speechConfig: config.generationConfig?.speechConfig,
+          tools: config.tools,
+          enableAffectiveDialog: true,
+          contextWindowCompression: config.contextWindowCompression,
+          sessionResumption: config.sessionResumption,
+          realtimeInputConfig: {
+            automaticActivityDetection: {
+              disabled: true,
+            },
+          },
+        },
+        callbacks: config.callbacks,
+      });
+
+      return { session };
+    } catch (error: any) {
+      Logger.error(`[GeminiClient] Live connection failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  public async uploadFile(filePath: string, mimeType: string, displayName?: string) {
+    const client = this.getClient();
+    return await (client as any).files.upload({
+      file: filePath,
+      config: { mimeType, displayName: displayName || filePath.split('/').pop() },
+    });
+  }
+
+  public async waitForFileActive(fileIdOrUri: string) {
+    const client = this.getClient();
+    const fileName = fileIdOrUri.includes('/') ? (fileIdOrUri.startsWith('http') ? `files/${fileIdOrUri.split('/').pop()}` : fileIdOrUri) : `files/${fileIdOrUri}`;
+    let file = await (client as any).files.get({ name: fileName });
+    while (file.state === FileState.PROCESSING) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      file = await (client as any).files.get({ name: fileName });
+    }
+    if (file.state === FileState.FAILED) throw new Error('Gemini File API processing failed');
+    return file;
+  }
+
+  public async deleteFile(fileIdOrUri: string) {
+    const client = this.getClient();
+    const fileName = fileIdOrUri.includes('/') ? (fileIdOrUri.startsWith('http') ? `files/${fileIdOrUri.split('/').pop()}` : fileIdOrUri) : `files/${fileIdOrUri}`;
+    await (client as any).files.delete({ name: fileName });
+    return true;
+  }
+}
+
+export const geminiClient = GeminiClient.getInstance();

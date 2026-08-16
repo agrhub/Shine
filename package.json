@@ -1,0 +1,22 @@
+{
+  "name": "shine",
+  "version": "0.0.1",
+  "description": "AI Micro-Drama Video Studio, Vue 3 + Element Plus & Express",
+  "type": "module",
+  "scripts": {
+    "server": "pnpm --filter shine-server dev",
+    "client": "pnpm --filter shine-client dev",
+    "dev": "concurrently \"pnpm run server\" \"pnpm run client\"",
+    "client:build": "pnpm --filter shine-client build",
+    "server:build": "pnpm --filter shine-server build",
+    "build": "pnpm run client:build && pnpm run server:build",
+    "start": "pnpm --filter shine-server start"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "module-alias": "^2.3.4"
+  }
+}
