@@ -1,6 +1,6 @@
-# Shine (DramaFlowAI) UI/UX Design & Enhancement Proposals
+# Shine UI/UX Design & Enhancement Proposals
 
-This document details the UI/UX enhancement proposals for **Shine (DramaFlowAI)** based on the 15 UI mockup samples in `docs/UI/`.
+This document details the UI/UX enhancement proposals for **Shine** based on the 15 UI mockup samples in `docs/stitch_shine_app_design/`.
 
 ---
 

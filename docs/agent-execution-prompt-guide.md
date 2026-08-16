@@ -22,13 +22,18 @@ Every task prompt assigned to an AI Developer Agent MUST contain these 5 structu
 # TASK: Implement [Feature Name / Sprint Module]
 
 ## Context & Specification Binding
-You are tasked with implementing [Feature Name] for Shine (DramaFlowAI).
+You are tasked with implementing [Feature Name] for Shine.
 Before writing code, inspect and strictly adhere to the following specification documents:
 - Requirements: `docs/requirements-document.md` (Section: [FR-XXX to FR-YYY])
 - Architecture: `docs/architecture-document.md` (Section: [Section Name])
 - API Reference: `docs/api-document.md` (Section: [Endpoint Name])
+- Design & Stitch MCP: `docs/design.md` & Google Stitch MCP local design assets in `docs/stitch_shine_app_design/`
+- Mandatory Stitch Screen Registry: `docs/stitch-screen-registry.md` (Call `get_screen` + `read_url_content` for target screen HTML before coding!)
+- Element Plus: Use `element-plus` components (`<el-button>`, `<el-card>`, `<el-table>`, `<el-tabs>`, etc.) and `@element-plus/icons-vue`.
 - Test Cases: `docs/test-document.md` (Section: [TC-XXX to TC-YYY])
 - Safety Protocols: `docs/safe-code-editing-guidelines.md`
+
+
 
 ## Target Files to Inspect & Modify
 - Frontend: `src/[path/to/component.vue]`
@@ -49,7 +54,9 @@ Before writing code, inspect and strictly adhere to the following specification 
 You CANNOT declare this task "100% Complete" based solely on code edits or UI mockups.
 You MUST execute the following verification steps and include empirical output in your response:
 1. Run `pnpm build` or `npx tsc --noEmit` to verify zero TypeScript errors.
-2. Run relevant unit/API tests (`pnpm test`) to verify passing status.
+2. Run `pnpm run check-i18n` in `apps/shine/client` to verify ZERO hardcoded toast strings and 100% key parity across all 6 locales (`en`, `vi`, `zh`, `jp`, `es`, `fr`).
+3. Run relevant unit/API tests (`pnpm test`) to verify passing status.
+
 
 ## Required Final Response Format
 Provide a clean summary containing:

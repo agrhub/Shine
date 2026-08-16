@@ -1,0 +1,340 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Shine - Trend Hunt</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "secondary": "#585f64",
+                        "inverse-primary": "#51df9c",
+                        "surface-container-high": "#e7e8e9",
+                        "on-primary": "#ffffff",
+                        "secondary-fixed": "#dce3e9",
+                        "primary-fixed-dim": "#51df9c",
+                        "on-secondary": "#ffffff",
+                        "surface-container": "#edeeef",
+                        "surface-bright": "#f8f9fa",
+                        "surface-container-lowest": "#ffffff",
+                        "on-primary-container": "#005434",
+                        "outline": "#6c7a70",
+                        "on-background": "#191c1d",
+                        "on-surface": "#191c1d",
+                        "on-secondary-fixed-variant": "#41484c",
+                        "on-tertiary-fixed-variant": "#40484d",
+                        "inverse-surface": "#2e3132",
+                        "on-primary-fixed-variant": "#005233",
+                        "on-error": "#ffffff",
+                        "on-tertiary-fixed": "#151d21",
+                        "primary": "#006c45",
+                        "inverse-on-surface": "#f0f1f2",
+                        "on-tertiary": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "surface": "#f8f9fa",
+                        "on-surface-variant": "#3d4a41",
+                        "error": "#ba1a1a",
+                        "secondary-fixed-dim": "#c0c7cd",
+                        "tertiary-fixed-dim": "#c0c7ce",
+                        "on-secondary-container": "#5e656a",
+                        "tertiary-container": "#b1b9c0",
+                        "background": "#f8f9fa",
+                        "on-primary-fixed": "#002112",
+                        "error-container": "#ffdad6",
+                        "surface-container-highest": "#e1e3e4",
+                        "secondary-container": "#dce3e9",
+                        "primary-fixed": "#71fcb6",
+                        "surface-tint": "#006c45",
+                        "surface-container-low": "#f3f4f5",
+                        "on-tertiary-container": "#424a4f",
+                        "surface-variant": "#e1e3e4",
+                        "tertiary": "#575f65",
+                        "surface-dim": "#d9dadb",
+                        "tertiary-fixed": "#dce3ea",
+                        "outline-variant": "#bbcabe",
+                        "on-secondary-fixed": "#161d21",
+                        "primary-container": "#3ecf8e"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    spacing: {
+                        "container-max": "1200px",
+                        "stack-md": "16px",
+                        "margin-mobile": "16px",
+                        "gutter": "24px",
+                        "stack-sm": "8px",
+                        "stack-lg": "32px",
+                        "sidebar-width": "280px"
+                    },
+                    fontFamily: {
+                        "body-md": ["Inter", "sans-serif"],
+                        "headline-xl": ["Inter", "sans-serif"],
+                        "headline-lg": ["Inter", "sans-serif"],
+                        "body-sm": ["Inter", "sans-serif"],
+                        "label-bold": ["Inter", "sans-serif"],
+                        "label-md": ["Inter", "sans-serif"],
+                        "headline-lg-mobile": ["Inter", "sans-serif"]
+                    },
+                    fontSize: {
+                        "body-md": ["16px", { lineHeight: "1.6", fontWeight: "400" }],
+                        "headline-xl": ["32px", { lineHeight: "1.2", letterSpacing: "-0.02em", fontWeight: "700" }],
+                        "headline-lg": ["24px", { lineHeight: "1.3", letterSpacing: "-0.01em", fontWeight: "600" }],
+                        "body-sm": ["14px", { lineHeight: "1.5", fontWeight: "400" }],
+                        "label-bold": ["12px", { lineHeight: "1.2", letterSpacing: "0.05em", fontWeight: "700" }],
+                        "label-md": ["13px", { lineHeight: "1.2", fontWeight: "500" }],
+                        "headline-lg-mobile": ["20px", { lineHeight: "1.3", fontWeight: "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style type="text/tailwindcss">
+        @layer utilities {
+            .glass-panel {
+                @apply bg-surface/80 backdrop-blur-md border border-outline-variant/30;
+            }
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body-md min-h-screen antialiased selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center w-full px-gutter h-20 bg-surface dark:bg-inverse-surface z-50 fixed full-width top-0 border-b border-outline-variant dark:border-outline">
+<div class="flex items-center gap-4">
+<span class="font-headline-xl text-headline-xl font-bold tracking-tighter text-on-surface dark:text-inverse-on-surface">SHINE</span>
+<div class="h-6 w-px bg-outline-variant mx-2"></div>
+<span class="font-label-bold text-label-bold text-secondary tracking-widest uppercase">Series Onboarding</span>
+</div>
+<!-- Stepper Navigation -->
+<nav class="hidden md:flex items-center gap-8 absolute left-1/2 -translate-x-1/2">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full border border-outline-variant flex items-center justify-center font-label-bold text-label-bold text-secondary">1</div>
+<span class="font-label-bold text-label-bold text-secondary uppercase tracking-widest">CORE DNA</span>
+</div>
+<div class="w-12 h-px bg-outline-variant"></div>
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full border-2 border-primary bg-primary-container flex items-center justify-center font-label-bold text-label-bold text-on-primary-container">2</div>
+<span class="font-label-bold text-label-bold text-primary font-bold uppercase tracking-widest">TREND HUNT</span>
+</div>
+<div class="w-12 h-px bg-outline-variant"></div>
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full border border-outline-variant flex items-center justify-center font-label-bold text-label-bold text-secondary">3</div>
+<span class="font-label-bold text-label-bold text-secondary uppercase tracking-widest">COMPLIANCE</span>
+</div>
+</nav>
+<div class="flex items-center gap-6">
+<button class="font-label-bold text-label-bold text-secondary hover:text-primary transition-colors duration-200 tracking-widest uppercase">SAVE DRAFT</button>
+<button class="bg-on-surface text-surface px-6 py-2.5 rounded-full font-label-bold text-label-bold tracking-widest uppercase hover:opacity-90 transition-opacity flex items-center gap-2 shadow-[0_4px_12px_rgba(0,0,0,0.1)]">
+                NEXT STEP
+            </button>
+</div>
+</header>
+<div class="flex pt-20 h-screen overflow-hidden">
+<!-- SideNavBar -->
+<aside class="hidden md:flex fixed left-0 top-20 h-[calc(100vh-80px)] w-sidebar-width flex-col p-gutter gap-stack-lg border-r border-outline-variant bg-surface-container-low shrink-0 z-40 overflow-y-auto">
+<div class="flex flex-col gap-2">
+<h2 class="font-label-bold text-label-bold text-secondary tracking-widest uppercase">STEP 2: MARKET ANALYSIS</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                    Our AI agent is scanning social platforms for high-retention tropes.
+                </p>
+</div>
+<div class="mt-8 bg-surface border border-outline-variant rounded-xl p-4 shadow-sm relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-primary-container"></div>
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-primary" data-icon="lightbulb" data-weight="fill" style="font-variation-settings: 'FILL' 1;">lightbulb</span>
+<span class="font-label-bold text-label-bold text-on-surface tracking-widest uppercase">AI TIP</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant italic">
+                    "Revenge dramas are currently outperforming Romance in the SEA region."
+                </p>
+</div>
+<!-- Contextual Navigation matches Step 1 SideNav pattern but inactive -->
+<nav class="mt-auto hidden">
+<ul class="flex flex-col gap-2">
+<li>
+<a class="flex items-center gap-3 p-3 rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="fingerprint">fingerprint</span>
+<span class="font-label-bold text-label-bold">Core DNA</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 p-3 rounded-lg bg-primary-container text-on-primary-container font-bold" href="#">
+<span class="material-symbols-outlined" data-icon="trending_up">trending_up</span>
+<span class="font-label-bold text-label-bold">Trend Hunt</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 p-3 rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="gavel">gavel</span>
+<span class="font-label-bold text-label-bold">Compliance</span>
+</a>
+</li>
+</ul>
+</nav>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 md:ml-[280px] p-margin-mobile md:p-gutter xl:px-12 overflow-y-auto w-full relative pb-32">
+<div class="max-w-[900px] mx-auto w-full pt-8 md:pt-12">
+<div class="mb-10">
+<h1 class="font-headline-xl text-headline-xl md:text-[40px] font-bold text-on-surface mb-2 tracking-tight">Explore Viral Trends</h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">
+                        Analyze real-time social velocity to anchor your script to proven audience hooks.
+                    </p>
+</div>
+<!-- Region Selector -->
+<div class="flex flex-wrap gap-3 mb-10 border-b border-outline-variant pb-6">
+<button class="px-5 py-2 rounded-full border-2 border-primary text-primary font-label-bold text-label-bold tracking-wide transition-all bg-primary/5">US</button>
+<button class="px-5 py-2 rounded-full border border-outline-variant text-on-surface-variant font-label-bold text-label-bold tracking-wide hover:border-outline transition-all bg-surface">SEA</button>
+<button class="px-5 py-2 rounded-full border border-outline-variant text-on-surface-variant font-label-bold text-label-bold tracking-wide hover:border-outline transition-all bg-surface">CN</button>
+<button class="px-5 py-2 rounded-full border border-outline-variant text-on-surface-variant font-label-bold text-label-bold tracking-wide hover:border-outline transition-all bg-surface">LATAM</button>
+<button class="px-5 py-2 rounded-full border border-outline-variant text-on-surface-variant font-label-bold text-label-bold tracking-wide hover:border-outline transition-all bg-surface">JP/KR</button>
+</div>
+<!-- Trending Trope Grid -->
+<h3 class="font-headline-lg text-headline-lg text-on-surface mb-6">Trending Tropes</h3>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+<!-- Card 1 -->
+<div class="group bg-surface border border-outline-variant rounded-xl p-6 hover:border-primary transition-colors cursor-pointer relative overflow-hidden flex flex-col h-full shadow-sm hover:shadow-md">
+<div class="flex justify-between items-start mb-4">
+<div class="w-10 h-10 rounded-full bg-error-container/50 flex items-center justify-center text-error">
+<span class="material-symbols-outlined" data-icon="local_fire_department" data-weight="fill" style="font-variation-settings: 'FILL' 1;">local_fire_department</span>
+</div>
+<span class="bg-error/10 text-error px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">High Velocity</span>
+</div>
+<h4 class="font-headline-lg-mobile text-headline-lg-mobile font-semibold mb-2">Secret Billionaire</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-6 flex-grow">Hidden wealth revealed to skeptical antagonists.</p>
+<div class="pt-4 border-t border-outline-variant/50 w-full">
+<div class="flex justify-between text-[10px] font-bold text-secondary uppercase tracking-wider mb-2">
+<span>Est. Retention</span>
+<span class="text-primary">82%</span>
+</div>
+<!-- Mini Graph Placeholder -->
+<div class="h-8 w-full bg-surface-container-low rounded relative overflow-hidden flex items-end px-1 gap-1">
+<div class="w-full bg-primary-container/40 rounded-t h-[40%]"></div>
+<div class="w-full bg-primary-container/60 rounded-t h-[55%]"></div>
+<div class="w-full bg-primary-container/80 rounded-t h-[65%]"></div>
+<div class="w-full bg-primary-container rounded-t h-[80%]"></div>
+<div class="w-full bg-primary rounded-t h-[95%]"></div>
+</div>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="group bg-surface border border-outline-variant rounded-xl p-6 hover:border-primary transition-colors cursor-pointer relative overflow-hidden flex flex-col h-full shadow-sm hover:shadow-md">
+<div class="flex justify-between items-start mb-4">
+<div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined" data-icon="published_with_changes">published_with_changes</span>
+</div>
+<span class="bg-surface-container-high text-on-surface-variant px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">Stable</span>
+</div>
+<h4 class="font-headline-lg-mobile text-headline-lg-mobile font-semibold mb-2">Return of the Ex</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-6 flex-grow">A glow-up revenge arc aimed at a former partner.</p>
+<div class="pt-4 border-t border-outline-variant/50 w-full">
+<div class="flex justify-between text-[10px] font-bold text-secondary uppercase tracking-wider mb-2">
+<span>Est. Retention</span>
+<span>68%</span>
+</div>
+<div class="h-8 w-full bg-surface-container-low rounded relative overflow-hidden flex items-end px-1 gap-1 opacity-60">
+<div class="w-full bg-secondary-fixed/50 rounded-t h-[60%]"></div>
+<div class="w-full bg-secondary-fixed/50 rounded-t h-[62%]"></div>
+<div class="w-full bg-secondary-fixed/50 rounded-t h-[58%]"></div>
+<div class="w-full bg-secondary-fixed/50 rounded-t h-[65%]"></div>
+<div class="w-full bg-secondary-fixed/50 rounded-t h-[64%]"></div>
+</div>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="group bg-surface border border-outline-variant rounded-xl p-6 hover:border-primary transition-colors cursor-pointer relative overflow-hidden flex flex-col h-full shadow-sm hover:shadow-md">
+<div class="flex justify-between items-start mb-4">
+<div class="w-10 h-10 rounded-full bg-primary-container/20 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="trending_up">trending_up</span>
+</div>
+<span class="bg-primary/10 text-primary px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">Rising</span>
+</div>
+<h4 class="font-headline-lg-mobile text-headline-lg-mobile font-semibold mb-2">Mistaken Identity</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-6 flex-grow">Ordinary person treated as VIP by a powerful syndicate.</p>
+<div class="pt-4 border-t border-outline-variant/50 w-full">
+<div class="flex justify-between text-[10px] font-bold text-secondary uppercase tracking-wider mb-2">
+<span>Est. Retention</span>
+<span class="text-primary">75%</span>
+</div>
+<div class="h-8 w-full bg-surface-container-low rounded relative overflow-hidden flex items-end px-1 gap-1">
+<div class="w-full bg-primary-container/30 rounded-t h-[30%]"></div>
+<div class="w-full bg-primary-container/40 rounded-t h-[45%]"></div>
+<div class="w-full bg-primary-container/60 rounded-t h-[60%]"></div>
+<div class="w-full bg-primary-container/80 rounded-t h-[75%]"></div>
+<div class="w-full bg-primary-container rounded-t h-[88%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bento Grid: Tags & Insights -->
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-6 mb-12">
+<!-- Hashtag Cloud -->
+<div class="lg:col-span-3 bg-surface border border-outline-variant rounded-xl p-6 shadow-sm">
+<h3 class="font-label-bold text-label-bold text-secondary tracking-widest uppercase mb-6">Viral Signatures</h3>
+<div class="flex flex-wrap gap-x-4 gap-y-6 items-center justify-center py-4">
+<div class="text-center">
+<span class="block text-2xl font-bold text-on-surface">#Cyberpunk</span>
+<span class="text-xs text-primary font-bold">+14%</span>
+</div>
+<div class="text-center opacity-70 scale-90">
+<span class="block text-xl font-medium text-on-surface-variant">#CEO</span>
+<span class="text-xs text-secondary font-bold">-2%</span>
+</div>
+<div class="text-center scale-110">
+<span class="block text-3xl font-extrabold text-on-surface">#ShortDrama</span>
+<span class="text-xs text-primary font-bold">+31%</span>
+</div>
+<div class="text-center opacity-80">
+<span class="block text-lg font-semibold text-on-surface">#ViralRevenge</span>
+<span class="text-xs text-primary font-bold">+8%</span>
+</div>
+<div class="text-center opacity-60 scale-75">
+<span class="block text-xl font-medium text-on-surface-variant">#TimeTravel</span>
+<span class="text-xs text-secondary font-bold">Stable</span>
+</div>
+<div class="text-center opacity-90">
+<span class="block text-2xl font-bold text-on-surface">#HiddenHeir</span>
+<span class="text-xs text-primary font-bold">+19%</span>
+</div>
+</div>
+</div>
+<!-- Script Insights -->
+<div class="lg:col-span-2 bg-surface-container-low border border-outline-variant rounded-xl p-6 shadow-sm relative overflow-hidden flex flex-col justify-center">
+<div class="absolute -right-4 -top-4 text-outline-variant/20">
+<span class="material-symbols-outlined text-[120px]" data-icon="insights">insights</span>
+</div>
+<div class="relative z-10">
+<div class="flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="auto_awesome">auto_awesome</span>
+<h3 class="font-label-bold text-label-bold text-secondary tracking-widest uppercase">AI Script Insight</h3>
+</div>
+<p class="font-body-md text-body-md text-on-surface font-medium mb-4 leading-relaxed">
+                                Top Hook Trend: "Protagonist discovers a secret file in the first 5 seconds."
+                            </p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                                Integrating this structural element increases average view duration by 1.8 seconds in the tested demographics.
+                            </p>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Floating Action Area -->
+<div class="fixed bottom-0 left-0 md:left-[280px] right-0 p-6 bg-gradient-to-t from-surface via-surface to-transparent z-40 flex justify-end pointer-events-none">
+<div class="pointer-events-auto">
+<button class="bg-on-surface text-surface px-8 py-4 rounded-full font-label-bold text-label-bold tracking-widest uppercase hover:opacity-90 transition-all flex items-center gap-3 shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.2)] hover:-translate-y-1">
+                    SCAN TRENDS &amp; CONTINUE
+                    <span class="material-symbols-outlined" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</body></html>

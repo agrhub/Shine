@@ -1,6 +1,6 @@
-# Shine (DramaFlowAI) - AI Prompt Engineering Guide
+# Shine - AI Prompt Engineering Guide
 
-Welcome to the **Shine (DramaFlowAI)** AI Prompt Engineering Guide. Shine is an AI micro-drama video studio powered by a hierarchical multi-agent system. This guide documents the prompt engineering patterns, JSON output formats, and best practices for configuring and interacting with each agent in the production pipeline.
+Welcome to the **Shine** AI Prompt Engineering Guide. Shine is an AI micro-drama video studio powered by a hierarchical multi-agent system. This guide documents the prompt engineering patterns, JSON output formats, and best practices for configuring and interacting with each agent in the production pipeline.
 
 ---
 
@@ -325,37 +325,34 @@ Use text instructions within the script to guide the TTS engine (e.g., `"speak w
 - ❌ **DON'T:** Skip the Supervision Agent step — it catches common consistency errors before expensive video generation.
 
 ---
-
----
-
 ## 13. Short Drama Scriptwriting Principles & Skills (Ref: Toonflow)
 
 Shine's AI Director and Script Agent enforce proven commercial short drama scriptwriting skills derived from industrial production frameworks.
 
-### 13.1 Three Densities (三大密度)
+### 13.1 Three Densities
 Every generated episode script must pass self-inspection against three core densities:
 
-1. **Emotional Density (情绪密度)**
+1. **Emotional Density**
    - **3s Hook:** Front-load high emotion in the first 3 seconds (e.g., slapped in the face, humiliated).
    - **30–40s Climax:** First emotional outbreak (e.g., protagonist's first counterstrike).
    - **10s Cliffhanger:** Maximize emotional suspense before cutting.
    - **Action over Dialogue:** Express emotion via concrete physical actions rather than passive dialogue (e.g., flipping a table vs. 10 lines saying "she was furious").
 
-2. **Information Density (信息密度 — "Fast, Accurate, New, Zero Fluff")**
-   - **Fast (快):** Front-load character identity, crisis, and core conflict within the first 10 seconds.
-   - **Accurate (准):** Use subtext to advance plot + reveal character + transfer conflict in a single line.
-   - **New (新):** Every episode MUST introduce new information (new identity/card, villain plot, reversal).
-   - **Zero Fluff (无):** Every single line must advance plot, build character, create a hook, or trigger emotion. Otherwise, delete.
+2. **Information Density ("Fast, Accurate, New, Zero Fluff")**
+   - **Fast:** Front-load character identity, crisis, and core conflict within the first 10 seconds.
+   - **Accurate:** Use subtext to advance plot + reveal character + transfer conflict in a single line.
+   - **New:** Every episode MUST introduce new information (new identity/card, villain plot, reversal).
+   - **Zero Fluff:** Every single line must advance plot, build character, create a hook, or trigger emotion. Otherwise, delete.
 
-3. **Plot Density (情节密度)**
+3. **Plot Density**
    - **Causal Anchoring:** Previous episode's result is the current episode's cause.
    - **Conflict-Driven:** Dynamic escalation or reversal of core conflict, never static exposition.
    - **Irreversible Value Shift:** Protagonist's core situation or direction undergoes an un-revertible change.
 
-### 13.2 Golden Episode Formula (黄金单集公式)
+### 13.2 Golden Episode Formula
 $$\text{Episode} = \text{Plot Continuation} + \text{Conflict Escalation} + \text{Value Shift} + \text{Next Episode Hook}$$
 
-### 13.3 Pacing 3-15-45 (秒级预期管理)
+### 13.3 Pacing 3-15-45 (Second-Level Expectation Management)
 | Timeband | Target | Description |
 |---|---|---|
 | **0 – 3s** | Emotional Impact | Immediate shock / confrontation |
@@ -364,12 +361,12 @@ $$\text{Episode} = \text{Plot Continuation} + \text{Conflict Escalation} + \text
 | **Ending** | Reversal Cliffhanger | Hard cut on an unresolved threat or reveal |
 
 ### 13.4 Emotional Archetypes & Formulas
-- **Cathartic Point (爽点 = Hide Identity + Face Slap + Shock + Reward):** Protagonist conceals status → arrogant antagonist mocks → truth revealed → audience shocked → reward gained.
-- **Tragic Point (虐点):** Closer relationships yield deeper pain. Give extreme happiness, then strip it away (e.g., ultimate secret sacrifice, unresolvable tragic misunderstanding).
-- **Shock Point (爆点):** Double identity, secret substitute, betrayal reversal, reborn revenge.
+- **Cathartic Point (Hide Identity + Face Slap + Shock + Reward):** Protagonist conceals status → arrogant antagonist mocks → truth revealed → audience shocked → reward gained.
+- **Tragic Point:** Closer relationships yield deeper pain. Give extreme happiness, then strip it away (e.g., ultimate secret sacrifice, unresolvable tragic misunderstanding).
+- **Shock Point:** Double identity, secret substitute, betrayal reversal, reborn revenge.
 
-### 13.5 AI Action Descriptions (△画面描述 Rules)
-- **Describe HOW they act ("人怎么干"), not just WHAT they do ("人干什么"):** Write concrete visual cues that map directly to AI video generation prompts (shot size, camera angle, lighting, subject movement, environment).
+### 13.5 AI Action Descriptions (Visual Rules)
+- **Describe HOW they act, not just WHAT they do:** Write concrete visual cues that map directly to AI video generation prompts (shot size, camera angle, lighting, subject movement, environment).
 - **Avoid AI Video Pitfalls:** Explicitly avoid face morphing triggers, erratic motion, and repetitive scene setups.
 
 ---
@@ -520,7 +517,7 @@ The in-editor AI Director Chatbot operates as a **Google Agent ADK `DirectorAgen
 
 ```markdown
 # Google Agent ADK DirectorAgent — System Prompt
-You are the AI Director Assistant Chatbot for Shine (DramaFlowAI). You act as an Omni-Module Command Layer managing Timeline, Script, Personas, Captions, Transitions, Render, and Publish.
+You are the AI Director Assistant Chatbot for Shine. You act as an Omni-Module Command Layer managing Timeline, Script, Personas, Captions, Transitions, Render, and Publish.
 
 ## Core Architectural Rules
 1. **Decoupled Audio/Video Architecture:**

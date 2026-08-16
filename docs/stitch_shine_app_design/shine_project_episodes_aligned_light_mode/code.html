@@ -1,0 +1,333 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Shine AI - The Neon Betrayal Episodes</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#006c45",
+                        "surface-bright": "#f8f9fa",
+                        "outline-variant": "#bbcabe",
+                        "on-tertiary": "#ffffff",
+                        "surface-variant": "#e1e3e4",
+                        "surface-container-high": "#e7e8e9",
+                        "on-primary-container": "#005434",
+                        "primary-container": "#3ecf8e",
+                        "error": "#ba1a1a",
+                        "primary-fixed": "#71fcb6",
+                        "on-secondary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "background": "#f8f9fa",
+                        "surface-container-low": "#f3f4f5",
+                        "on-tertiary-container": "#424a4f",
+                        "outline": "#6c7a70",
+                        "on-error": "#ffffff",
+                        "surface-container-highest": "#e1e3e4",
+                        "on-primary-fixed": "#002112",
+                        "surface-dim": "#d9dadb",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-fixed-variant": "#41484c",
+                        "on-tertiary-fixed": "#151d21",
+                        "on-secondary-container": "#5e656a",
+                        "secondary": "#585f64",
+                        "on-secondary-fixed": "#161d21",
+                        "inverse-surface": "#2e3132",
+                        "secondary-container": "#dce3e9",
+                        "on-surface-variant": "#3d4a41",
+                        "on-surface": "#191c1d",
+                        "primary-fixed-dim": "#51df9c",
+                        "tertiary-fixed": "#dce3ea",
+                        "tertiary": "#575f65",
+                        "on-error-container": "#93000a",
+                        "on-background": "#191c1d",
+                        "secondary-fixed-dim": "#c0c7cd",
+                        "inverse-on-surface": "#f0f1f2",
+                        "on-primary-fixed-variant": "#005233",
+                        "secondary-fixed": "#dce3e9",
+                        "surface": "#f8f9fa",
+                        "tertiary-container": "#b1b9c0",
+                        "on-primary": "#ffffff",
+                        "surface-container": "#edeeef",
+                        "on-tertiary-fixed-variant": "#40484d",
+                        "tertiary-fixed-dim": "#c0c7ce",
+                        "surface-tint": "#006c45",
+                        "inverse-primary": "#51df9c"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px",
+                        "2xl": "1rem"
+                    },
+                    spacing: {
+                        "stack-sm": "8px",
+                        "stack-lg": "32px",
+                        "gutter": "24px",
+                        "sidebar-width": "280px",
+                        "container-max": "1200px",
+                        "stack-md": "16px",
+                        "margin-mobile": "16px"
+                    },
+                    fontFamily: {
+                        "headline-lg-mobile": ["Inter"],
+                        "label-md": ["Inter"],
+                        "headline-xl": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-bold": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-sm": ["Inter"]
+                    },
+                    fontSize: {
+                        "headline-lg-mobile": ["20px", { "lineHeight": "1.3", "fontWeight": "600" }],
+                        "label-md": ["13px", { "lineHeight": "1.2", "fontWeight": "500" }],
+                        "headline-xl": ["32px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "body-md": ["16px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "label-bold": ["12px", { "lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "headline-lg": ["24px", { "lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-sm": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background antialiased h-screen flex overflow-hidden">
+<!-- SideNavBar (Shared Component) -->
+<nav class="w-sidebar-width h-screen fixed left-0 top-0 border-r border-outline-variant bg-surface-container-lowest dark:bg-surface-dim flex flex-col py-stack-md flex-shrink-0 z-40 hidden md:flex">
+<!-- Header -->
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-8 h-8 bg-primary-container rounded flex items-center justify-center text-on-primary-container">
+<span class="material-symbols-outlined" data-weight="fill" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</div>
+<div>
+<h1 class="text-headline-lg font-headline-lg font-black text-on-surface dark:text-inverse-on-surface leading-none tracking-tight">Shine</h1>
+<p class="text-[10px] uppercase tracking-widest text-secondary font-bold mt-1">AI Drama Studio</p>
+</div>
+</div>
+<!-- Navigation Tabs -->
+<div class="flex-1 overflow-y-auto px-2 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors rounded-lg mx-2 group" href="#">
+<span class="material-symbols-outlined text-xl group-hover:text-primary transition-colors">dashboard</span>
+<span class="font-label-md text-label-md">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg mx-2 active:scale-98 transition-all duration-150 group bg-surface-container text-on-surface" href="#">
+<span class="material-symbols-outlined text-xl" data-weight="fill" style="font-variation-settings: 'FILL' 1;">folder</span>
+<span class="font-label-md text-label-md font-medium">My Projects</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors rounded-lg mx-2 group" href="#">
+<span class="material-symbols-outlined text-xl group-hover:text-primary transition-colors">group</span>
+<span class="font-label-md text-label-md">Team Shared</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors rounded-lg mx-2 group" href="#">
+<span class="material-symbols-outlined text-xl group-hover:text-primary transition-colors">perm_media</span>
+<span class="font-label-md text-label-md">Asset Library</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors rounded-lg mx-2 group" href="#">
+<span class="material-symbols-outlined text-xl group-hover:text-primary transition-colors">analytics</span>
+<span class="font-label-md text-label-md">Analytics</span>
+</a>
+</div>
+<!-- Footer -->
+<div class="mt-auto px-4 pt-4 border-t border-outline-variant/50">
+<a class="flex items-center gap-3 px-2 py-3 text-secondary hover:bg-surface-container-high transition-colors rounded-lg group" href="#">
+<img class="w-8 h-8 rounded-full object-cover border border-outline-variant/30" data-alt="A small, circular avatar portrait of a creative professional in a bright, modern studio setting. Light mode aesthetic with sharp focus." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCdXQyMAzDEOq092LiqSHPxT5VMCPBr7zC_ZWP1hOqQzixvha6YNLDPjnkXQLyPo6g3tFIhU1AGQvdutIiRYqX5LaEXlUOYPP91KpXK_h1hkj2KmifyY2SWoYgRR3ycUQgRXN4YFrOp69dSsub2v9ERaWgKh_vRnV4fc-PQEhsIBkU_J4PznQlZCiw4DqFLDzZZiTdqbttUoJBP1IkCyZ3j0xGekjDh2ea1TOns_hEjxxj_EAl88RTxJA">
+<div class="flex-1 min-w-0">
+<p class="font-label-md text-label-md text-on-surface truncate">Alex Rivera</p>
+<p class="text-[10px] text-primary uppercase font-bold tracking-wider truncate">Pro Creator</p>
+</div>
+<span class="material-symbols-outlined text-sm text-tertiary group-hover:text-primary">chevron_right</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Wrapper -->
+<div class="flex-1 flex flex-col md:ml-[280px] h-screen overflow-hidden">
+<!-- TopAppBar (Shared Component) -->
+<header class="h-16 w-full sticky top-0 z-30 bg-surface-bright dark:bg-surface-container-low border-b border-outline-variant dark:border-outline flex items-center justify-between px-gutter flex-shrink-0">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<h2 class="font-headline-lg text-headline-lg font-bold text-on-surface dark:text-on-surface-variant tracking-tight">The Neon Betrayal</h2>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant text-[10px] uppercase tracking-wider font-bold border border-outline-variant/30">Series</span>
+</div>
+<!-- Navigation Links -->
+<nav class="hidden lg:flex items-center gap-8 ml-8 pt-4">
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-primary dark:hover:text-primary-fixed transition-colors pb-4 font-label-bold text-label-bold" href="#">Overview</a>
+<!-- Active Tab -->
+<a class="text-primary dark:text-primary-fixed-dim border-b-2 border-primary dark:border-primary-fixed-dim pb-4 font-label-bold text-label-bold" href="#">Episodes</a>
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-primary dark:hover:text-primary-fixed transition-colors pb-4 font-label-bold text-label-bold" href="#">Analysis</a>
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-primary dark:hover:text-primary-fixed transition-colors pb-4 font-label-bold text-label-bold" href="#">Distribution</a>
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-primary dark:hover:text-primary-fixed transition-colors pb-4 font-label-bold text-label-bold" href="#">Revenue</a>
+</nav>
+</div>
+<!-- Actions -->
+<div class="flex items-center gap-4">
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-secondary hover:bg-surface-container-high hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-secondary hover:bg-surface-container-high hover:text-primary transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+</header>
+<!-- Page Content Canvas -->
+<main class="flex-1 overflow-y-auto bg-background p-6 md:p-8">
+<div class="max-w-container-max mx-auto w-full">
+<!-- Header Section -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+<div>
+<h2 class="text-3xl font-headline-xl font-bold text-on-surface tracking-tight mb-2">All Episodes</h2>
+<p class="text-secondary text-body-md">Organize, sequence, and manage your 13-part series.</p>
+</div>
+<div class="flex items-center gap-4 w-full md:w-auto">
+<!-- Search Bar -->
+<div class="relative flex-1 md:w-64">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-secondary text-lg">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg text-sm focus:ring-primary focus:border-primary transition-colors placeholder:text-secondary" placeholder="Search episodes..." type="text">
+</div>
+<!-- Primary Action -->
+<button class="bg-[#11181C] hover:bg-[#2e3132] text-white px-5 py-2.5 rounded-lg font-medium text-sm transition-all shadow-sm flex items-center gap-2 whitespace-nowrap">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                        New Episode
+                    </button>
+</div>
+</div>
+<!-- Filters -->
+<div class="flex gap-2 mb-8 overflow-x-auto pb-2 border-b border-outline-variant/50">
+<button class="px-4 py-1.5 rounded-full bg-surface-container-high border border-outline-variant text-sm font-semibold text-on-surface whitespace-nowrap">
+                    All Episodes (13)
+                </button>
+<button class="px-4 py-1.5 rounded-full border border-transparent hover:border-outline-variant hover:bg-surface-container-low text-sm font-medium text-secondary transition-colors whitespace-nowrap">
+                    Published (8)
+                </button>
+<button class="px-4 py-1.5 rounded-full border border-transparent hover:border-outline-variant hover:bg-surface-container-low text-sm font-medium text-secondary transition-colors whitespace-nowrap">
+                    In Production (3)
+                </button>
+<button class="px-4 py-1.5 rounded-full border border-transparent hover:border-outline-variant hover:bg-surface-container-low text-sm font-medium text-secondary transition-colors whitespace-nowrap">
+                    Drafts (2)
+                </button>
+</div>
+<!-- Episode Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+<!-- Card 1: Published -->
+<div class="group relative flex flex-col bg-surface-container-lowest rounded-2xl border border-outline-variant hover:border-primary transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md">
+<!-- Thumbnail 9:16 aspect ratio approx -->
+<div class="relative w-full bg-surface-container-low overflow-hidden pt-[140%]">
+<div class="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-105" data-alt="A cinematic vertical frame from a sci-fi micro-drama. A sleek, futuristic cyberpunk city alley bathed in neon green and deep blue lighting. A mysterious silhouette stands in the rain. High contrast, moody, photorealistic rendering perfect for a mobile video thumbnail." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDeJv71Nfsk-x6liueqkb4udtmUVoyxP0o0ZPSMzmzDgel1gLjl2sSnOohM-QaFwSnREyMvRB5JhXYaK4ArDmx4X2aUJ1Ih2nm0zMuYvNKbAb6055zC-UectZ4Go-mbShoJY3J37SdSkg5PNw-x_i5XCITG8mEy8xEx-lNVi8y8MbqpzGK--SCsLXUBY-umvK6XdDmgJQvdd0g_M3ZvTdVo6x4E-hPGBO57YiMCqsi2Q4QWzie_Wk2pvg')"></div>
+<!-- Status Badge -->
+<div class="absolute top-4 left-4 bg-black/70 backdrop-blur-sm px-2.5 py-1 rounded-md flex items-center gap-1.5 border border-white/10">
+<div class="w-1.5 h-1.5 rounded-full bg-primary-container"></div>
+<span class="text-[10px] font-bold text-white tracking-widest uppercase">Published</span>
+</div>
+<!-- Duration -->
+<div class="absolute bottom-4 right-4 bg-black/80 px-2 py-0.5 rounded text-[11px] font-medium text-white backdrop-blur-md">
+                            24:15
+                        </div>
+<!-- Hover Overlay (Edit Action) -->
+<div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center backdrop-blur-[2px]">
+<button class="bg-primary hover:bg-surface-tint text-on-primary px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transform translate-y-4 group-hover:translate-y-0 transition-all shadow-lg">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+                                Edit Episode
+                            </button>
+</div>
+</div>
+<!-- Metadata -->
+<div class="p-6 flex flex-col gap-2 relative bg-surface-container-lowest z-10 border-t border-outline-variant/50">
+<div class="flex justify-between items-start gap-2">
+<h3 class="text-sm font-semibold text-on-surface line-clamp-2 leading-snug">Episode 1: The First Contact</h3>
+<button class="text-secondary hover:text-on-surface p-1 -mt-1 -mr-1 rounded hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+<p class="text-xs text-secondary flex items-center gap-1.5 mt-1">
+<span class="material-symbols-outlined text-[14px]">calendar_today</span>
+                            Oct 24, 2023
+                        </p>
+</div>
+</div>
+<!-- Card 2: In Production -->
+<div class="group relative flex flex-col bg-surface-container-lowest rounded-2xl border border-outline-variant hover:border-primary transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md">
+<div class="relative w-full bg-surface-container-low overflow-hidden pt-[140%]">
+<div class="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-105" data-alt="A vertical cinematic shot for a sci-fi drama. A close-up of a high-tech glowing briefcase on a pristine white minimalist table in a sterile corporate boardroom. Cool light-mode aesthetic with stark white and subtle mint green accents." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCBr3XlDJ9Z2A2WFQwN4FD5OJI-ZeCNO94abF04cFtkLTAUxxP0HzcgJO2-Rf1x3xrYES75koQjaN36cPf1aEQv3u41UG1gbF5FmO9-1QnmFYxftWcB-blAESGDOt9ZAfTUiv0L4xj4wIovdnofGF3W_m8qgf8Ou5pNxJdOM3zpU0qRpu-P9fdlXWlf-dfjZWq_kvwPXlVgCiv9SePlex45tAVooFW2vLuMVYsjsIM_rcHj5htsdl4EDg')"></div>
+<div class="absolute top-4 left-4 bg-black/70 backdrop-blur-sm px-2.5 py-1 rounded-md flex items-center gap-1.5 border border-white/10">
+<div class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></div>
+<span class="text-[10px] font-bold text-white tracking-widest uppercase">In Production</span>
+</div>
+<div class="absolute bottom-4 right-4 bg-black/80 px-2 py-0.5 rounded text-[11px] font-medium text-white backdrop-blur-md">
+                            18:42
+                        </div>
+<div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center backdrop-blur-[2px]">
+<button class="bg-primary hover:bg-surface-tint text-on-primary px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transform translate-y-4 group-hover:translate-y-0 transition-all shadow-lg">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+                                Resume Edit
+                            </button>
+</div>
+</div>
+<div class="p-6 flex flex-col gap-2 relative bg-surface-container-lowest z-10 border-t border-outline-variant/50">
+<div class="flex justify-between items-start gap-2">
+<h3 class="text-sm font-semibold text-on-surface line-clamp-2 leading-snug">Episode 2: Data Breach</h3>
+<button class="text-secondary hover:text-on-surface p-1 -mt-1 -mr-1 rounded hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+<p class="text-xs text-secondary flex items-center gap-1.5 mt-1">
+<span class="material-symbols-outlined text-[14px]">edit_note</span>
+                            Edited 2 hrs ago
+                        </p>
+</div>
+</div>
+<!-- Card 3: Draft -->
+<div class="group relative flex flex-col bg-surface-container-lowest rounded-2xl border border-outline-variant hover:border-primary transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md opacity-80 hover:opacity-100">
+<div class="relative w-full bg-surface-container-high overflow-hidden pt-[140%]">
+<!-- Empty state / Draft placeholder style -->
+<div class="absolute inset-0 flex flex-col items-center justify-center bg-surface-container text-secondary/70 border-2 border-dashed border-outline-variant/50 m-2 rounded-xl">
+<span class="material-symbols-outlined text-[48px] mb-2 opacity-50">movie_creation</span>
+<span class="text-xs font-bold uppercase tracking-wider">No Media Yet</span>
+</div>
+<div class="absolute top-4 left-4 bg-surface-container-lowest/90 backdrop-blur-sm px-2.5 py-1 rounded-md flex items-center gap-1.5 border border-outline-variant shadow-sm">
+<div class="w-1.5 h-1.5 rounded-full bg-outline"></div>
+<span class="text-[10px] font-bold text-secondary tracking-widest uppercase">Draft</span>
+</div>
+<div class="absolute bottom-4 right-4 bg-surface-container-lowest/90 px-2 py-0.5 rounded text-[11px] font-medium text-secondary border border-outline-variant">
+                            00:00
+                        </div>
+<div class="absolute inset-0 bg-white/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center backdrop-blur-[2px]">
+<button class="bg-[#11181C] hover:bg-[#2e3132] text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transform translate-y-4 group-hover:translate-y-0 transition-all shadow-lg">
+<span class="material-symbols-outlined text-[18px]">add_a_photo</span>
+                                Add Media
+                            </button>
+</div>
+</div>
+<div class="p-6 flex flex-col gap-2 relative bg-surface-container-lowest z-10 border-t border-outline-variant/50">
+<div class="flex justify-between items-start gap-2">
+<h3 class="text-sm font-semibold text-secondary line-clamp-2 leading-snug">Episode 3: The Setup</h3>
+<button class="text-secondary hover:text-on-surface p-1 -mt-1 -mr-1 rounded hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+<p class="text-xs text-secondary flex items-center gap-1.5 mt-1">
+<span class="material-symbols-outlined text-[14px]">calendar_today</span>
+                            Created yesterday
+                        </p>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+
+
+</body></html>

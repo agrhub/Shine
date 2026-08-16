@@ -1,5 +1,5 @@
 # Software Requirements Specification (SRS)
-## Shine (DramaFlowAI) - AI Micro-Drama Video Studio
+## Shine - AI Micro-Drama Video Studio
 
 **Version:** 1.0
 **Date:** August 9, 2026
@@ -9,7 +9,7 @@
 ## 1. Introduction
 
 ### 1.1 Purpose
-This document specifies the software requirements for Shine (DramaFlowAI), an enterprise-grade AI-powered platform for creating, producing, and distributing vertical short dramas (9:16 micro-drama / Chinese-style Wēi Duǎnjù). This document serves as the primary reference for the development team, QA, product managers, and stakeholders to understand the system's capabilities, constraints, and architecture.
+This document specifies the software requirements for Shine, an enterprise-grade AI-powered platform for creating, producing, and distributing vertical short dramas (9:16 micro-drama / Chinese-style Wēi Duǎnjù). This document serves as the primary reference for the development team, QA, product managers, and stakeholders to understand the system's capabilities, constraints, and architecture.
 
 ### 1.2 Scope
 Shine is a web-based Single Page Application (SPA) designed to revolutionize the production of vertical short dramas. The platform integrates advanced AI tools (Google Gemini, Veo, Vertex AI) to assist creators in every step of the workflow—from script generation and storyboard assembly to AI video generation, dubbing, auto-captioning, and multi-platform publishing. 
@@ -82,7 +82,7 @@ Shine operates as a cloud-hosted web application utilizing a Vue 3 + Vite fronte
 * **FR-007**: **AI Prompt Configuration** - System shall generate a base AI prompt tailored to the selected genre for subsequent script generation. (Must | Solo, Pro)
 * **FR-008**: **Visual Style Selection** - System shall allow users to select an overall visual aesthetic (e.g., Cinematic, Anime, Realism). (Must | Solo, Pro)
 * **FR-009**: **Template Generation** - System shall automatically create an initial project structure based on wizard inputs. (Should | Solo, Pro)
-* **FR-074**: **Real-Time Viral Trend & Competitor Script Hunting (Parallel MCP)** - System shall automatically scan social platforms (TikTok, Douyin, X) and App Store leaderboards to surface real-time viral drama topics, trending tropes, and competitor concepts during wizard setup. (Should | Pro, Admin)
+* **FR-074**: **Multi-Region Geo-Targeted Viral Trend & Competitor Script Hunting (Parallel MCP)** - System shall automatically scan social platforms (TikTok, Douyin, Kuaishou, YouTube Shorts, X) and App Store leaderboards to surface real-time viral drama topics, trending tropes, hashtag velocity, and competitor script hooks filtered by target region/country (`US` North America, `SEA_VN` Vietnam/Southeast Asia, `CN` China, `LATAM` Latin America, `JP_KR` East Asia, `EU` Europe). (Should | Pro, Admin)
 * **FR-075**: **Cultural Compliance & Copyright Safety Engine (Parallel MCP / Gemini Guardrails)** - System shall perform multi-region content safety audits, age classification checks, and copyright/IP infringement scans on script, audio, and visual assets prior to publishing. (Must | All Roles)
 
 
@@ -139,6 +139,28 @@ Shine operates as a cloud-hosted web application utilizing a Vue 3 + Vite fronte
 * **FR-112**: **Interactive User Manual & Knowledge Base** - System shall provide an interactive documentation portal (`/manual`) containing step-by-step onboarding guides, AI Director prompt tips, keyboard shortcut cheatsheets, and video tutorials. (Must | All Roles)
 * **FR-113**: **Multi-Language System UI & vue-i18n Localization Engine** - System shall provide seamless client-side UI localization using `vue-i18n` (supporting English `en`, Vietnamese `vi`, Chinese `zh`, Japanese `jp`, Spanish `es`, and French `fr`) with instant language switching and auto-detected Chatbot prompt localization. (Must | All Roles)
 * **FR-114**: **AntV G6 Multi-Module Graph Visualization Suite** - System shall utilize `@antv/g6` graph visualization across 5 core workspace modules: Interactive Branching Narrative DAG Trees, Character Relationship & Lineage Graphs, Multi-Agent Workflow Execution Monitors, Spatial Audio 3D Soundstage Positioning, and Asset Dependency Lineage Graphs. (Must | Pro, Admin)
+* **FR-115**: **1-Click Web Novel-to-Series Auto-Converter Engine (Proposal 17)** - System shall ingest long-form manuscripts (PDF/TXT/EPUB), auto-parse chapter arcs, extract character bibles, and produce a 50-episode structured JSON script in under 60 seconds using Gemini 3.5 Flash. (Must | Solo, Pro, Admin)
+* **FR-116**: **Interactive TikTok/Douyin Live-Stream Drama Engine (Proposal 18)** - System shall ingest live-stream WebSocket comments, run real-time audience polling, and dynamically trigger AntV G6 scene branch switches and live AI video clip generation during live broadcasts. (Should | Pro, Admin)
+* **FR-117**: **AI Virtual Actor Royalty & Character Marketplace (Proposal 19)** - System shall provide a marketplace (`/marketplace/actors`) for creators to publish 8-anchor Persona bibles and earn passive credit royalties whenever other studios feature their virtual actor in a drama series. (Should | Pro, Admin)
+* **FR-118**: **Cultural Geo-Localization & Idiom Adaptation Engine (Proposal 20)** - System shall provide a cultural adaptation agent (`POST /ai/cultural-adapt`) that re-writes dialogue slang, adjusts visual wardrobe presets, translates background signs, and tunes regional TTS accents per target country. (Must | All Roles)
+* **FR-119**: **Predictive Paywall Placement & Monetization Doctor (Proposal 21)** - System shall analyze viewer engagement curves to recommend the optimal episode paywall threshold (e.g. coin unlock at EP 6), coin pricing, and projected 30-day MRR. (Should | Pro, Admin)
+* **FR-120**: **Cloud Pub/Sub Async Render Stream & Back-Pressure Engine (Proposal 22)** - System shall route high-volume 50-episode batch render jobs through GCP Cloud Pub/Sub and stream real-time progress events over Server-Sent Events (SSE) / WebSockets (`GET /api/v1/render/stream`) to prevent HTTP gateway timeouts. (Must | All Roles)
+* **FR-121**: **AI Royalty-Free Sound Check & Copyright Safety Engine (Proposal 23)** - System shall perform audio fingerprinting (`POST /audio/copyright-verify`) against global music databases and auto-replace copyrighted background tracks with safe Lyria 3 / Artlist AI soundtracks prior to publishing. (Must | All Roles)
+* **FR-122**: **Virtual Canvas Viewport & Lazy Asset Streaming Engine (Proposal 24)** - System shall implement WebGL texture windowing and RAM garbage collection to only load the 5 video clips nearest to playhead, preventing browser memory crashes during 45-scene episode edits. (Must | All Roles)
+* **FR-123**: **Responsive Touch-Optimized Gesture Studio (Proposal 25)** - System shall provide touch-optimized NLE controls (pinch-to-zoom timeline, swipe-to-trim, floating action wheel) for tablet and foldable mobile devices. (Should | All Roles)
+* **FR-124**: **Smart Rights & Automated Revenue Split Engine (Proposal 26)** - System shall provide automated revenue sharing contracts (`/billing/revenue-splits`) distributing Stripe and social platform earnings automatically between writers, AI directors, and studio owners. (Should | Pro, Admin)
+* **FR-125**: **C2PA AI Provenance & Invisible SynthID Watermarking Engine (Proposal 27)** - System shall embed C2PA cryptographic provenance metadata and Google SynthID invisible video/audio watermarks into all MP4 exports (`POST /export/c2pa-watermark`) to comply with EU AI Act & TikTok Content Credentials regulations. (Must | All Roles)
+* **FR-126**: **Intra-Scene Emotional Curve & Vocal Affect Steering Engine (Proposal 28)** - System shall support mid-sentence SSML and prompt-based vocal affect steering (`POST /voices/steer-emotion`), allowing dynamic switches between whispering, crying, laughing, and explosive screaming. (Should | Pro, Admin)
+* **FR-127**: **AI Multi-Platform Recutter & Algorithm Optimizer Engine (Proposal 29)** - System shall automatically re-edit 3-minute episode timelines into platform-optimized cuts (`POST /export/platform-recut`) - e.g., 59s fast cut for YouTube Shorts vs 90s narrative cut for TikTok Series vs 15s teaser for Instagram Reels. (Should | Pro, Admin)
+* **FR-128**: **Shine Creator Template & Prompt Marketplace (Proposal 30)** - System shall provide a marketplace (`/marketplace/templates`) allowing creators to buy, sell, or share pre-built Drama Genre Presets, Virtual Sets, Color LUTs, and AntV G6 Story Trees for AI credit rewards. (Should | All Roles)
+* **FR-129**: **Hybrid Dual-Engine AI Provider Router (Vertex AI + Google Flow Account Pool) (Proposal 31)** - System shall implement a hybrid provider router that dynamically falls back to an internal Google Flow Account Pool (`FlowAdapter`, `FlowSyncService`, `CaptchaService` reCAPTCHA solver) for free/draft image (Imagen 3.5, Narwhal) and 9:16 video generation (`veo_3_1_t2v_fast_portrait`, `veo_3_1_i2v_s_fast_portrait_fl`, `veo_3_1_r2v_fast_portrait`), reducing GPU operation costs by 70–90% while routing high-priority exports to paid Vertex AI. (Must | All Roles)
+* **FR-130**: **Pluggable & Configurable Primary Database Engine (SQLite or MongoDB Choice)** - System shall implement a database abstraction layer (`IDatabaseProvider` repository pattern) allowing users/admins to choose either embedded SQLite (`better-sqlite3` at `./data/shine.db`) or MongoDB (`mongoose` / MongoDB Atlas) as their primary database via environment configuration (`DB_PROVIDER=sqlite` or `DB_PROVIDER=mongodb`), while maintaining 100% feature parity across both database drivers. (Must | All Roles)
+
+
+
+
+
+
 
 
 

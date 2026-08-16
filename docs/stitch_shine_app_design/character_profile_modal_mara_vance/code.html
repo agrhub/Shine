@@ -1,0 +1,381 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Persona Studio - Mara Vance</title>
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;450;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "background": "#fcf9f8",
+                      "error-container": "#ffdad6",
+                      "on-secondary-fixed": "#1b1b1b",
+                      "tertiary": "#5f5e5e",
+                      "surface-dim": "#dcd9d9",
+                      "tertiary-fixed": "#e4e2e1",
+                      "surface-container-lowest": "#ffffff",
+                      "on-surface": "#1c1b1b",
+                      "secondary-container": "#e2dfde",
+                      "on-tertiary": "#ffffff",
+                      "on-primary-container": "#005434",
+                      "surface-bright": "#fcf9f8",
+                      "on-primary": "#ffffff",
+                      "surface": "#fcf9f8",
+                      "on-error": "#ffffff",
+                      "on-primary-fixed-variant": "#005233",
+                      "on-secondary-fixed-variant": "#474746",
+                      "tertiary-fixed-dim": "#c8c6c6",
+                      "on-secondary": "#ffffff",
+                      "primary-fixed-dim": "#51df9c",
+                      "inverse-primary": "#51df9c",
+                      "error": "#ba1a1a",
+                      "on-tertiary-container": "#484848",
+                      "secondary-fixed-dim": "#c8c6c5",
+                      "surface-container-high": "#ebe7e7",
+                      "outline": "#6c7a70",
+                      "secondary-fixed": "#e5e2e1",
+                      "on-error-container": "#93000a",
+                      "on-surface-variant": "#3d4a41",
+                      "surface-container-highest": "#e5e2e1",
+                      "on-tertiary-fixed": "#1b1c1c",
+                      "tertiary-container": "#b9b7b7",
+                      "secondary": "#5f5e5e",
+                      "primary": "#006c45",
+                      "on-secondary-container": "#636262",
+                      "primary-container": "#3ecf8e",
+                      "on-background": "#1c1b1b",
+                      "on-tertiary-fixed-variant": "#474747",
+                      "surface-tint": "#006c45",
+                      "surface-container-low": "#f6f3f2",
+                      "outline-variant": "#bbcabe",
+                      "on-primary-fixed": "#002112",
+                      "surface-variant": "#e5e2e1",
+                      "inverse-surface": "#313030",
+                      "surface-container": "#f0edec",
+                      "inverse-on-surface": "#f3f0ef",
+                      "primary-fixed": "#71fcb6"
+              },
+              "borderRadius": {
+                      "DEFAULT": "1rem",
+                      "lg": "2rem",
+                      "xl": "3rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "margin-desktop": "32px",
+                      "base": "4px",
+                      "gutter": "16px",
+                      "container-max": "1440px",
+                      "margin-mobile": "16px"
+              },
+              "fontFamily": {
+                      "label-xs": [
+                              "Outfit"
+                      ],
+                      "display-lg": [
+                              "Outfit"
+                      ],
+                      "body-sm": [
+                              "Outfit"
+                      ],
+                      "body-md": [
+                              "Outfit"
+                      ],
+                      "code-md": [
+                              "Outfit"
+                      ],
+                      "headline-lg-mobile": [
+                              "Outfit"
+                      ],
+                      "headline-lg": [
+                              "Outfit"
+                      ]
+              },
+              "fontSize": {
+                      "label-xs": [
+                              "11px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "display-lg": [
+                              "48px",
+                              {
+                                      "lineHeight": "56px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-sm": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "code-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "450"
+                              }
+                      ],
+                      "headline-lg-mobile": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        .material-symbols-outlined {
+          font-variation-settings:
+          'FILL' 0,
+          'wght' 400,
+          'GRAD' 0,
+          'opsz' 24
+        }
+    </style>
+</head>
+<body class="bg-background min-h-screen flex items-center justify-center p-4 md:p-8 font-body-md text-on-background relative overflow-hidden">
+<!-- Background context (blurred) -->
+<div class="absolute inset-0 z-0 bg-surface-container-low opacity-50"></div>
+<div class="absolute inset-0 z-0 backdrop-blur-sm bg-on-background/10"></div>
+<!-- Modal Container -->
+<div class="relative z-10 w-full max-w-4xl bg-surface-container-lowest rounded-lg shadow-2xl border border-outline-variant flex flex-col max-h-[90vh] overflow-hidden">
+<!-- Header -->
+<div class="flex items-center justify-between px-gutter py-6 border-b border-outline-variant bg-surface">
+<div class="flex items-center gap-4">
+<div class="w-16 h-16 rounded-full overflow-hidden border-2 border-primary-container relative shrink-0 shadow-sm">
+<img class="w-full h-full object-cover absolute inset-0" data-alt="A cinematic, high-fidelity portrait of a cynical, female detective protagonist named Mara Vance. She has a sharp, analog-intuition aesthetic, possibly wearing a subtle trench coat. The lighting is studio quality, light mode aesthetic, crisp and professional, fitting an AI video studio persona profile." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBnlD-lMsZFIpU1s400CrsrRjjFpzYjlWxidg4Q1yxkSIql8VRQpRai0vDLpuyaUxy1IsjpMNjyR99ELfDOFR4A6-p7kiVwxEvaMN6WKErEmMMlujuqYThHD0UJMzpm6yLENW6TvGQdz4rc7wNrPGcVyoOipeWAonHHl_1hAI8IujewFLQzky8JEBSwY0TBJg67CDQh32Crp4pmHxt_KjxfxQ9z4KiLvT_FOThWO25TkGWLmvy3Co85JA">
+</div>
+<div>
+<div class="flex items-center gap-2 mb-1">
+<h1 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-surface m-0 p-0 leading-none">Mara Vance</h1>
+<span class="inline-flex items-center px-2 py-1 rounded-full bg-primary-container/20 text-on-primary-container font-label-xs text-label-xs border border-primary-container/30">
+<span class="material-symbols-outlined text-[14px] mr-1" style="font-variation-settings: 'FILL' 1;">star</span>
+                            Lead Protagonist
+                        </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">folder_shared</span>
+                        Persona Studio Profile
+                    </p>
+</div>
+</div>
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-highest transition-colors shrink-0">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<!-- Scrollable Content Area -->
+<div class="flex-1 overflow-y-auto p-gutter space-y-8 bg-surface-container-lowest custom-scrollbar">
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-gutter">
+<!-- Left Column: Stats & Bio (7 cols) -->
+<div class="col-span-1 md:col-span-7 space-y-gutter">
+<!-- Bio & Traits Card -->
+<div class="bg-surface rounded-DEFAULT border border-outline-variant p-6 h-full flex flex-col shadow-sm">
+<div class="flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-primary-container">psychology</span>
+<h2 class="font-body-md text-body-md font-semibold text-on-surface">Character Identity</h2>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-6 flex-1">
+                            A seasoned investigator navigating a world transitioning to total automation. She relies on raw intuition and physical evidence over algorithmic probability. Her cynicism masks a deeply held belief in justice, making her relentless when on a lead.
+                        </p>
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-surface-container-low p-3 rounded-DEFAULT border border-outline-variant/50">
+<span class="font-label-xs text-label-xs text-on-surface-variant block mb-1 uppercase tracking-wider">Voice Profile</span>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-tertiary text-[18px]">graphic_eq</span>
+<span class="font-body-sm text-body-sm font-medium text-on-surface">Husky / Emotional</span>
+</div>
+</div>
+<div class="bg-surface-container-low p-3 rounded-DEFAULT border border-outline-variant/50">
+<span class="font-label-xs text-label-xs text-on-surface-variant block mb-1 uppercase tracking-wider">Archetype</span>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-tertiary text-[18px]">person_search</span>
+<span class="font-body-sm text-body-sm font-medium text-on-surface">Noir Detective</span>
+</div>
+</div>
+</div>
+<div class="mt-4">
+<span class="font-label-xs text-label-xs text-on-surface-variant block mb-2 uppercase tracking-wider">Core Traits</span>
+<div class="flex flex-wrap gap-2">
+<span class="px-3 py-1 bg-secondary-container/50 text-on-secondary-container rounded-full font-label-xs text-label-xs border border-outline-variant/30">Analog Intuition</span>
+<span class="px-3 py-1 bg-secondary-container/50 text-on-secondary-container rounded-full font-label-xs text-label-xs border border-outline-variant/30">Cynical</span>
+<span class="px-3 py-1 bg-secondary-container/50 text-on-secondary-container rounded-full font-label-xs text-label-xs border border-outline-variant/30">Relentless</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Settings & Model (5 cols) -->
+<div class="col-span-1 md:col-span-5 space-y-gutter">
+<!-- AI Generation Settings Card -->
+<div class="bg-surface rounded-DEFAULT border border-outline-variant p-6 shadow-sm">
+<div class="flex items-center justify-between mb-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container">tune</span>
+<h2 class="font-body-md text-body-md font-semibold text-on-surface">Generation Engine</h2>
+</div>
+<span class="inline-flex items-center gap-1 text-primary-container font-label-xs text-label-xs">
+<div class="w-2 h-2 rounded-full bg-primary-container animate-pulse"></div> Active
+                            </span>
+</div>
+<div class="space-y-5">
+<!-- LoRA Model -->
+<div>
+<label class="font-label-xs text-label-xs text-on-surface-variant block mb-2 uppercase tracking-wider">LoRA Model Anchor</label>
+<div class="flex items-center justify-between p-3 rounded-DEFAULT border border-outline-variant bg-surface-container-lowest">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">deployed_code</span>
+<span class="font-code-md text-code-md text-on-surface">Mara_v4.2.safetensors</span>
+</div>
+<button class="text-primary-container hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[18px]">swap_horiz</span>
+</button>
+</div>
+</div>
+<!-- Character Strength -->
+<div>
+<div class="flex items-center justify-between mb-2">
+<label class="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Character Strength</label>
+<span class="font-code-md text-code-md text-primary-container">0.85</span>
+</div>
+<input class="w-full h-1 bg-surface-variant rounded-lg appearance-none cursor-pointer accent-primary-container" max="1" min="0" step="0.05" type="range" value="0.85">
+<div class="flex justify-between mt-1">
+<span class="font-label-xs text-label-xs text-on-surface-variant/70">Subtle</span>
+<span class="font-label-xs text-label-xs text-on-surface-variant/70">Rigid</span>
+</div>
+</div>
+<!-- Generation Mode -->
+<div>
+<label class="font-label-xs text-label-xs text-on-surface-variant block mb-2 uppercase tracking-wider">Render Mode</label>
+<div class="grid grid-cols-2 bg-surface-variant p-1 rounded-DEFAULT">
+<button class="bg-surface-container-lowest text-on-surface font-body-sm text-body-sm py-1.5 rounded-[12px] shadow-sm flex items-center justify-center gap-1">
+<span class="material-symbols-outlined text-[16px]">high_quality</span> Hi-Fi
+                                    </button>
+<button class="text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm py-1.5 rounded-[12px] transition-colors flex items-center justify-center gap-1">
+<span class="material-symbols-outlined text-[16px]">speed</span> Proxy
+                                    </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Full Width: Visual Anchors -->
+<div class="col-span-1 md:col-span-12">
+<div class="bg-surface rounded-DEFAULT border border-outline-variant p-6 shadow-sm">
+<div class="flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-primary-container">face_retouching_natural</span>
+<h2 class="font-body-md text-body-md font-semibold text-on-surface">Consistency Anchors</h2>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-6 max-w-3xl">
+                            Verified reference frames used by the generation engine to maintain facial identity across disparate angles and lighting conditions.
+                        </p>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+<!-- Anchor 1 -->
+<div class="relative group rounded-DEFAULT overflow-hidden border border-outline-variant bg-surface-container-lowest">
+<div class="aspect-square relative">
+<img class="w-full h-full object-cover" data-alt="A clean, studio-lit front-facing portrait of female detective Mara Vance. Neutral expression, showing clear facial features, light mode UI aesthetic, high resolution, acting as a facial consistency anchor." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAF9jGRmJXS6-oW2tE3Hy568o7vuP1fa5KpkjgceHfG9nxDKAexWwJeenOHUDr6Bd0lp0W0VZKhGpz-UrCuc6UBGBo5My9wgo43YztD3nrRfNlUWMeIUuNvJHMP4wJoFKYFXWULiUuNILm27T0cBEBWecsz1QaCHw0JW4WfMFeRtoK1ZncmKU15ngthicfwJxrC4CWo07FR1iqu97zplNV10ZhawSrdhmj2IJ7P1JavRxC0K5qN4FRx7w">
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3">
+<span class="text-white font-label-xs text-label-xs">Frontal View</span>
+</div>
+<div class="absolute top-2 right-2 bg-surface rounded-full p-1 shadow-sm border border-outline-variant/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary-container text-[14px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</div>
+<div class="p-2 text-center border-t border-outline-variant">
+<span class="font-label-xs text-label-xs text-on-surface-variant uppercase">Front</span>
+</div>
+</div>
+<!-- Anchor 2 -->
+<div class="relative group rounded-DEFAULT overflow-hidden border border-outline-variant bg-surface-container-lowest">
+<div class="aspect-square relative">
+<img class="w-full h-full object-cover" data-alt="A clean, studio-lit profile view (side view) portrait of female detective Mara Vance. Neutral expression, showing clear facial silhouette, light mode UI aesthetic, high resolution, acting as a facial consistency anchor." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBqlSl1eE5_MKzvHgVGz3oGdOzzYVniCpNGRwRLSV_1zfM6tiLs_xPzwBOc9qF99az2fqmoYk3oWOMJ7xUgN35-rF6MAu4KrC144TnBzJlWcPn5BsVsT1B263Wsr4aaZ2_XL3D8Yj0pNRDLMgj63pOiIKiV9CYcm0RfarSfGKhMbicwd7V9MKCt7tIvA1JjPc1UZyMplOkfyf_slfqRfhSQhMtJatAMP_5BGFUaHue696sjndBTCo8jww">
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3">
+<span class="text-white font-label-xs text-label-xs">Left Profile</span>
+</div>
+<div class="absolute top-2 right-2 bg-surface rounded-full p-1 shadow-sm border border-outline-variant/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary-container text-[14px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</div>
+<div class="p-2 text-center border-t border-outline-variant">
+<span class="font-label-xs text-label-xs text-on-surface-variant uppercase">Profile</span>
+</div>
+</div>
+<!-- Anchor 3 -->
+<div class="relative group rounded-DEFAULT overflow-hidden border border-outline-variant bg-surface-container-lowest">
+<div class="aspect-square relative">
+<img class="w-full h-full object-cover" data-alt="A clean, studio-lit 3/4 angle view portrait of female detective Mara Vance. Neutral expression, showing clear facial depth, light mode UI aesthetic, high resolution, acting as a facial consistency anchor." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBIl49UqoqPL69RB2532X8bz8sI-fo_GliY94S-2009vAPkvn-z7ALMXvmtLTBBtFHB3JfFbiPmGika5JbR_xWVrpp1OPB0hylavAdWI99oscFD02gsDNGujN_iUTIRGDphj5YrRnHvQPoAEHQhodBPNUs-Z8SRmVD8Efe7laHHEv5NFHs-Wh-9RKke6-Ok43GvI-1FU7IsytBMZ_4tCtKmHUKNAloQLXfwhunk6qMXygGKuJY6EG0VUA">
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3">
+<span class="text-white font-label-xs text-label-xs">3/4 Angle</span>
+</div>
+<div class="absolute top-2 right-2 bg-surface rounded-full p-1 shadow-sm border border-outline-variant/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary-container text-[14px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</div>
+<div class="p-2 text-center border-t border-outline-variant">
+<span class="font-label-xs text-label-xs text-on-surface-variant uppercase">3/4 View</span>
+</div>
+</div>
+<!-- Outfit Continuity -->
+<div class="relative group rounded-DEFAULT overflow-hidden border-2 border-dashed border-outline-variant/60 bg-surface-container-low flex flex-col items-center justify-center">
+<div class="absolute top-2 right-2 bg-surface rounded-full p-1 shadow-sm border border-outline-variant/30 flex items-center justify-center z-10">
+<span class="material-symbols-outlined text-tertiary text-[14px]">lock</span>
+</div>
+<div class="w-full h-full flex flex-col items-center justify-center p-4 relative z-0">
+<div class="w-16 h-16 rounded-full bg-surface-container-highest flex items-center justify-center mb-2">
+<span class="material-symbols-outlined text-on-surface-variant text-[24px]">apparel</span>
+</div>
+<span class="font-label-xs text-label-xs text-on-surface-variant uppercase text-center block mb-1">Nightstalker Trench</span>
+<span class="font-label-xs text-label-xs text-primary-container bg-primary-container/10 px-2 py-0.5 rounded-full">Outfit Locked</span>
+</div>
+<img class="absolute inset-0 w-full h-full object-cover opacity-30 group-hover:opacity-50 transition-opacity mix-blend-multiply" data-alt="A close up detailed render of a dark, textured noir detective trench coat, specifically named 'Nightstalker Trench'. Studio lighting, high fidelity texture showing the fabric weave. Acting as a wardrobe consistency reference in a UI." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBWnSHzcQE7IX4yJ-dHRgbD9gkP9rZzfPmALr4C2MvDhDcJytSmekylsKKu7AsOu6dimcve0BoKIk2Y0NTJPumGTIzUlA-GL5kzxjr2CI2mQcnQp4lNIX_YFDGfMkSVSfp4mFAQ9dnhCqP0YoMAhTJjlCfrs_dv8SEV50M3QjeSLOZeE9LJcIaCpt8Us1UyaA_xog2yG2fpGYv9INsg0hmGJgCkwI6jVCE6o2qWIFad0ZJRz8y-fgoVcQ">
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer Actions -->
+<div class="px-gutter py-4 border-t border-outline-variant bg-surface flex flex-col-reverse md:flex-row items-center justify-end gap-3 shrink-0">
+<button class="w-full md:w-auto px-6 py-2.5 rounded-full border border-outline-variant text-on-surface hover:bg-surface-container-highest transition-colors font-body-sm text-body-sm font-medium flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                Generate Reference Sheet
+            </button>
+<button class="w-full md:w-auto px-6 py-2.5 rounded-full bg-primary-container text-on-primary-container hover:bg-primary-fixed transition-colors font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2 shadow-sm">
+<span class="material-symbols-outlined text-[18px]">save</span>
+                Update Persona
+            </button>
+</div>
+</div>
+</body></html>

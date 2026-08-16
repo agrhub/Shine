@@ -1,0 +1,318 @@
+<!DOCTYPE html><html lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Distribution - The Neon Betrayal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-dim": "#dcd9d9",
+                        "on-primary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "surface-container-highest": "#e5e2e1",
+                        "outline-variant": "#bbcabe",
+                        "inverse-primary": "#51df9c",
+                        "on-error-container": "#93000a",
+                        "primary-container": "#3ecf8e",
+                        "on-surface": "#1c1b1b",
+                        "primary-fixed-dim": "#51df9c",
+                        "primary": "#006c45",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary-fixed-variant": "#474747",
+                        "on-primary-fixed": "#002112",
+                        "on-secondary-fixed-variant": "#474746",
+                        "on-background": "#1c1b1b",
+                        "surface-container": "#f0edec",
+                        "primary-fixed": "#71fcb6",
+                        "on-error": "#ffffff",
+                        "on-surface-variant": "#3d4a41",
+                        "secondary-container": "#e2dfde",
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary-fixed-dim": "#c8c6c6",
+                        "on-tertiary-fixed": "#1b1c1c",
+                        "on-primary-container": "#005434",
+                        "on-tertiary": "#ffffff",
+                        "outline": "#6c7a70",
+                        "surface-container-low": "#f6f3f2",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "on-secondary-container": "#636262",
+                        "on-primary-fixed-variant": "#005233",
+                        "surface": "#fcf9f8",
+                        "tertiary": "#5f5e5e",
+                        "background": "#fcf9f8",
+                        "on-tertiary-container": "#484848",
+                        "secondary": "#5f5e5e",
+                        "tertiary-container": "#b9b7b7",
+                        "tertiary-fixed": "#e4e2e1",
+                        "surface-variant": "#e5e2e1",
+                        "surface-tint": "#006c45",
+                        "inverse-on-surface": "#f3f0ef",
+                        "surface-bright": "#fcf9f8",
+                        "inverse-surface": "#313030",
+                        "secondary-fixed": "#e5e2e1",
+                        "error": "#ba1a1a",
+                        "on-secondary-fixed": "#1b1b1b",
+                        "surface-container-high": "#ebe7e7"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "1rem",
+                        "lg": "2rem",
+                        "xl": "3rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "container-max": "1440px",
+                        "margin-desktop": "32px",
+                        "margin-mobile": "16px",
+                        "base": "4px",
+                        "gutter": "16px",
+                        "sidebar-width": "240px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Outfit"],
+                        "code-md": ["Outfit"],
+                        "headline-lg-mobile": ["Outfit"],
+                        "label-xs": ["Outfit"],
+                        "display-lg": ["Outfit"],
+                        "body-sm": ["Outfit"],
+                        "body-md": ["Outfit"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "code-md": ["14px", { "lineHeight": "20px", "fontWeight": "450" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "label-xs": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500" }],
+                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Outfit', sans-serif; }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex antialiased">
+<!-- SideNavBar -->
+<aside class="w-sidebar-width h-screen fixed left-0 top-0 border-r border-outline-variant bg-surface-container-lowest z-40 flex flex-col py-6">
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-8 h-8 bg-primary-container rounded flex items-center justify-center text-on-primary-container">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</div>
+<div>
+<h1 class="text-headline-lg font-headline-lg font-black text-on-surface leading-none" style="font-size: 20px;">Shine</h1>
+<p class="text-label-xs font-label-xs text-secondary mt-1">AI Drama Studio</p>
+</div>
+</div>
+<nav class="flex-1 px-2 space-y-1">
+<a class="flex items-center gap-3 px-4 py-2 text-secondary hover:bg-surface-container-high transition-colors rounded-lg mx-2 text-body-md font-body-md" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 text-secondary hover:bg-surface-container-high transition-colors rounded-lg mx-2 text-body-md font-body-md" href="#" style="background-color: rgb(237, 238, 239); color: rgb(25, 28, 29);">
+<span class="material-symbols-outlined" style="color: inherit;">folder</span>
+                My Projects
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 text-secondary hover:bg-surface-container-high transition-colors rounded-lg mx-2 text-body-md font-body-md" href="#">
+<span class="material-symbols-outlined">group</span>
+                Team Shared
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 text-secondary hover:bg-surface-container-high transition-colors rounded-lg mx-2 text-body-md font-body-md" href="#">
+<span class="material-symbols-outlined">perm_media</span>
+                Asset Library
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 text-secondary hover:bg-surface-container-high transition-colors rounded-lg mx-2 text-body-md font-body-md" href="#">
+<span class="material-symbols-outlined">analytics</span>
+                Analytics
+            </a>
+</nav>
+<div class="mt-auto pt-4 border-t border-outline-variant px-4">
+<div class="flex items-center gap-3 px-2 py-2 hover:bg-surface-container-high rounded-lg cursor-pointer transition-colors">
+<img alt="Alex Rivera" class="w-8 h-8 rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAiOMLL0pMR128UuJ5sHkE023qscT-Le_81No3h0rKpN6CYmggeZy_JAiJ_9TiraQCzjPpJ17a0dyB4Iob_zxUlIPJ3XuxurKRqtN8LDngDK558QtpJhh8tJoxH26Gl5J49Ci2w1-RreFjvwVTvE4aiM8nGZLKvsbySHXNNisPgCoDpOY_QtUhyrfFqs-RdtoZ6gYm_NhLks9-iCpT4hxyoJHWzp_DZyn7Pgh92bTcKKRzoUY1PYLYD8Q">
+<div class="flex-1">
+<p class="text-body-sm font-body-sm font-medium">Alex Rivera</p>
+<p class="text-label-xs font-label-xs text-primary font-bold">PRO CREATOR</p>
+</div>
+<span class="material-symbols-outlined text-secondary text-sm">chevron_right</span>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<div class="ml-[240px] flex-1 flex flex-col min-h-screen">
+<!-- TopNavBar -->
+<header class="h-16 w-full sticky top-0 z-30 bg-surface-bright border-b border-outline-variant flex items-center justify-between px-8">
+<h2 class="font-headline-lg text-headline-lg font-bold text-on-surface" style="font-size: 24px;">The Neon Betrayal</h2>
+<nav class="flex h-full items-end space-x-8">
+<a class="text-secondary hover:text-primary transition-colors pb-4 font-body-sm text-body-sm font-medium" href="#">Overview</a>
+<a class="text-secondary hover:text-primary transition-colors pb-4 font-body-sm text-body-sm font-medium" href="#">Episodes</a>
+<a class="text-secondary hover:text-primary transition-colors pb-4 font-body-sm text-body-sm font-medium" href="#">Analysis</a>
+<a class="text-primary border-b-2 border-primary pb-4 font-body-sm text-body-sm font-medium" href="#">Distribution</a>
+<a class="text-secondary hover:text-primary transition-colors pb-4 font-body-sm text-body-sm font-medium" href="#">Revenue</a>
+</nav>
+<div class="flex items-center gap-4 text-secondary">
+<button class="hover:text-primary transition-colors"><span class="material-symbols-outlined">notifications</span></button>
+<button class="hover:text-primary transition-colors"><span class="material-symbols-outlined">settings</span></button>
+</div>
+</header>
+<!-- Canvas -->
+<main class="flex-1 p-8 bg-surface">
+<!-- Header Actions -->
+<div class="flex justify-between items-center mb-8">
+<div class="flex items-center gap-3">
+
+<h3 class="text-headline-lg font-headline-lg text-on-surface" style="font-size: 24px;">Distribution Network</h3>
+</div>
+<div class="flex gap-3"><div class="flex items-center gap-2 mr-2"><span class="text-label-xs font-label-xs text-secondary uppercase tracking-wider">Global Sync</span><button class="w-8 h-4 bg-primary-container rounded-full relative flex items-center px-0.5"><div class="w-3 h-3 bg-on-primary-container rounded-full ml-auto"></div></button></div>
+<button class="flex items-center gap-2 px-4 py-2 border border-outline rounded-full text-body-sm font-body-sm hover:bg-surface-container-high transition-colors text-on-surface">
+<span class="material-symbols-outlined text-sm">magic_button</span>
+                        Auto-Gen Metadata
+                    </button>
+<button class="flex items-center gap-2 px-5 py-2 bg-on-surface text-surface rounded-full text-body-sm font-body-sm font-medium hover:bg-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">cloud_upload</span>
+                        Batch Publish
+                    </button>
+</div>
+</div>
+<!-- Platform Performance Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+<!-- TikTok Card -->
+<div class="bg-surface-bright border border-outline-variant rounded-lg p-6 flex flex-col relative overflow-hidden">
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 bg-surface-container-high rounded flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface">music_note</span>
+</div>
+<span class="font-body-md text-body-md font-medium text-on-surface">TikTok</span>
+</div>
+<span class="bg-primary-container/20 text-primary text-label-xs font-label-xs px-2 py-0.5 rounded font-bold">CONNECTED</span>
+</div>
+<div class="mt-2">
+<p class="text-display-lg font-display-lg text-on-surface leading-none" style="font-size: 36px;">4.2M</p>
+<p class="text-label-xs font-label-xs text-secondary mt-1 uppercase">Total Views</p><span class="text-label-xs font-bold text-primary ml-2">+12% this week</span>
+</div>
+<div class="flex gap-4 mt-6 pt-4 border-t border-outline-variant/50">
+<div>
+<p class="text-body-md font-body-md font-medium text-on-surface">12%</p>
+<p class="text-label-xs font-label-xs text-secondary">ENG. RATE</p>
+</div>
+<div>
+<p class="text-body-md font-body-md font-medium text-on-surface">145k</p>
+<p class="text-label-xs font-label-xs text-secondary">SHARES</p>
+</div>
+</div>
+</div>
+<!-- YT Shorts Card -->
+<div class="bg-surface-bright border border-outline-variant rounded-lg p-6 flex flex-col relative overflow-hidden">
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 bg-error-container text-on-error-container rounded flex items-center justify-center">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">play_circle</span>
+</div>
+<span class="font-body-md text-body-md font-medium text-on-surface">YT Shorts</span>
+</div>
+<span class="bg-primary-container/20 text-primary text-label-xs font-label-xs px-2 py-0.5 rounded font-bold">CONNECTED</span>
+</div>
+<div class="mt-2">
+<p class="text-display-lg font-display-lg text-on-surface leading-none" style="font-size: 36px;">2.8M</p>
+<p class="text-label-xs font-label-xs text-secondary mt-1 uppercase">Total Views</p><span class="text-label-xs font-bold text-primary ml-2">+12% this week</span>
+</div>
+<div class="flex gap-4 mt-6 pt-4 border-t border-outline-variant/50">
+<div>
+<p class="text-body-md font-body-md font-medium text-on-surface">8.5%</p>
+<p class="text-label-xs font-label-xs text-secondary">ENG. RATE</p>
+</div>
+<div>
+<p class="text-body-md font-body-md font-medium text-on-surface">82k</p>
+<p class="text-label-xs font-label-xs text-secondary">SHARES</p>
+</div>
+</div>
+</div>
+<!-- IG Reels Card -->
+<div class="bg-surface-bright border border-outline-variant rounded-lg p-6 flex flex-col relative overflow-hidden">
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 bg-tertiary-container text-on-tertiary-container rounded flex items-center justify-center">
+<span class="material-symbols-outlined">photo_camera</span>
+</div>
+<span class="font-body-md text-body-md font-medium text-on-surface">IG Reels</span>
+</div>
+<span class="bg-primary-container/20 text-primary text-label-xs font-label-xs px-2 py-0.5 rounded font-bold">CONNECTED</span>
+</div>
+<div class="mt-2">
+<p class="text-display-lg font-display-lg text-on-surface leading-none" style="font-size: 36px;">1.9M</p>
+<p class="text-label-xs font-label-xs text-secondary mt-1 uppercase">Total Views</p><span class="text-label-xs font-bold text-primary ml-2">+12% this week</span>
+</div>
+<div class="flex gap-4 mt-6 pt-4 border-t border-outline-variant/50">
+<div>
+<p class="text-body-md font-body-md font-medium text-on-surface">6.2%</p>
+<p class="text-label-xs font-label-xs text-secondary">ENG. RATE</p>
+</div>
+<div>
+<p class="text-body-md font-body-md font-medium text-on-surface">45k</p>
+<p class="text-label-xs font-label-xs text-secondary">SHARES</p>
+</div>
+</div>
+</div>
+<div class="bg-surface-bright border border-outline-variant rounded-lg p-6 flex flex-col relative overflow-hidden"><div class="flex justify-between items-start mb-4"><div class="flex items-center gap-2"><div class="w-8 h-8 bg-surface-container-high rounded flex items-center justify-center"><span class="material-symbols-outlined text-on-surface">video_library</span></div><span class="font-body-md text-body-md font-medium text-on-surface">FB Reels</span></div><span class="bg-primary-container/20 text-primary text-label-xs font-label-xs px-2 py-0.5 rounded font-bold">CONNECTED</span></div><div class="mt-2"><p class="text-display-lg font-display-lg text-on-surface leading-none" style="font-size: 36px;">850k</p><p class="text-label-xs font-label-xs text-secondary mt-1 uppercase">Total Views<span class="text-label-xs font-bold text-primary ml-2">+5%</span></p></div><div class="flex gap-4 mt-6 pt-4 border-t border-outline-variant/50"><div><p class="text-body-md font-body-md font-medium text-on-surface">4.2%</p><p class="text-label-xs font-label-xs text-secondary">ENG. RATE</p></div><div><p class="text-body-md font-body-md font-medium text-on-surface">12k</p><p class="text-label-xs font-label-xs text-secondary">SHARES</p></div></div></div><div class="bg-surface-bright border border-outline-variant rounded-lg p-6 flex flex-col relative overflow-hidden"><div class="flex justify-between items-start mb-4"><div class="flex items-center gap-2"><div class="w-8 h-8 bg-surface-container-high rounded flex items-center justify-center"><span class="material-symbols-outlined text-on-surface">flare</span></div><span class="font-body-md text-body-md font-medium text-on-surface">Snapchat</span></div><span class="bg-surface-container-high text-secondary text-label-xs font-label-xs px-2 py-0.5 rounded font-bold">PENDING</span></div><div class="mt-2"><p class="text-display-lg font-display-lg text-on-surface leading-none" style="font-size: 36px;">--</p><p class="text-label-xs font-label-xs text-secondary mt-1 uppercase">Total Views</p></div><div class="flex gap-4 mt-6 pt-4 border-t border-outline-variant/50"><div><p class="text-body-md font-body-md font-medium text-on-surface">--</p><p class="text-label-xs font-label-xs text-secondary">ENG. RATE</p></div><div><p class="text-body-md font-body-md font-medium text-on-surface">--</p><p class="text-label-xs font-label-xs text-secondary">SHARES</p></div></div></div></div>
+<!-- Episode Schedule Table -->
+<div class="bg-surface-bright border border-outline-variant rounded-lg overflow-hidden">
+<div class="px-6 py-5 border-b border-outline-variant flex justify-between items-center bg-surface-container-lowest">
+<h4 class="font-body-md text-body-md font-semibold text-on-surface">Episode Pipeline</h4>
+<span class="text-label-xs font-label-xs text-secondary">Last sync: 2 mins ago</span>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant/50">
+<th class="px-6 py-3 text-label-xs font-label-xs text-secondary uppercase tracking-wider font-semibold">Episode</th><th class="px-6 py-3 text-label-xs font-label-xs text-secondary uppercase tracking-wider font-semibold">Variants</th>
+<th class="px-6 py-3 text-label-xs font-label-xs text-secondary uppercase tracking-wider font-semibold">TikTok</th>
+<th class="px-6 py-3 text-label-xs font-label-xs text-secondary uppercase tracking-wider font-semibold">YT Shorts</th>
+<th class="px-6 py-3 text-label-xs font-label-xs text-secondary uppercase tracking-wider font-semibold">IG Reels</th>
+<th class="px-6 py-3 text-label-xs font-label-xs text-secondary uppercase tracking-wider font-semibold text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="text-body-sm font-body-sm">
+<tr class="border-b border-outline-variant/30 hover:bg-surface-container-lowest/50 transition-colors">
+<td class="px-6 py-4 font-medium text-on-surface">Ep 13: The Betrayal</td><td class="px-6 py-4"><span class="bg-tertiary-container text-on-tertiary-container text-[10px] px-2 py-0.5 rounded-full font-bold">MULTI-ENDING</span></td>
+<td class="px-6 py-4"><span class="flex items-center gap-1 text-primary"><span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span> Published</span><div class="mt-1"><span class="text-[10px] text-primary font-bold border border-primary px-1.5 rounded">Optimized</span></div></td>
+<td class="px-6 py-4"><span class="flex items-center gap-1 text-primary"><span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span> Published</span></td>
+<td class="px-6 py-4"><span class="flex items-center gap-1 text-primary"><span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span> Published</span></td>
+<td class="px-6 py-4 text-right">
+<button class="text-secondary hover:text-on-surface"><span class="material-symbols-outlined">more_vert</span></button>
+</td>
+</tr>
+<tr class="border-b border-outline-variant/30 hover:bg-surface-container-lowest/50 transition-colors">
+<td class="px-6 py-4 font-medium text-on-surface">Ep 14: Echoes</td>
+<td class="px-6 py-4"><span class="flex items-center gap-1 text-secondary"><span class="material-symbols-outlined text-sm">schedule</span> Scheduled</span></td>
+<td class="px-6 py-4"><span class="flex items-center gap-1 text-secondary"><span class="material-symbols-outlined text-sm">schedule</span> Scheduled</span></td>
+<td class="px-6 py-4"><span class="flex items-center gap-1 text-secondary"><span class="material-symbols-outlined text-sm">schedule</span> Scheduled</span></td>
+<td class="px-6 py-4 text-right">
+<button class="px-3 py-1 bg-surface-container-high hover:bg-surface-variant text-on-surface rounded-full text-label-xs font-label-xs transition-colors border border-outline-variant">Edit Schedule</button>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-lowest/50 transition-colors">
+<td class="px-6 py-4 font-medium text-on-surface">Ep 15: Neon Dawn</td>
+<td class="px-6 py-4"><span class="flex items-center gap-1 text-on-tertiary-container"><span class="material-symbols-outlined text-sm animate-spin">sync</span> Rendering</span></td>
+<td class="px-6 py-4"><span class="flex items-center gap-1 text-secondary"><span class="material-symbols-outlined text-sm">hourglass_empty</span> Pending</span></td>
+<td class="px-6 py-4"><span class="flex items-center gap-1 text-secondary"><span class="material-symbols-outlined text-sm">hourglass_empty</span> Pending</span></td>
+<td class="px-6 py-4 text-right"><button class="mr-2 px-3 py-1 bg-primary text-on-primary rounded-full text-label-xs font-label-xs hover:bg-primary-container hover:text-on-primary-container transition-colors">AI Hook Optimizer</button>
+<button class="px-3 py-1 bg-surface-container-high text-secondary rounded-full text-label-xs font-label-xs cursor-not-allowed opacity-50 border border-outline-variant">Processing...</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</main>
+</div>
+
+
+</body></html>

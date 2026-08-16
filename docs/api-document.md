@@ -1,8 +1,8 @@
-# Shine (DramaFlowAI) API Reference
+# Shine API Reference
 
 ## 1. Overview
 
-**Shine (DramaFlowAI)** is a comprehensive AI Micro-Drama Video Studio platform. This RESTful API allows developers to programmatically access Shine's video generation, AI scripting, character consistency, dubbing, and publishing features.
+**Shine** is a comprehensive AI Micro-Drama Video Studio platform. This RESTful API allows developers to programmatically access Shine's video generation, AI scripting, character consistency, dubbing, and publishing features.
 
 ### Base URL
 All API requests should be prefixed with the following base URL:
@@ -33,22 +33,45 @@ Rate limit status is returned in the response headers:
 - `X-RateLimit-Remaining`: Remaining requests in the current window.
 - `X-RateLimit-Reset`: Unix timestamp when the limit resets.
 
+### Standardized Response Data Format (`ApiResponse<T>`)
+ALL API endpoints return JSON payloads wrapped in the unified `ApiResponse<T>` envelope:
+
+```json
+{
+  "code": 200,
+  "data": { ... },
+  "message": "Operation completed successfully",
+  "error": null
+}
+```
+
+- **`code` (number)**: Business status code (`200` / `0` for success, `400` Bad Request, `401` Unauthorized, `403` Forbidden, `404` Not Found, `500` Internal Error).
+- **`data` (object | array | null)**: Payload data result returned when `code === 200`.
+- **`message` (string)**: Human-readable response summary or localized notification string.
+- **`error` (object | string | null)**: Error details string or object when `code !== 200` (returns `null` on success).
+
 ### Pagination
 List endpoints support pagination via query parameters:
 - `page`: Page number (default: 1)
 - `limit`: Items per page (default: 20, max: 100)
 
-Paginated responses include a `meta` object:
+Paginated responses include a `meta` object inside `data`:
 ```json
 {
-  "data": [ ... ],
-  "meta": {
-    "total": 150,
-    "page": 1,
-    "limit": 20,
-    "totalPages": 8
-  }
+  "code": 200,
+  "data": {
+    "items": [ ... ],
+    "meta": {
+      "total": 150,
+      "page": 1,
+      "limit": 20,
+      "totalPages": 8
+    }
+  },
+  "message": "Success",
+  "error": null
 }
+```
 ```
 
 ### Context & External Integrations
@@ -444,9 +467,25 @@ Dynamic Cliffhanger Hook Engine (Proposal 3): Automatically generates and inject
 Retrieve the history of AI script revisions.
 
 #### `GET /ai/trends/viral-topics`
-Parallel MCP real-time scan of TikTok, Douyin, X, and App Store top charts for viral drama topics, high-retention tropes, and competitor concepts.
-- **Query Params:** `genre` (optional), `region` (default: "global")
-- **Response (200 OK):** `{ "topics": [{ "title": "string", "viralScore": 96, "hookType": "string", "competitorReference": "string" }] }`
+Parallel MCP real-time scan of TikTok, Douyin, Kuaishou, YouTube Shorts, X, and App Store top charts for viral drama topics, high-retention tropes, hashtag velocity, and competitor script hooks.
+- **Query Params:** `genre` (optional), `region` (enum: `US`, `SEA_VN`, `CN`, `LATAM`, `JP_KR`, `EU`, default: `US`)
+- **Response (200 OK):** 
+  ```json
+  {
+    "region": "SEA_VN",
+    "lastScannedAt": "2026-08-10T09:50:00Z",
+    "trendingTropes": [
+      {
+        "tropeId": "mother_in_law_revenge",
+        "title": "Mẹ Chồng Nàng Dâu - Cuộc Chiến Gia Tộc",
+        "viralScore": 98.4,
+        "hashtagVelocity": "+142%/24h",
+        "hookPattern": "Tập 1: Bị sỉ nhục tại tiệc gia tộc ➔ Tập 3: Tiết lộ thân phận Tống Giám đốc",
+        "recommendedAudience": "Nữ 18-35"
+      }
+    ]
+  }
+  ```
 
 #### `POST /ai/compliance/check`
 Parallel MCP / Gemini Guardrails content safety, age classification, and copyright/IP infringement audit across script, audio, and visual assets.
@@ -885,9 +924,34 @@ Publish rendered video to multiple social platforms (TikTok, YouTube Shorts, Ins
   "style_overrides": {}
 }
 ```
-*(Other models include Scene, Character, Asset, Voice, Analytics Event)*
+### Strategic & Market Innovation Endpoints (Proposals 17–21)
+- `POST /ai/convert-novel`: Ingest manuscript (PDF/TXT/EPUB) and auto-generate 50-episode JSON script in 60s.
+- `POST /live/polling`: Process live stream comment votes and trigger AntV G6 scene branch switches.
+- `GET /marketplace/actors`: Search and license 8-anchor virtual actor Personas with royalty distribution.
+- `POST /ai/cultural-adapt`: Perform cultural geo-localization of dialogue, wardrobe, signs, and TTS accents.
+- `GET /analytics/paywall-recommendation`: Analyze retention curves to recommend optimal episode paywall coin unlock thresholds.
+
+### Technical & Infrastructure Endpoints (Proposals 22–26)
+- `GET /api/v1/render/stream`: SSE / WebSocket stream for real-time batch render queue progress.
+- `POST /audio/copyright-verify`: Audio fingerprinting scan auto-swapping unsafe background audio tracks.
+- `POST /billing/revenue-splits`: Define and process automated revenue sharing contracts among team members.
+
+### AI Compliance, Vocal Control & Ecosystem Endpoints (Proposals 27–30)
+- `POST /export/c2pa-watermark`: Embed C2PA cryptographic provenance metadata & Google SynthID invisible watermarks.
+- `POST /voices/steer-emotion`: Apply intra-scene SSML emotion affect steering (whisper, cry, laugh, shout).
+- `POST /export/platform-recut`: Auto-generate platform-specific edit cuts (59s YouTube Shorts vs 90s TikTok Series vs 15s IG Reels).
+- `GET /marketplace/templates`: Search, buy, or publish drama genre presets, virtual sets, and story trees.
+
+### Google Flow Account Pool & Hybrid Provider Endpoints (Proposal 31)
+- `GET /admin/flow-accounts`: List all active `google-flow` accounts in pool, session token status, and credit balances.
+- `POST /admin/flow-accounts`: Add new `google-flow` session token (`flowST`) to pool.
+- `POST /admin/flow-accounts/sync`: Trigger manual background token refresh & credit sync for Flow accounts.
+- `GET /admin/flow-accounts/status`: Check current Flow pool availability, active accounts, and reCAPTCHA solver health.
 
 ---
+
+
+
 
 ## 5. WebSocket Events
 

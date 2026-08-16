@@ -1,0 +1,379 @@
+<!DOCTYPE html><html class="light" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Shine AI - Episode Editor Modal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+                "on-tertiary-container": "#484848",
+                "secondary": "#5f5e5e",
+                "on-error-container": "#93000a",
+                "on-primary-fixed-variant": "#005233",
+                "tertiary-container": "#b9b7b7",
+                "background": "#fcf9f8",
+                "error": "#ba1a1a",
+                "on-secondary-fixed-variant": "#474746",
+                "on-background": "#1c1b1b",
+                "surface-tint": "#006c45",
+                "on-secondary": "#ffffff",
+                "on-tertiary-fixed": "#1b1c1c",
+                "surface": "#fcf9f8",
+                "surface-container-lowest": "#ffffff",
+                "on-secondary-container": "#636262",
+                "tertiary-fixed": "#e4e2e1",
+                "inverse-primary": "#51df9c",
+                "outline-variant": "#bbcabe",
+                "surface-variant": "#e5e2e1",
+                "surface-bright": "#fcf9f8",
+                "on-surface-variant": "#3d4a41",
+                "surface-dim": "#dcd9d9",
+                "surface-container-high": "#ebe7e7",
+                "primary-container": "#3ecf8e",
+                "tertiary": "#5f5e5e",
+                "surface-container": "#f0edec",
+                "surface-container-low": "#f6f3f2",
+                "primary": "#006c45",
+                "on-primary-fixed": "#002112",
+                "secondary-fixed": "#e5e2e1",
+                "on-tertiary-fixed-variant": "#474747",
+                "outline": "#6c7a70",
+                "tertiary-fixed-dim": "#c8c6c6",
+                "on-surface": "#1c1b1b",
+                "on-tertiary": "#ffffff",
+                "secondary-fixed-dim": "#c8c6c5",
+                "on-primary": "#ffffff",
+                "on-primary-container": "#005434",
+                "on-error": "#ffffff",
+                "inverse-surface": "#313030",
+                "error-container": "#ffdad6",
+                "surface-container-highest": "#e5e2e1",
+                "on-secondary-fixed": "#1b1b1b",
+                "inverse-on-surface": "#f3f0ef",
+                "primary-fixed-dim": "#51df9c",
+                "primary-fixed": "#71fcb6",
+                "secondary-container": "#e2dfde"
+        },
+        "borderRadius": {
+                "DEFAULT": "1rem",
+                "lg": "2rem",
+                "xl": "3rem",
+                "full": "9999px"
+        },
+        "spacing": {
+                "base": "4px",
+                "margin-desktop": "32px",
+                "gutter": "16px",
+                "margin-mobile": "16px",
+                "container-max": "1440px"
+        },
+        "fontFamily": {
+                "body-md": [
+                        "Outfit"
+                ],
+                "label-xs": [
+                        "Outfit"
+                ],
+                "code-md": [
+                        "Outfit"
+                ],
+                "headline-lg": [
+                        "Outfit"
+                ],
+                "headline-lg-mobile": [
+                        "Outfit"
+                ],
+                "body-sm": [
+                        "Outfit"
+                ],
+                "display-lg": [
+                        "Outfit"
+                ]
+        },
+        "fontSize": {
+                "body-md": [
+                        "16px",
+                        {
+                                "lineHeight": "24px",
+                                "fontWeight": "400"
+                        }
+                ],
+                "label-xs": [
+                        "11px",
+                        {
+                                "lineHeight": "16px",
+                                "letterSpacing": "0.05em",
+                                "fontWeight": "500"
+                        }
+                ],
+                "code-md": [
+                        "14px",
+                        {
+                                "lineHeight": "20px",
+                                "fontWeight": "450"
+                        }
+                ],
+                "headline-lg": [
+                        "32px",
+                        {
+                                "lineHeight": "40px",
+                                "letterSpacing": "-0.01em",
+                                "fontWeight": "600"
+                        }
+                ],
+                "headline-lg-mobile": [
+                        "24px",
+                        {
+                                "lineHeight": "32px",
+                                "fontWeight": "600"
+                        }
+                ],
+                "body-sm": [
+                        "14px",
+                        {
+                                "lineHeight": "20px",
+                                "fontWeight": "400"
+                        }
+                ],
+                "display-lg": [
+                        "48px",
+                        {
+                                "lineHeight": "56px",
+                                "letterSpacing": "-0.02em",
+                                "fontWeight": "700"
+                        }
+                ]
+        }
+},
+    },
+  }
+</script>
+<style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #f0edec; /* surface-container */
+        }
+        /* Custom scrollbar for webkit */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #dcd9d9;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #b9b7b7;
+        }
+        
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        
+        .phone-frame {
+            border: 8px solid #1c1b1b;
+            border-radius: 2rem;
+            overflow: hidden;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="h-screen w-full flex items-center justify-center p-4 md:p-8">
+<!-- Modal Backdrop -->
+<div class="fixed inset-0 bg-on-background/40 backdrop-blur-sm z-40"></div>
+<!-- Modal Container -->
+<div class="relative w-full max-w-[1400px] h-[90vh] bg-surface-container-lowest rounded-xl shadow-2xl flex flex-col overflow-hidden z-50 border border-outline-variant">
+<!-- Header -->
+<header class="flex justify-between items-center px-6 py-4 border-b border-outline-variant bg-surface-container-lowest z-10 shrink-0">
+<div>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile md:font-headline-lg md:text-headline-lg text-on-surface">Episode Editor: Shadows in the Code</h2>
+<p class="font-body-sm text-body-sm text-secondary mt-1">Series: The Neon Betrayal</p>
+</div>
+<button class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-surface-container transition-colors text-secondary">
+<span class="material-symbols-outlined">close</span>
+</button>
+</header>
+<!-- Main Content (Split View) -->
+<div class="flex-1 flex flex-col md:flex-row overflow-hidden bg-surface"><nav class="w-60 flex flex-col border-r border-outline-variant bg-surface-container-low shrink-0 py-6">
+<ul class="flex flex-col gap-1 px-3"><li class="">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-secondary hover:bg-surface-container font-medium" href="#">
+<span class="material-symbols-outlined">description</span>
+<span class="font-body-sm">Script</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors text-secondary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined">edit</span>
+<span class="font-body-sm">Editor</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors text-secondary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined">music_note</span>
+<span class="font-body-sm">Voice &amp; Music</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors text-secondary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined">closed_caption</span>
+<span class="font-body-sm">Caption</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary-container/10 text-primary font-medium transition-colors" href="#">
+<span class="material-symbols-outlined">publish</span>
+<span class="font-body-sm">Export &amp; Publish</span>
+</a>
+</li></ul>
+</nav>
+<!-- Central Workspace -->
+<main class="flex-1 overflow-y-auto bg-surface-bright p-8 md:p-12 relative flex flex-col gap-8 pb-32"><div class="max-w-4xl mx-auto flex flex-col gap-8 w-full">
+<div class="flex flex-col gap-2">
+<h2 class="font-headline-lg-mobile md:font-headline-lg text-on-surface">Export &amp; Publish</h2>
+<p class="font-body-md text-on-surface-variant">Configure metadata and distribute to social platforms.</p>
+</div>
+<section class="grid grid-cols-1 gap-6">
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 shadow-sm">
+<h3 class="font-body-md font-bold text-on-surface mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-primary">auto_awesome</span> Smart Metadata</h3>
+<div class="flex flex-col gap-4">
+<div>
+<label class="font-label-xs text-on-surface-variant mb-1 block">Series Title</label>
+<input class="w-full bg-surface border border-outline-variant rounded-lg p-3 font-body-md" type="text" value="Shadows in the Code: The Neon Betrayal">
+</div>
+<div>
+<label class="font-label-xs text-on-surface-variant mb-1 block">Description</label>
+<textarea class="w-full bg-surface border border-outline-variant rounded-lg p-3 font-body-md resize-none" rows="3">In a world of neon and chrome, Kael discovers a secret that could rewrite the city's source code. #Cyberpunk #SciFi</textarea>
+</div>
+</div>
+</div>
+<div class="bg-primary-container/5 border border-primary/20 rounded-xl p-6">
+<div class="flex justify-between items-center mb-4">
+<h3 class="font-body-md font-bold text-on-surface">Viral Hook Analyzer</h3>
+<div class="bg-primary text-white px-3 py-1 rounded-full text-xs font-bold">88/100 Retention Prediction</div>
+</div>
+<div class="flex flex-wrap gap-2">
+<span class="px-3 py-1 bg-surface-container rounded-full text-xs font-medium text-on-surface-variant">#CyberpunkNoir</span>
+<span class="px-3 py-1 bg-surface-container rounded-full text-xs font-medium text-on-surface-variant">#AITriller</span>
+<span class="px-3 py-1 bg-surface-container rounded-full text-xs font-medium text-on-surface-variant">#NeonAesthetic</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 shadow-sm">
+<div class="flex justify-between items-center mb-4">
+<h3 class="font-body-md font-bold text-on-surface">Smart Cover Generator</h3>
+<button class="text-primary font-bold text-xs flex items-center gap-1 hover:underline"><span class="material-symbols-outlined text-sm">refresh</span> Regenerate Covers</button>
+</div>
+<div class="grid grid-cols-3 gap-4">
+<div class="aspect-[9/16] bg-surface-variant rounded-lg overflow-hidden border border-outline-variant relative group">
+<div class="absolute inset-0 flex items-center justify-center text-on-surface-variant/40"><span class="material-symbols-outlined text-4xl">image</span></div>
+<div class="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded">Cover A</div>
+</div>
+<div class="aspect-[9/16] bg-surface-variant rounded-lg overflow-hidden border-2 border-primary relative">
+<div class="absolute inset-0 flex items-center justify-center text-on-surface-variant/40"><span class="material-symbols-outlined text-4xl">image</span></div>
+<div class="absolute bottom-2 left-2 bg-primary text-white text-[10px] px-2 py-0.5 rounded">Selected</div>
+</div>
+<div class="aspect-[9/16] bg-surface-variant rounded-lg overflow-hidden border border-outline-variant relative">
+<div class="absolute inset-0 flex items-center justify-center text-on-surface-variant/40"><span class="material-symbols-outlined text-4xl">image</span></div>
+<div class="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded">Cover C</div>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 shadow-sm">
+<h3 class="font-body-md font-bold text-on-surface mb-4">Platform Targets</h3>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div class="p-4 border border-outline-variant rounded-xl flex flex-col gap-3">
+<div class="flex justify-between items-center">
+<span class="font-bold text-sm">TikTok</span>
+<div class="w-8 h-4 bg-primary rounded-full relative"><div class="absolute right-0.5 top-0.5 w-3 h-3 bg-white rounded-full"></div></div>
+</div>
+<span class="text-[10px] bg-primary-container/20 text-primary px-2 py-0.5 rounded-full w-fit font-bold">Optimize for Algorithm</span>
+</div>
+<div class="p-4 border border-outline-variant rounded-xl flex flex-col gap-3">
+<div class="flex justify-between items-center">
+<span class="font-bold text-sm">Instagram</span>
+<div class="w-8 h-4 bg-primary rounded-full relative"><div class="absolute right-0.5 top-0.5 w-3 h-3 bg-white rounded-full"></div></div>
+</div>
+<span class="text-[10px] bg-primary-container/20 text-primary px-2 py-0.5 rounded-full w-fit font-bold">Optimize for Algorithm</span>
+</div>
+<div class="p-4 border border-outline-variant rounded-xl flex flex-col gap-3">
+<div class="flex justify-between items-center">
+<span class="font-bold text-sm">YouTube</span>
+<div class="w-8 h-4 bg-surface-variant rounded-full relative"><div class="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full"></div></div>
+</div>
+<span class="text-[10px] bg-surface-container text-on-surface-variant px-2 py-0.5 rounded-full w-fit font-medium">Disabled</span>
+</div>
+</div>
+</div>
+</section>
+</div></main>
+<!-- Right Panel: Caption Styling -->
+<section class="w-[360px] border-l border-outline-variant bg-surface flex flex-col h-full relative shrink-0"><div class="h-14 border-b border-outline-variant flex items-center px-6 bg-surface-container-lowest sticky top-0 z-10 shrink-0">
+<div class="flex items-center gap-2 text-on-surface font-semibold font-body-md">
+<span class="material-symbols-outlined">settings</span> Export Settings
+</div>
+</div>
+<div class="flex-1 overflow-y-auto p-6 hide-scrollbar flex flex-col gap-8">
+<div>
+<h3 class="font-label-xs text-on-surface-variant uppercase tracking-widest mb-4">Resolution</h3>
+<div class="flex flex-col gap-2">
+<button class="w-full p-3 border-2 border-primary bg-primary-container/5 rounded-xl text-left flex justify-between items-center">
+<span class="font-body-sm font-bold">4K Vertical (2160x3840)</span>
+<span class="material-symbols-outlined text-primary">check_circle</span>
+</button>
+<button class="w-full p-3 border border-outline-variant bg-surface-container-lowest rounded-xl text-left">
+<span class="font-body-sm font-medium text-on-surface-variant">1080p Vertical (1080x1920)</span>
+</button>
+</div>
+</div>
+<div>
+<h3 class="font-label-xs text-on-surface-variant uppercase tracking-widest mb-4">Format</h3>
+<div class="grid grid-cols-2 gap-2">
+<button class="p-3 border-2 border-primary bg-primary-container/5 rounded-xl text-center font-bold text-sm">MP4</button>
+<button class="p-3 border border-outline-variant bg-surface-container-lowest rounded-xl text-center font-medium text-sm text-on-surface-variant">MOV</button>
+</div>
+</div>
+<div>
+<h3 class="font-label-xs text-on-surface-variant uppercase tracking-widest mb-4">Final Quality Check</h3>
+<div class="flex flex-col gap-3">
+<div class="flex items-center justify-between text-sm">
+<span class="text-on-surface-variant">Audio Normalization</span>
+<span class="text-primary font-bold flex items-center gap-1"><span class="material-symbols-outlined text-sm">check</span> Passed</span>
+</div>
+<div class="flex items-center justify-between text-sm">
+<span class="text-on-surface-variant">Subtitle Sync</span>
+<span class="text-primary font-bold flex items-center gap-1"><span class="material-symbols-outlined text-sm">check</span> Passed</span>
+</div>
+<div class="flex items-center justify-between text-sm">
+<span class="text-on-surface-variant">Visual Consistency</span>
+<span class="text-primary font-bold flex items-center gap-1"><span class="material-symbols-outlined text-sm">check</span> Passed</span>
+</div>
+</div>
+</div>
+</div>
+<div class="p-6 border-t border-outline-variant bg-surface-container-lowest">
+<button class="w-full py-4 bg-primary text-white font-bold rounded-xl hover:bg-[#32b57a] transition-colors shadow-lg flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">cloud_upload</span> Begin Cloud Render &amp; Publish
+</button>
+</div></section>
+</div>
+<!-- Footer -->
+<footer class="px-6 py-4 border-t border-outline-variant bg-surface-container-lowest flex justify-between items-center z-10 shrink-0">
+<button class="px-6 py-2 rounded-full border border-outline-variant text-on-surface font-body-sm text-body-sm hover:bg-surface-container transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">play_arrow</span> Preview Episode
+            </button>
+<button class="px-8 py-2 bg-primary-container text-on-primary-fixed font-bold rounded-full hover:bg-[#32b57a] transition-colors shadow-sm flex items-center gap-2">Begin Cloud Render &amp; Publish</button>
+</footer>
+</div>
+</body></html>

@@ -1,4 +1,4 @@
-# Shine (DramaFlowAI) - AI Micro-Drama Video Studio
+# Shine - AI Micro-Drama Video Studio
 ## Test Plan & Detailed Test Cases Document
 
 **Version:** 1.0
@@ -9,7 +9,7 @@
 ## 1. Test Plan Overview
 
 ### 1.1 Objectives
-The objective of this test plan is to define the testing strategy, scope, environment, and methodologies required to ensure the quality, reliability, and performance of Shine (DramaFlowAI). The platform is an enterprise-grade AI-powered system for creating vertical short dramas.
+The objective of this test plan is to define the testing strategy, scope, environment, and methodologies required to ensure the quality, reliability, and performance of Shine. The platform is an enterprise-grade AI-powered system for creating vertical short dramas.
 
 ### 1.2 Scope
 **In Scope:**
@@ -396,6 +396,9 @@ A hybrid testing approach will be utilized, combining automated testing (Unit, I
 | API-013 | `/api/v1/analytics/comments/ep1` | GET | `limit=20` | 200 OK | `{ total: 1250, comments: [...] }` | Comments Aggregation |
 | API-014 | `/api/v1/analytics/comments/c1/reply` | POST | `{ "customInstruction": "Tease cliffhanger" }` | 200 OK | `{ replyText: "...", posted: true }` | AI Auto-Reply |
 | API-015 | `/api/v1/ai/script/adapt-from-feedback` | POST | `{ "seriesId": "s1", "targetEpisodeNumber": 6 }` | 200 OK | `{ adaptationSummary: "...", revisedScript: {} }` | Script Feedback Loop |
+| API-016 | `/api/v1/admin/flow-accounts/status` | GET | Admin JWT | 200 OK | `{ poolSize: 5, activeAccounts: 5, captchaHealth: "ok" }` | Google Flow Pool |
+| API-017 | `/api/v1/health` | GET | None | 200 OK | `{ status: "ok", primaryDatabase: "sqlite" }` | DB Provider Check |
+
 
 
 

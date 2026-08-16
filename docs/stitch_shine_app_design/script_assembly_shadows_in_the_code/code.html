@@ -1,0 +1,442 @@
+<!DOCTYPE html><html class="light" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Shine AI - Episode Editor Modal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+                "on-tertiary-container": "#484848",
+                "secondary": "#5f5e5e",
+                "on-error-container": "#93000a",
+                "on-primary-fixed-variant": "#005233",
+                "tertiary-container": "#b9b7b7",
+                "background": "#fcf9f8",
+                "error": "#ba1a1a",
+                "on-secondary-fixed-variant": "#474746",
+                "on-background": "#1c1b1b",
+                "surface-tint": "#006c45",
+                "on-secondary": "#ffffff",
+                "on-tertiary-fixed": "#1b1c1c",
+                "surface": "#fcf9f8",
+                "surface-container-lowest": "#ffffff",
+                "on-secondary-container": "#636262",
+                "tertiary-fixed": "#e4e2e1",
+                "inverse-primary": "#51df9c",
+                "outline-variant": "#bbcabe",
+                "surface-variant": "#e5e2e1",
+                "surface-bright": "#fcf9f8",
+                "on-surface-variant": "#3d4a41",
+                "surface-dim": "#dcd9d9",
+                "surface-container-high": "#ebe7e7",
+                "primary-container": "#3ecf8e",
+                "tertiary": "#5f5e5e",
+                "surface-container": "#f0edec",
+                "surface-container-low": "#f6f3f2",
+                "primary": "#006c45",
+                "on-primary-fixed": "#002112",
+                "secondary-fixed": "#e5e2e1",
+                "on-tertiary-fixed-variant": "#474747",
+                "outline": "#6c7a70",
+                "tertiary-fixed-dim": "#c8c6c6",
+                "on-surface": "#1c1b1b",
+                "on-tertiary": "#ffffff",
+                "secondary-fixed-dim": "#c8c6c5",
+                "on-primary": "#ffffff",
+                "on-primary-container": "#005434",
+                "on-error": "#ffffff",
+                "inverse-surface": "#313030",
+                "error-container": "#ffdad6",
+                "surface-container-highest": "#e5e2e1",
+                "on-secondary-fixed": "#1b1b1b",
+                "inverse-on-surface": "#f3f0ef",
+                "primary-fixed-dim": "#51df9c",
+                "primary-fixed": "#71fcb6",
+                "secondary-container": "#e2dfde"
+        },
+        "borderRadius": {
+                "DEFAULT": "1rem",
+                "lg": "2rem",
+                "xl": "3rem",
+                "full": "9999px"
+        },
+        "spacing": {
+                "base": "4px",
+                "margin-desktop": "32px",
+                "gutter": "16px",
+                "margin-mobile": "16px",
+                "container-max": "1440px"
+        },
+        "fontFamily": {
+                "body-md": [
+                        "Outfit"
+                ],
+                "label-xs": [
+                        "Outfit"
+                ],
+                "code-md": [
+                        "Outfit"
+                ],
+                "headline-lg": [
+                        "Outfit"
+                ],
+                "headline-lg-mobile": [
+                        "Outfit"
+                ],
+                "body-sm": [
+                        "Outfit"
+                ],
+                "display-lg": [
+                        "Outfit"
+                ]
+        },
+        "fontSize": {
+                "body-md": [
+                        "16px",
+                        {
+                                "lineHeight": "24px",
+                                "fontWeight": "400"
+                        }
+                ],
+                "label-xs": [
+                        "11px",
+                        {
+                                "lineHeight": "16px",
+                                "letterSpacing": "0.05em",
+                                "fontWeight": "500"
+                        }
+                ],
+                "code-md": [
+                        "14px",
+                        {
+                                "lineHeight": "20px",
+                                "fontWeight": "450"
+                        }
+                ],
+                "headline-lg": [
+                        "32px",
+                        {
+                                "lineHeight": "40px",
+                                "letterSpacing": "-0.01em",
+                                "fontWeight": "600"
+                        }
+                ],
+                "headline-lg-mobile": [
+                        "24px",
+                        {
+                                "lineHeight": "32px",
+                                "fontWeight": "600"
+                        }
+                ],
+                "body-sm": [
+                        "14px",
+                        {
+                                "lineHeight": "20px",
+                                "fontWeight": "400"
+                        }
+                ],
+                "display-lg": [
+                        "48px",
+                        {
+                                "lineHeight": "56px",
+                                "letterSpacing": "-0.02em",
+                                "fontWeight": "700"
+                        }
+                ]
+        }
+},
+    },
+  }
+</script>
+<style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #f0edec; /* surface-container */
+        }
+        /* Custom scrollbar for webkit */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #dcd9d9;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #b9b7b7;
+        }
+        
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        
+        .phone-frame {
+            border: 8px solid #1c1b1b;
+            border-radius: 2rem;
+            overflow: hidden;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="h-screen w-full flex items-center justify-center p-4 md:p-8">
+<!-- Modal Backdrop -->
+<div class="fixed inset-0 bg-on-background/40 backdrop-blur-sm z-40"></div>
+<!-- Modal Container -->
+<div class="relative w-full max-w-[1400px] h-[90vh] bg-surface-container-lowest rounded-xl shadow-2xl flex flex-col overflow-hidden z-50 border border-outline-variant">
+<!-- Header -->
+<header class="flex justify-between items-center px-6 py-4 border-b border-outline-variant bg-surface-container-lowest z-10 shrink-0">
+<div>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile md:font-headline-lg md:text-headline-lg text-on-surface">Episode Editor: Shadows in the Code</h2>
+<p class="font-body-sm text-body-sm text-secondary mt-1">Series: The Neon Betrayal</p>
+</div>
+<button class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-surface-container transition-colors text-secondary">
+<span class="material-symbols-outlined">close</span>
+</button>
+</header>
+<!-- Main Content (Split View) -->
+<div class="flex-1 flex flex-col md:flex-row overflow-hidden bg-surface"><nav class="w-60 flex flex-col border-r border-outline-variant bg-surface-container-low shrink-0 py-6">
+<ul class="flex flex-col gap-1 px-3">
+<li class="">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors bg-primary-container/10 text-primary font-medium" href="#">
+<span class="material-symbols-outlined">description</span>
+<span class="font-body-sm">Script</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors text-secondary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined">edit</span>
+<span class="font-body-sm">Editor</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-secondary hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined">music_note</span>
+<span class="font-body-sm">Voice &amp; Music</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-secondary hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined">closed_caption</span>
+<span class="font-body-sm">Caption</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-secondary hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined">publish</span>
+<span class="font-body-sm">Export &amp; Publish</span>
+</a>
+</li>
+</ul>
+</nav>
+<!-- Left Panel: Series DNA -->
+<section class="w-72 border-r border-outline-variant bg-surface flex flex-col h-full overflow-y-auto hide-scrollbar shrink-0">
+<div class="p-6 flex flex-col gap-8">
+<!-- Characters -->
+<div>
+<div class="flex items-center justify-between mb-4">
+<h3 class="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-widest">Characters</h3>
+<button class="text-primary hover:text-primary-container flex items-center gap-1 font-label-xs text-label-xs">
+<span class="material-symbols-outlined text-sm">add</span> Add
+                            </button>
+</div>
+<div class="flex flex-col gap-3">
+<div class="flex items-center gap-4 p-3 rounded-xl border border-primary-container bg-primary-container/5">
+<img alt="Mara" class="w-10 h-10 rounded-full object-cover border border-primary-container" data-alt="A small circular profile picture of a young woman with neon lighting reflecting on her face, cyberpunk aesthetic, detailed and realistic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCWImuxVaBQprcdKxXp3iIWz9Um4eKRmIAGvTiA-8KbB0UU6eYQ-8BWYpp5UzMBwVW2D-l4kMnmFoJWuIbXlWUKfEu6m-Nwqp614iKs7DI7BRTu6TLROIRtYCU4VXsFDndMpr_XLrZ4DFKqWKnHd7LIFqQENohVLp1R0LijinbMSqU_Pbvwm-VAjN4aqmA3B2V80kD2spDQR7Bd69VXFZKSHxv3IVVFWEchBnEKycGbkNOSpQBxaPxIbQ">
+<div class="flex-1">
+<h4 class="font-body-sm text-body-sm font-semibold text-on-surface">Mara</h4>
+<p class="font-label-xs text-label-xs text-on-surface-variant">Locked Avatar</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-sm">lock</span>
+</div>
+<div class="flex items-center gap-4 p-3 rounded-xl border border-outline-variant bg-surface-container-lowest">
+<img alt="Kael" class="w-10 h-10 rounded-full object-cover border border-outline-variant" data-alt="A small circular profile picture of a young man looking serious in a dimly lit alleyway, moody cinematic lighting, highly detailed." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD9QaAPGNRDD87RcciSDFz1v1ej2HXmFyim7eHcl8YE7L7WajwsMLLc-8CZAom4aSK_1Yf6V7ouCUVJF3UYDJLNk09c4LCutyK2o54y3zj8wn2A0uEDz6GWXAu0jGs23DdZUfEoxTt3WE-G20yEp_v9xyQEKu-rZ2SxrLdtEDA-6y2koQFWZD1CWXjuy3VKooRx68sBa5JWHV9IROp6VHtz_ejnmRJBLY9UlOg-4yGBdhY6k3UFAFbE9Q">
+<div class="flex-1">
+<h4 class="font-body-sm text-body-sm font-semibold text-on-surface">Kael</h4>
+<p class="font-label-xs text-label-xs text-on-surface-variant">Dynamic</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Drama Tone -->
+<div>
+<h3 class="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-widest mb-4">Drama Tone</h3>
+<div class="grid grid-cols-2 gap-3">
+<button class="flex flex-col items-center justify-center p-4 rounded-xl border-2 border-primary bg-primary-container/10 text-primary transition-all">
+<span class="material-symbols-outlined mb-2 text-2xl">visibility</span>
+<span class="font-label-xs text-label-xs">Suspense</span>
+</button>
+<button class="flex flex-col items-center justify-center p-4 rounded-xl border border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-variant transition-all">
+<span class="material-symbols-outlined mb-2 text-2xl">favorite</span>
+<span class="font-label-xs text-label-xs">Romance</span>
+</button>
+<button class="flex flex-col items-center justify-center p-4 rounded-xl border border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-variant transition-all">
+<span class="material-symbols-outlined mb-2 text-2xl">sports_martial_arts</span>
+<span class="font-label-xs text-label-xs">Action</span>
+</button>
+<button class="flex flex-col items-center justify-center p-4 rounded-xl border border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-variant transition-all">
+<span class="material-symbols-outlined mb-2 text-2xl">theater_comedy</span>
+<span class="font-label-xs text-label-xs">Satire</span>
+</button>
+</div>
+</div>
+<!-- Visual Style -->
+<div>
+<h3 class="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-widest mb-4">Visual Style</h3>
+<div class="flex flex-col gap-4">
+<div>
+<label class="font-label-xs text-label-xs text-on-surface-variant block mb-1">Lighting</label>
+<div class="relative">
+<select class="w-full appearance-none bg-surface-container-lowest border border-outline-variant rounded-xl py-2 px-3 font-body-sm text-body-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary">
+<option>Cinematic Neon</option>
+<option>Natural Daylight</option>
+<option>Moody Noir</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant">expand_more</span>
+</div>
+</div>
+<div>
+<label class="font-label-xs text-label-xs text-on-surface-variant block mb-1">Camera Movement</label>
+<div class="relative">
+<select class="w-full appearance-none bg-surface-container-lowest border border-outline-variant rounded-xl py-2 px-3 font-body-sm text-body-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary">
+<option>Steady Handheld</option>
+<option>Drone Sweep</option>
+<option>Static Tripod</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant">expand_more</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<main class="flex-1 overflow-y-auto bg-surface-bright p-8 md:p-12 relative flex flex-col gap-8 pb-32">
+<div class="max-w-3xl mx-auto flex flex-col gap-12 w-full">
+<!-- Scene 1 -->
+<section class="group relative">
+<div class="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-widest mb-3 flex items-center gap-4">
+                            SCENE 1 — INT. NEON ALLEY - NIGHT
+                            <div class="h-px bg-outline-variant flex-1 opacity-50"></div>
+</div>
+<p class="font-body-md text-body-md text-on-surface leading-relaxed mb-6 max-w-2xl">
+                            MARA stands under a flickering sign. The rain is cold, biting. She checks her watch. 11:59 PM.
+                        </p>
+<div class="pl-8 border-l-2 border-primary-container/30 relative">
+<h5 class="font-label-xs text-label-xs text-on-surface-variant font-semibold mb-1">MARA</h5>
+<p class="font-body-md text-body-md text-on-surface italic max-w-md">"Where are you, Kael? You're never late."</p>
+</div>
+</section>
+<!-- Scene 2 -->
+<section class="group relative mt-4">
+<div class="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-widest mb-3 flex items-center gap-4">
+                            SCENE 2 — EXT. ROOFTOP - CONTINUOUS
+                            <div class="h-px bg-outline-variant flex-1 opacity-50"></div>
+</div>
+<p class="font-body-md text-body-md text-on-surface leading-relaxed mb-6 max-w-2xl">
+                            KAEL watches from above. He has a sniper rifle, but he's not aiming at her. He's aiming at the shadows behind her.
+                        </p>
+<div class="pl-8 border-l-2 border-outline-variant relative">
+<h5 class="font-label-xs text-label-xs text-on-surface-variant font-semibold mb-1">KAEL (V.O.)</h5>
+<p class="font-body-md text-body-md text-on-surface italic max-w-md">"Too late, Mara. They're already here."</p>
+</div>
+</section>
+<!-- Add Scene Hook -->
+<div class="mt-8 flex justify-center">
+<button class="w-full max-w-md aspect-video rounded-lg border border-dashed border-outline-variant hover:border-primary-container hover:bg-primary-container/5 transition-colors flex flex-col items-center justify-center gap-2 text-secondary hover:text-primary-container group">
+<span class="material-symbols-outlined text-3xl mb-2 group-hover:scale-110 transition-transform">add_circle</span>
+<span class="font-label-xs text-label-xs tracking-widest font-semibold uppercase">Add Next Scene Hook</span>
+</button>
+</div>
+</div>
+</main>
+<!-- Right Panel: Scene Assembly -->
+<section class="w-[420px] border-l border-outline-variant bg-surface-container flex flex-col h-full relative shrink-0">
+<!-- Assembly Header -->
+<div class="h-14 border-b border-outline-variant flex items-center justify-between px-6 bg-surface-container-lowest sticky top-0 z-10 shrink-0">
+<div class="flex items-center gap-2 text-on-surface font-semibold font-body-md">
+<span class="material-symbols-outlined">video_library</span>
+                        Scene Assembly
+                    </div>
+<div class="flex items-center gap-2">
+<button class="text-on-surface-variant hover:text-primary p-1 rounded-md hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined text-sm">grid_view</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary p-1 rounded-md hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined text-sm">view_list</span>
+</button>
+</div>
+</div>
+<!-- Storyboard Grid -->
+<div class="flex-1 overflow-y-auto p-6 hide-scrollbar">
+<div class="grid grid-cols-2 gap-4 pb-24">
+<!-- Card 1: Rendered -->
+<div class="bg-surface rounded-xl border border-outline-variant overflow-hidden flex flex-col shadow-sm group">
+<div class="aspect-[9/16] relative bg-inverse-surface">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="A highly detailed 9:16 vertical cinematic shot of a dark, rain-slicked cyberpunk alleyway. A lone figure stands under a bright pink and blue neon sign reading 'Inatiira'. The lighting is moody, reflecting in puddles. High contrast, photorealistic, 8k resolution, cinematic lighting." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCC29lA1_P8HYqgqIDDmaiyZ51gYwZkgWrIagJ_ahVCe5xwPIWpGwciFHU8moFva5v71UZADXTDetysh0RE5EhPrD-JFkUbvu7QYibPiXaGP5-yOjYFle8l1xZ_SgsiRxw3u3vyvke6fISlm7yCdpJaLGVcQFB0FoQJJEkCgVnCeTt020tcp6EqnUy4cBUqPo6xkwkjzOeh9MtLuwTV6EmNCZh9LI7uSdmmLMFqewQGBxS5sdr0Gdsm_g')"></div>
+<div class="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm text-white px-2 py-1 rounded text-[10px] font-mono tracking-wider">
+                                    00:00 - 00:04
+                                </div>
+</div>
+<div class="p-3 bg-surface">
+<div class="w-full h-1 bg-surface-variant rounded-full overflow-hidden mb-2">
+<div class="h-full bg-primary w-full"></div>
+</div>
+<p class="text-[10px] text-on-surface-variant font-medium truncate">Scene 1 - Master</p>
+</div>
+</div>
+<!-- Card 2: Rendered -->
+<div class="bg-surface rounded-xl border border-outline-variant overflow-hidden flex flex-col shadow-sm group">
+<div class="aspect-[9/16] relative bg-inverse-surface">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="A highly detailed 9:16 vertical cinematic shot looking down from a high rooftop onto a sprawling, foggy cyberpunk city at night. Dark teal and green lighting dominates the scene with faint orange glows from distant windows. A subtle silhouette of a person with a rifle is in the foreground. Photorealistic, atmospheric depth, cinematic composition." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAkvJBU51zE3p6R_zI2Ke-SDOw0nMzUMNpCFp-Tzf2eG6gle1b_fTtFm3bkRpRsdGA3G_hTcG0zN_7ESK-1KpyBWA7fPbbdF2cuIUH8zU4OxMpKgTXHVZrX9Wf6lb1YNENHg389xlgx54IlBF3YPj2-lneMm2ONmysVu0yAzarvF6a05epmtnaNk9ndr5Ca6BfzKOQB910ojcv_pir9WUosynMlmgd6QbOAEdtnLx3TOeR8INrPto1wJQ')"></div>
+<div class="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm text-white px-2 py-1 rounded text-[10px] font-mono tracking-wider">
+                                    00:04 - 00:08
+                                </div>
+</div>
+<div class="p-3 bg-surface">
+<div class="w-full h-1 bg-surface-variant rounded-full overflow-hidden mb-2">
+<div class="h-full bg-primary w-full"></div>
+</div>
+<p class="text-[10px] text-on-surface-variant font-medium truncate">Scene 2 - Rooftop POV</p>
+</div>
+</div>
+<!-- Card 3: Synthesizing -->
+<div class="bg-primary-container/5 rounded-xl border border-primary border-dashed overflow-hidden flex flex-col aspect-[9/16] items-center justify-center p-4 text-center relative">
+<div class="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4"></div>
+<h6 class="font-label-xs text-label-xs font-bold text-primary tracking-widest uppercase mb-1">Synthesizing...</h6>
+<p class="text-[10px] text-on-surface-variant">Injecting suspense layer</p>
+</div>
+<!-- Card 4: Insert -->
+<button class="w-full aspect-video rounded-xl border border-dashed border-outline-variant hover:border-primary-container hover:bg-primary-container/5 transition-colors flex flex-col items-center justify-center gap-2 text-secondary hover:text-primary-container group col-span-1 h-auto aspect-[9/16]">
+<div class="w-12 h-12 rounded-full bg-surface-variant flex items-center justify-center mb-3 group-hover:bg-primary-container/20 transition-colors">
+<span class="material-symbols-outlined text-2xl text-on-surface-variant group-hover:text-primary">add</span>
+</div>
+<h6 class="font-label-xs text-label-xs font-bold text-on-surface-variant group-hover:text-primary tracking-widest uppercase">Insert Shot</h6>
+</button>
+</div>
+</div>
+</section>
+</div>
+<!-- Footer -->
+<footer class="px-6 py-4 border-t border-outline-variant bg-surface-container-lowest flex justify-between items-center z-10 shrink-0">
+<button class="px-6 py-2 rounded-full border border-outline-variant text-on-surface font-body-sm text-body-sm hover:bg-surface-container transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">add</span> Add Next Scene
+            </button>
+<button class="px-8 py-2 bg-primary-container text-on-primary-fixed font-bold rounded-full hover:bg-[#32b57a] transition-colors shadow-sm flex items-center gap-2">
+                Save &amp; Sync Episode
+            </button>
+</footer>
+</div>
+</body></html>

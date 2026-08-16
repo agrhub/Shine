@@ -1,6 +1,6 @@
 # Safe Code Editing & Agent Pair-Programming Protocols
 
-This document defines the mandatory guidelines and protocols for developers and AI Agents when modifying, editing, or refactoring codebase files in **Shine (DramaFlowAI)**.
+This document defines the mandatory guidelines and protocols for developers and AI Agents when modifying, editing, or refactoring codebase files in **Shine**.
 
 ## Purpose
 
@@ -29,6 +29,17 @@ To eliminate code regression, accidental deletion of existing logic, missing imp
 ### Protocol 5: Strict Contract & Comment Preservation
 - Retain all unrelated comments, docstrings, exported types, interfaces, and error handling branches unless explicitly instructed to refactor them.
 
+### Protocol 6: Mandatory Automated i18n & Localization Check (`pnpm run check-i18n`)
+- Never hardcode English or Vietnamese strings in Vue templates, Pinia stores, or toast notifications (`toast.success(...)`).
+- Every new user-facing key MUST be added to ALL 6 locale JSON files (`en`, `vi`, `zh`, `jp`, `es`, `fr`).
+- Developers and AI Agents MUST execute `pnpm run check-i18n` in `apps/shine/client` before declaring any turn or task complete.
+
+### Protocol 7: Google Stitch MCP & Element Plus Component Mandate
+- All UI layouts, screens, and components MUST align with Google Stitch local design assets in `docs/stitch_shine_app_design/` using the local design files in `docs/stitch_shine_app_design/`.
+- All views MUST use native Element Plus (`element-plus`) components (`<el-button>`, `<el-card>`, `<el-table>`, `<el-tabs>`, `<el-dialog>`, `<el-drawer>`, `<el-menu>`, `<el-steps>`, `<el-select>`, `<el-input>`, `<el-tag>`, etc.) and `@element-plus/icons-vue`.
+
+
+
 ---
 
 ## 6. Definition of Done (DoD) & Anti-Hallucination Protocols
@@ -55,4 +66,9 @@ When a user asks *"Did you check?"* or *"Are you sure?"*:
 
 ### Rule 4: Anti-Symptom Patching Rule
 - NEVER fix broken tests or errors by commenting out assertions, swallowing exceptions in try/catch, returning dummy arrays, or writing empty stub implementations.
+
+### Rule 5: Zero Destructive Refactoring Rule (Strict Function Preservation)
+- When refactoring text strings, styles, or i18n keys, Agents MUST NEVER delete, truncate, or overwrite surrounding business logic, functions (`handleUndo`, `handleRedo`, `handleImportJSON`, `handleApplyCustomSize`), event handlers, or store calls.
+- Every edit chunk MUST be minimal (1–3 lines) targeting ONLY the exact string or class being replaced.
+
 

@@ -1,8 +1,8 @@
-# Architecture Document: Shine (DramaFlowAI) - AI Micro-Drama Video Studio
+# Architecture Document: Shine - AI Micro-Drama Video Studio
 
 ## 1. System Overview
 
-Shine (DramaFlowAI) is an enterprise-grade AI-powered platform tailored for creating serialized vertical short dramas (9:16 aspect ratio, typically 20-50 episodes of 1-3 minutes each). The platform integrates a Vue 3 frontend, a Node.js (Express) backend, and heavily utilizes Google Vertex AI for all generative tasks via the official `@google/genai` SDK. By orchestrating a multi-agent AI pipeline and a specialized multi-modal generation pipeline (Video, Audio, Image, Text), Shine enables end-to-end creation, character consistency management, episode editing, and social platform distribution.
+Shine is an enterprise-grade AI-powered platform tailored for creating serialized vertical short dramas (9:16 aspect ratio, typically 20-50 episodes of 1-3 minutes each). The platform integrates a Vue 3 frontend, a Node.js (Express) backend, and heavily utilizes Google Vertex AI for all generative tasks via the official `@google/genai` SDK. By orchestrating a multi-agent AI pipeline and a specialized multi-modal generation pipeline (Video, Audio, Image, Text), Shine enables end-to-end creation, character consistency management, episode editing, and social platform distribution.
 
 ```mermaid
 graph TD
@@ -70,32 +70,185 @@ erDiagram
     }
 ```
 
-## 3. Frontend Architecture
+## 3. Modular Decoupled Workspace Architecture
 
-The frontend is a Vue 3 Single Page Application (SPA) built with Vite and TypeScript, providing a rich, interactive canvas and timeline for episode editing.
+The system is organized into a clean, decoupled modular workspace separating Frontend, Backend API Server, and Shared UI Component Packages:
 
-- **Framework**: Vue 3 (Composition API, `<script setup>`)
-- **Build Tool**: Vite
-- **State Management**: Pinia (stores for Series, Episode, Editor Timeline, Character Library, and Job Queue)
-- **Routing**: Vue Router
-- **Key Modules**:
-  - `ScriptWorkspace`: AI Director interaction, script breakdown.
-  - `StoryBoard`: Shot preparation, character assignment, start/end frame generation.
-  - `TimelineEditor`: Video/Audio/Subs multi-track sequence editor.
-  - `TaskCenter`: Unified interface for tracking async Veo/Lyria generation jobs.
+- **Frontend SPA Application:** [`apps/shine/client`](../client) - Vue 3 + Vite + TypeScript NLE Studio & Creator Workspace.
+- **Backend API Server:** [`apps/shine/server`](../server)) - Express Node.js Service, AI Provider Router, WebSocket server & Pluggable Database Abstraction.
+- **Shared UI Package:** [`packages/vue-element-plus`](../../../packages/vue-element-plus) - Design system foundation built on Element Plus (`element-plus` v2.14.2), UnoCSS (`unocss` v66.7.4), Reka UI (`reka-ui` v2.10.1), `@openvideo/vue-admin`, and OKLCH color space variables defined in [`docs/design.md`](../docs/design.md).
 
-## 4. Backend Architecture
+```mermaid
+graph TD
+    subgraph Frontend Workspace [client]
+        VueApp[Vue 3 SPA]
+        PiniaStore[Pinia State Stores]
+        VueRouter[Vue Router v5]
+        DesignSystem[vue-element-plus Design Package]
+    end
 
-The backend is an Express-based Node.js service designed to act as a robust orchestrator for AI tasks and data persistence.
+    subgraph Backend Workspace [server]
+        ExpressServer[Node.js Express Server :3000]
+        AIRouter[AIProviderRouter]
+        DBLayer[IDatabaseProvider - SQLite/MongoDB]
+        WSServer[WebSocket Atomic Patch Server]
+    end
 
-- **Core Framework**: Node.js + Express
-- **Language**: TypeScript
-- **State Machine**: Orchestrates the shot readiness lifecycle (Pending → Prepared → Generating → Done) for async generation jobs.
-- **Key Services**:
-  - `AIService`: Wraps the GeminiClient to interface with Google Vertex AI.
-  - `JobManager`: Manages async long-polling jobs (like Veo video generation up to 10 minutes).
-  - `AssetManager`: Handles S3 object uploads/downloads and pre-signing.
-  - `SocialPublisher`: Handles OAuth and publishing to TikTok/YouTube/Instagram.
+    subgraph Shared UI Package [packages/vue-element-plus]
+        ElPlus[Element Plus UI Components]
+        UnoCSS[UnoCSS Utility Engine & Preset Wind4]
+        ThemeTokens[OKLCH Theme Tokens & vue-admin Themes]
+    end
+
+    VueApp --> DesignSystem
+    DesignSystem --> Shared UI Package
+    VueApp <--> |HTTP / REST API & WebSockets| ExpressServer
+    ExpressServer <--> DBLayer
+    ExpressServer <--> AIRouter
+```
+
+## 4. Frontend Architecture & Directory Structure
+
+The frontend is a decoupled Vue 3 Single Page Application (SPA) built inside [`apps/shine/client`](../client) using Vite, TypeScript, Pinia, Axios, Element Plus (`element-plus`), and `@element-plus/icons-vue`. The visual design and screen layouts align 100% with **Google Stitch local design assets in `docs/stitch_shine_app_design/`** using the local design files in `docs/stitch_shine_app_design/`.
+
+
+### 4.1 Client Directory Structure Standard (`apps/shine/client/`)
+```
+apps/shine/client/
+├── public/                 # Static public assets (favicons, images, loading HTML)
+├── src/
+│   ├── api/                # Centralized API service modules (auth.ts, series.ts, ai.ts)
+│   ├── assets/             # Global CSS, SCSS resources, icons, and theme tokens
+│   ├── components/         # Application components
+│   │   ├── basic/          # NATIVE BASIC UI COMPONENTS (FaButton, FaInput, FaCard, FaForm, etc.)
+│   │   ├── layout/         # Layout components (Header, Sidebar, UserMenu, ThemeToggle)
+│   │   └── business/       # Domain business components (SeriesCard, ScriptItem, TimelineTrack)
+│   ├── composables/        # Shared Vue 3 composition hooks (useI18n, useTheme, usePlayer)
+│   ├── constants/          # Application constants, genre enums, API endpoints
+│   ├── layouts/            # 5 Layout Shells (DefaultLayout.vue, HomeLayout.vue, AuthLayout.vue, AppLayout.vue, StudioLayout.vue)
+│   ├── locales/            # 6 i18n locale JSON files (en.json, vi.json, zh.json, jp.json, es.json, fr.json)
+│   ├── router/             # Vue Router configuration & route modules (modules/dashboard.ts, manual.ts)
+│   ├── stores/             # Centralized Pinia Stores (authStore.ts, seriesStore.ts, timelineStore.ts)
+│   ├── types/              # Shared TypeScript interfaces & API contract definitions (api.ts)
+│   ├── utils/              # Helper utilities & Centralized Axios Client (http.ts)
+│   ├── views/              # Page View Components (dashboard/index.vue, manual/index.vue, login.vue)
+│   ├── App.vue             # Root component with dynamic layout resolver
+│   └── main.ts             # Application entrypoint (Pinia, i18n, router, UnoCSS setup)
+├── index.html              # HTML entrypoint
+├── package.json            # Client workspace dependencies
+├── tsconfig.json           # TypeScript configuration
+├── uno.config.ts           # UnoCSS design token configuration
+└── vite.config.ts          # Vite build & alias configuration
+
+### 4.1.1 Application Layout Shell & Modal Architecture
+
+The frontend application utilizes standardized layout shells and modal containers:
+
+1. **`AuthLayout.vue` (Synchronized Auth Shell):**
+   - Standardized Light Mint Brand Panel (Image 2) on the left side with logo "Shine", headline *"Start shipping vertical drama in minutes"*, 2 feature badges ("AI Scene Synthesis", "Professional Timeline"), and copyright info.
+   - Wraps `Login.vue`, `Signup.vue`, `ForgotPassword.vue`, and `ResetPassword.vue` with 1:1 consistent form styling, `rounded-xl` input fields, `rounded-full` CTA buttons, and social auth buttons.
+
+2. **`AppLayout.vue` (Core Application Shell):**
+   - Left Sidebar Navigation: Overview, My Projects, Team Shared, Asset Library, Analytics, Training Center.
+   - Header Bar: Global search, series selector, notifications, language switcher, user profile menu.
+   - Main Canvas: `<router-view />` for Dashboard, Team Shared, Global Analytics, and Project Workspace.
+
+3. **`ProjectWorkspacePage.vue` (Unified Tabbed Project Workspace):**
+   - Mounted at `/projects/:id`.
+   - Contains a top `<el-tabs>` header bar unifying 5 Stitch project views:
+     - **Overview**: `ProjectOverview.vue`
+     - **Episodes**: `ProjectEpisodes.vue`
+     - **Analysis & Retention**: `ProjectAnalysis.vue`
+     - **Distribution Network**: `DistributionPage.vue`
+     - **Revenue**: `ProjectRevenue.vue`
+
+4. **`StudioWorkspaceModal.vue` (Episode Production Studio Modal):**
+   - Fullscreen `<el-dialog>` with left sidebar tab navigation grouping all production surfaces:
+     - `script`: `ScriptStudio.vue` (Script & Scene Assembly)
+     - `editor`: `EditPage.vue` (9:16 Timeline Video Editor)
+     - `voice`: `VoiceDubbingPage.vue` (Neural Dubbing & Affect Steering)
+     - `captions`: `CaptionsPage.vue` (Subtitles Studio & Caption Designer)
+     - `export`: `PublishPage.vue` (Smart Cover Generator & Export Config)
+
+5. **Modal System**:
+   - **`SeriesWizardModal.vue`**: 3-step series creation wizard inside an `<el-dialog>` modal (Core DNA, Trend Hunt, Compliance).
+   - **`MasterScriptModal.vue`**: AI Script breakdown dialog.
+   - **`CharacterPersonaModal.vue`**: Persona Studio & Facial Consistency Anchors dialog.
+   - Target Routes: `/terms`, `/privacy`, `/contact`, `/manual`
+
+2. **`HomeLayout.vue` (Marketing Landing Page Shell):**
+   - Header: Marketing header with Logo, nav links (Features, Pricing, Use Cases, Blog), LanguageSelect, Sign In button, Get Started button
+   - Footer: Clean footer
+   - Main content: `<router-view />`
+   - Sidebar: No sidebar
+   - Target Routes: Marketing landing page (`/`)
+
+3. **`AuthLayout.vue` (Authentication Shell):**
+   - Left column: Image/Video/Brand hero illustration (Shine branding)
+   - Right column: Centered card with `<router-view />`
+   - Target Routes: `/auth/login`, `/auth/signup`, `/auth/forgot-password`, `/auth/reset-password`
+
+4. **`AppLayout.vue` (Main Workspace Management Shell):**
+   - `.g-sub-sidebar`: Collapsible menu (Series Dashboard, My Projects, Team Shared, Assets Library, Analytics); top header menu is logo icon; bottom footer is User Profile Menu (Profile, Settings, LanguageSelect, Dark/Light toggle and logout) and collapse toggle button at the bottom
+   - `.g-main-area`: Content area with `<router-view />`
+   - Target Routes: `/dashboard`, `/projects`, `/team`, `/assets`, `/analytics`
+
+5. **`StudioLayout.vue` (Dedicated Production Studio Shell):**
+   - `.g-header`: Logo with "Back to Dashboard / My Projects / Team Shared" button and main workspace tabs (Script, Editor, Characters, Library, Voice & Dubbing, Captions, Analytics, Export & Publish)
+   - `.g-main-area`: Content area with `<router-view />`
+   - Target Routes: `/wizard`, `/script/*`, `/editor/*`, `/persona/*`, `/dubbing/*`, `/captions/*`, `/audio/*`, `/environment/*`, `/reviews/*`, `/export/*` / `/publish/*`
+
+```
+
+### 4.2 Store-Driven Data Fetching & Centralized Axios Client Rule
+- **STRICT PROHIBITION OF RAW `fetch()`:** Raw `fetch()` calls scattered across Vue page templates or view scripts are STRICTLY PROHIBITED.
+- **STORE-DRIVEN API DATA FETCHING:** All user interactions triggering network requests MUST call Pinia store actions (e.g., `authStore.login(credentials)`, `seriesStore.createSeries(payload)`). Views components MUST NOT invoke API endpoints directly.
+- **CENTRALIZED AXIOS HTTP CLIENT (`src/utils/http.ts`):** All API calls MUST execute through the unified Axios instance featuring:
+  1. **Request Interceptor:** Automatically injects JWT Bearer token (`Authorization: Bearer <token>`) from storage to every outgoing HTTP request.
+  2. **Response Interceptor:** Automatically unwraps response payload, handles business error codes (`res.code`), triggers global 401 unauthorized redirects to `/login`, and handles toast error notifications.
+
+---
+
+## 5. Backend Architecture & Directory Structure
+
+The backend is a completely decoupled Node.js Express service running inside [`apps/shine/server`](../server) designed as a robust orchestrator for AI generation tasks, WebSocket patch sync, and pluggable data persistence.
+
+### 5.1 Server Directory Structure Standard (`apps/shine/server/`)
+```
+apps/shine/server/
+├── data/                   # Embedded SQLite database storage (shine.db)
+├── src/
+│   ├── controllers/        # Express route controller logic (authController, seriesController)
+│   ├── middleware/         # Auth JWT verification, rate limiting, error handling middleware
+│   ├── routes/             # REST API endpoint definitions (auth.ts, series.ts, ai.ts)
+│   ├── lib/                # Core library abstractions & services
+│   │   ├── ai/             # AI Pipeline (GeminiClient.ts, AIProviderRouter.ts, FlowAdapter.ts)
+│   │   ├── db/             # IDatabaseProvider interface & providers (SQLiteProvider, MongoDBProvider)
+│   │   └── storage/        # Object storage service (S3 / MinIO client)
+│   ├── types/              # Server-side TypeScript interfaces & DTO schemas
+│   ├── utils/              # Helper utilities, logger, response wrappers
+│   ├── app.ts              # Express application setup & middleware registration
+│   └── index.ts            # Server entrypoint (HTTP server listener & port binding)
+├── package.json            # Server workspace dependencies
+└── tsconfig.json           # Server TypeScript configuration
+```
+
+### 5.2 Standardized Server API Response Data Format Specification
+All Express backend REST API endpoints MUST return responses formatted strictly according to the unified `ApiResponse<T>` JSON schema:
+
+```json
+{
+  "code": 200,
+  "data": { ... },
+  "message": "Operation completed successfully",
+  "error": null
+}
+```
+
+- **`code` (number)**: Standard HTTP status code or business response code (`200` / `0` for clean success, `400` Bad Request, `401` Unauthorized, `403` Forbidden, `404` Not Found, `500` Internal Error).
+- **`data` (object | array | null)**: The primary payload result returned to the client when `code === 200`.
+- **`message` (string)**: Human-readable response summary or localized notification message.
+- **`error` (object | string | null)**: Structured error details object or stack string when `code !== 200` (returns `null` on success).
 
 ## 5. AI Pipeline Architecture
 
@@ -429,6 +582,54 @@ The platform leverages `@antv/g6` graph engine across 5 core workspace modules:
 
 ### 18.2 AI Chatbot Multilingual Prompt Detection & Output Localizer
 - **Language Detection Pipeline**: Gemini 3.5 Flash automatically detects prompt language and responds in the same language while maintaining valid structural OpenVideo JSON `Command[]` payloads.
+
+---
+
+## 19. Rendering Performance, Memory Safety & Copyright Architecture (Proposals 22–26)
+
+### 19.1 Cloud Pub/Sub Async Render Streaming Engine (`FR-120`)
+- **Pub/Sub Queue Routing**: Offloads 50-episode batch jobs to GCP Cloud Run background containers.
+- **Server-Sent Events (SSE) Progress Stream (`GET /api/v1/render/stream`)**: Pushes real-time percentage progress and clip status to the frontend without HTTP 504 timeouts.
+
+### 19.2 Virtual Canvas Viewport & RAM Memory Windowing (`FR-122`)
+- **Texture Windowing**: Only decodes and binds WebGL textures for the 5 clips nearest to playhead position.
+- **Automatic Garbage Collection**: Unbinds and releases WebGL textures for clips outside the active 5-clip window, preventing browser Out-Of-Memory crashes.
+
+### 19.3 AI Audio Copyright Fingerprinting Engine (`FR-121`)
+- **Pre-Publish Scan**: Runs audio fingerprinting (`POST /audio/copyright-verify`) comparing soundtrack frequency signatures against copyright databases, auto-substituting flagged audio with Lyria 3 AI music.
+
+---
+
+## 20. AI Compliance, Provenance & Ecosystem Architecture (Proposals 27–30)
+
+### 20.1 C2PA Cryptographic Provenance & SynthID Engine (`FR-125`)
+- **Metadata Injection**: Injects C2PA JUMBF cryptographic manifests and Google SynthID invisible video/audio steganographic watermarks during cloud rendering to satisfy EU AI Act & TikTok Content Credentials mandates.
+
+### 20.2 Intra-Scene Vocal Affect Steering (`FR-126`)
+- **SSML Affect Engine**: Generates micro-second SSML tags (`<express-as type="whisper">`, `<express-as type="shout">`) mapped to timeline keyframes for mid-sentence vocal shifts.
+
+### 20.3 AI Multi-Platform Recutter Engine (`FR-127`)
+- **Automated Pacing Re-trim**: Re-evaluates timeline JSON to generate platform-tailored edits (59s YouTube Shorts fast cut vs 90s TikTok Series cut vs 15s IG Reels teaser).
+
+---
+
+## 21. Hybrid Dual-Engine AI Provider Router & Flow Pool Architecture (Proposal 31, FR-129)
+
+### 21.1 Provider Dispatch Routing Engine (`server/lib/ai/AIProviderRouter.ts`)
+- **Routing Strategy**:
+  - `tier === 'ENTERPRISE' || mode === 'COMMERCIAL_EXPORT'` ➔ Routes to Official **GCP Vertex AI** (`GeminiClient.ts` via Service Account / ADC).
+  - `tier === 'FREE' || tier === 'PRO' || mode === 'DRAFT_STORYBOARD'` ➔ Routes to **Google Flow Account Pool** (`FlowAdapter.ts`).
+
+### 21.2 Flow Account Pool Manager & Token Lifecycle (`FlowSyncService.ts`)
+- **Session-to-Access Token Converter (`stToAt`)**: Converts session cookies (`flowST` from `__Secure-next-auth.session-token`) to OAuth access tokens (`flowAT`) via `https://labs.google/fx/api/auth/session`.
+- **Project Auto-Resolver (`ensureProject`)**: Auto-creates or resolves PINHOLE project IDs on Google Labs FX (`https://labs.google/fx/api/trpc/project.createProject`).
+- **30-Minute Background Token Sync**: Background cron refreshing access tokens and querying credit balances (`https://aisandbox-pa.googleapis.com/v1/credits`).
+
+### 21.3 reCAPTCHA v3 Solver Pipeline (`CaptchaService.ts`)
+- **reCAPTCHA Token Generation**: Solves reCAPTCHA v3 (`6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV`) for `IMAGE_GENERATION` and `VIDEO_GENERATION` actions using configured solver adapters (`yescaptcha`, `capsolver`, `capmonster`, `remote_browser`, or local Playwright browser).
+
+
+
 
 
 

@@ -1,0 +1,265 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Team Shared - Shine AI Studio</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Outfit', 'sans-serif'],
+          },
+          colors: {
+            shine: {
+              DEFAULT: '#3ecf8e',
+              light: '#dff6eb',
+              dark: '#2ba871',
+            },
+            surface: {
+              DEFAULT: '#f8fafc',
+              alt: '#ffffff',
+            },
+            text: {
+              main: '#0f172a',
+              muted: '#64748b',
+              light: '#94a3b8',
+            }
+          },
+          borderRadius: {
+            'card': '0.75rem',
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-styles">
+    body {
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    .sidebar-item {
+      transition: all 0.2s ease;
+    }
+    .sidebar-item:hover, .sidebar-item.active {
+      background-color: #f1f5f9;
+    }
+    .sidebar-item.active {
+      font-weight: 600;
+    }
+    .avatar-stack > img {
+      border: 2px solid white;
+    }
+  </style>
+</head>
+<body class="flex h-screen overflow-hidden bg-surface antialiased">
+<!-- BEGIN: Sidebar -->
+<aside class="w-64 bg-surface-alt border-r border-slate-200 flex flex-col justify-between hidden md:flex">
+<!-- Top Section -->
+<div>
+<!-- Logo -->
+<div class="p-6 flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-shine flex items-center justify-center text-white">
+<svg fill="none" height="20" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+</div>
+<span class="font-bold text-xl tracking-tight">Shine<span class="text-shine">AI</span></span>
+</div>
+<!-- Navigation -->
+<nav class="px-4 py-2 space-y-1">
+<a class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-muted hover:text-text-main" href="#">
+<svg fill="none" height="18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+<span>Dashboard</span>
+</a>
+<a class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-muted hover:text-text-main" href="#">
+<svg fill="none" height="18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+<span>My Projects</span>
+</a>
+<a class="sidebar-item active flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-main" href="#">
+<svg fill="none" height="18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+<span>Team Shared</span>
+</a>
+<a class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-muted hover:text-text-main" href="#">
+<svg fill="none" height="18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path><path d="M12 12v9"></path><path d="m8 17 4 4 4-4"></path></svg>
+<span>Asset Library</span>
+</a>
+<a class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-muted hover:text-text-main" href="#">
+<svg fill="none" height="18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg"><path d="M3 3v18h18"></path><path d="m19 9-5 5-4-4-3 3"></path></svg>
+<span>Analytics</span>
+</a>
+</nav>
+</div>
+<!-- Bottom Profile -->
+<div class="border-t border-slate-200 p-4">
+<div class="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-2 rounded-lg transition-colors">
+<img alt="Alex Rivera" class="w-10 h-10 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5zJs11L9nPJT-G8tqsyL0kurgS45i6YaXN2D-QsBGPHDYMSkYbGaBBYfZoBbPbzYd9vDReXipOVn9GfSzskPUPYLIKBJmWMXRfW7CzBzdEtctzCWU7yOLWM03I1OYvUFJQXw-Jb6vJRC8ZwotDBAuMEi2_yJcB6YU1iW9NCDH2Tzc0KWZxjlgZMB1axxOhXgMNgJG6mTvQuZoMjDrEXQ1AXBZc9XIjJ9cXDyee9zh5KltxP1wgtZSVw">
+<div class="flex-1 min-w-0">
+<p class="text-sm font-semibold text-text-main truncate">Alex Rivera</p>
+<p class="text-[10px] font-bold text-shine tracking-wider uppercase truncate">Pro Creator</p>
+</div>
+<svg class="text-text-light" fill="none" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="16" xmlns="http://www.w3.org/2000/svg"><path d="m9 18 6-6-6-6"></path></svg>
+</div>
+</div>
+</aside>
+<!-- END: Sidebar -->
+<!-- BEGIN: Main Content -->
+<main class="flex-1 flex flex-col overflow-y-auto">
+<div class="max-w-6xl w-full mx-auto p-8 lg:p-12">
+<!-- BEGIN: Header -->
+<header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
+<div>
+<h1 class="text-3xl font-bold tracking-tight mb-1 text-text-main">Team Shared</h1>
+<p class="text-text-muted">Collaborative workspaces and shared production assets.</p>
+</div>
+<button class="bg-shine hover:bg-shine-dark text-white px-5 py-2.5 rounded-full font-medium text-sm flex items-center gap-2 transition-colors shadow-sm self-start sm:self-auto">
+<svg fill="none" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>
+          Create Workspace
+        </button>
+</header>
+<!-- END: Header -->
+<!-- BEGIN: Active Workspaces -->
+<section class="mb-12">
+<h2 class="text-xl font-bold mb-6 text-text-main">Active Workspaces</h2>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<!-- Workspace Card 1 -->
+<div class="bg-surface-alt rounded-card border border-slate-200 p-6 flex flex-col shadow-sm hover:shadow-md transition-shadow cursor-pointer">
+<div class="flex justify-between items-start mb-4">
+<div class="w-12 h-12 rounded-xl bg-shine-light text-shine-dark flex items-center justify-center font-bold text-xl">
+                NV
+              </div>
+<div class="flex -space-x-2 overflow-hidden avatar-stack">
+<img alt="" class="inline-block h-8 w-8 rounded-full ring-2 ring-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAr60meyA2fob1EpS9aHYF_IjQs1yl0a42FaGiqwW47fF_IeIkblmBbklqs0kZdw0cvhojxuli859PG4FtILxvukhiWmGRf0TJGzNFKOEqTgkqXV6uDMxM30ibSekqmu6Cunvps4ZurROM9weqEbwDt9PQBN7iU7ga2hwL7GQc2S5iIbPGo-r22r21niqgEuk3fzGYyNaMAPFS0tPMCQiEXgxmhfO8NR1YVmJn0zh6d4CZBcUH5FlwV8g">
+<img alt="" class="inline-block h-8 w-8 rounded-full ring-2 ring-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDkuHkEZVD75hySqS7ojBVX2_g3mmXSWG1cdL8edxDGuhV0jiC19M94cilYMKPIQYEpGp4s2Yef39HbtOrVf8QBz-d0v8v2EOT9KUv46JjK2-mK2ekcsjDBkGV3aXq1RYmnbqbDPjoipFeDiOpEPSC--HNh_PcFOVync6-piRrcc5lGwlupgyAH0N3DGUr4hBcU7gGa4tI77HmcEIg3MM1JXs1u7-maa4ZQExEmOaNumuFIDpri9S0j_A">
+<img alt="" class="inline-block h-8 w-8 rounded-full ring-2 ring-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD6Hp_DRVBVH1DUXGEEGGPJIUn6VrHQ5gk86ZNutnTREcuTxqSRw1_cu8L8ghvSv_O85SYV644iA55Cp3qVFreyPFWDUvU2KORVlR3IbNG7VGtbdjyQOnRinNKm9jKsqbvsD69KAQCUFDLP-0qlMV8v-PhH4l26KT6cHnnYkygfVSkuh6zcjPy5MjhHHqfelAm0NEs5Io2Kyg3ux-Z6evgWk5dC73UeQXXV-rCgg7563OR_0MB7tU8VuQ">
+<div class="inline-block h-8 w-8 rounded-full ring-2 ring-white bg-slate-100 flex items-center justify-center text-xs font-medium text-slate-600 z-10">
+                  +2
+                </div>
+</div>
+</div>
+<div class="flex-1">
+<h3 class="font-bold text-lg mb-1 text-text-main">Neo-Vanguard Studio</h3>
+<p class="text-sm text-text-muted mb-6">Main production hub for sci-fi anthology series.</p>
+</div>
+<div class="flex justify-between items-center text-xs font-semibold text-text-light uppercase tracking-wider mt-auto pt-4 border-t border-slate-100">
+<span>8 Projects</span>
+<span class="text-shine">Active Now</span>
+</div>
+</div>
+<!-- Workspace Card 2 -->
+<div class="bg-surface-alt rounded-card border border-slate-200 p-6 flex flex-col shadow-sm hover:shadow-md transition-shadow cursor-pointer">
+<div class="flex justify-between items-start mb-4">
+<div class="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xl">
+                WR
+              </div>
+<div class="flex -space-x-2 overflow-hidden avatar-stack">
+<img alt="" class="inline-block h-8 w-8 rounded-full ring-2 ring-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDMrb5m59pr4agl1Jkq4NXH73xWz6GLEd4K3NaVbH0DmGutniGjt3ND9l3_aVKsJPjxFSnC99Ka-4vDe4Jyn7V73vFDilVElzeSRdqTKtYPl7StUtkRHt3_E_gEjwsFA5RRrYdrD448BdxuShWe-3AxHT504oNgP2lF7kLtVzcXXTtOu5kgVGnyRpEUDszr_BPmySynToQrCyM0F6fY2W228RCwhrAijdo09FyTFRkT2Nyup7ySiw5IfQ">
+<img alt="" class="inline-block h-8 w-8 rounded-full ring-2 ring-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDehjEyLkySsxgxOEeMmOGyfAnkoWT1p5VdOxxITBo5mZggMBx-zhD6G6E0LNKnYgON1iwkOWiy2lx3yUqfHMQ27ZJeLFxbWCBPFItVluuTooian-5tYs8bxgmkpAT_46z4NhhGk_-hC4W4sGcDC-fKU70PXu0uOBR4Bb5QjDb9Nbwn27hu2FzkhC2n8Up9JSXBoULxban3fGct8dDKSnfumaBO87O0SgKRy2d8Cjd5TEYr4PTsL153Sg">
+</div>
+</div>
+<div class="flex-1">
+<h3 class="font-bold text-lg mb-1 text-text-main">Whisper Romance</h3>
+<p class="text-sm text-text-muted mb-6">Collaborative scriptwriting and scene assembly unit.</p>
+</div>
+<div class="flex justify-between items-center text-xs font-semibold text-text-light uppercase tracking-wider mt-auto pt-4 border-t border-slate-100">
+<span>3 Projects</span>
+<span>Updated 4h ago</span>
+</div>
+</div>
+<!-- Invite Code Card -->
+<div class="bg-transparent rounded-card border-2 border-dashed border-slate-200 p-6 flex flex-col items-center justify-center text-center hover:border-slate-300 transition-colors cursor-pointer min-h-[220px]">
+<div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-4">
+<svg fill="none" height="18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg"><path d="M21.2 8.4c.5.38.8.97.8 1.6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10a2 2 0 0 1 .8-1.6l8-6a2 2 0 0 1 2.4 0l8 6Z"></path><path d="m22 10-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 10"></path></svg>
+</div>
+<h3 class="font-bold text-lg mb-1 text-text-main">Have an invite code?</h3>
+<p class="text-sm text-text-muted">Join an existing production team</p>
+</div>
+</div>
+</section>
+<!-- END: Active Workspaces -->
+<!-- BEGIN: Recent Shared Projects -->
+<section>
+<div class="flex justify-between items-center mb-6">
+<h2 class="text-xl font-bold text-text-main">Recent Shared Projects</h2>
+<a class="text-sm font-semibold text-shine hover:text-shine-dark transition-colors" href="#">View All Projects</a>
+</div>
+<div class="bg-surface-alt rounded-card border border-slate-200 overflow-hidden shadow-sm">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-slate-200 bg-slate-50/50">
+<th class="py-4 px-6 text-xs font-semibold text-text-light uppercase tracking-wider">Project Name</th>
+<th class="py-4 px-6 text-xs font-semibold text-text-light uppercase tracking-wider">Workspace</th>
+<th class="py-4 px-6 text-xs font-semibold text-text-light uppercase tracking-wider">Status</th>
+<th class="py-4 px-6 text-xs font-semibold text-text-light uppercase tracking-wider">Last Activity</th>
+<th class="py-4 px-6 text-xs font-semibold text-text-light uppercase tracking-wider text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100">
+<!-- Row 1 -->
+<tr class="hover:bg-slate-50/50 transition-colors">
+<td class="py-4 px-6">
+<div class="flex items-center gap-4">
+<img alt="The Silent Protocol cover" class="w-10 h-12 rounded object-cover shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDY1ULxttHQdoWXDbCjSGbT1X8ML_Le8ov1_sXfZISbE61VBvbfhlyA5nR79JdKTFH2qxVsFbG2dpUDzY8pe8Cp2LtIUnEyvwRr5vY7b84eMvoPvkCcNiy_5thTeWsHtXgqX_EbqsGSDVTI2dv9shysbtWh9pqyQSWcb5m3vSj1a9feBeq6P4dACaIcf_WJmJwXAmqnQ41lp971PUF5zPxEsWH9Bv3tRfFsjUgsHYfadNOIUjQZwYkJjQ">
+<div>
+<p class="font-semibold text-text-main">The Silent Protocol</p>
+<p class="text-xs text-text-muted">Anthology • Episode 03</p>
+</div>
+</div>
+</td>
+<td class="py-4 px-6">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-shine-light text-shine-dark">Neo-Vanguard</span>
+</td>
+<td class="py-4 px-6">
+<div class="flex items-center gap-2 text-sm text-text-main">
+<span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                    In Review
+                  </div>
+</td>
+<td class="py-4 px-6">
+<div class="flex items-center gap-2 text-sm text-text-muted">
+<img alt="Sarah Miller" class="w-6 h-6 rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDt9swQEaj2EKHxi__6Zu44jPq4jiMNMieq4zo3jro_JGL7ibPB9zaI1-UZNjLyi8ikUQdGct_I4W8ymFUlNmHxzUhrV3t_bFApC6gucIVmFKqRwjEemxpHKGe1zXUKc_SJDf3L_xZ_S7XXDKBlr0mQivvSNk0TzdvT4oPovbdfhGstOkOZZOBhCnsfubd1aTrTAQGmE-rkgsDbIcMCIuzOG3HDt7M_SUzgjZOAsMwHXohC8Ur6p5hyzg">
+<span>Sarah Miller • 12m ago</span>
+</div>
+</td>
+<td class="py-4 px-6 text-right">
+<button class="bg-shine hover:bg-shine-dark text-white px-4 py-1.5 rounded-full font-medium text-xs transition-colors">Join Live</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-slate-50/50 transition-colors">
+<td class="py-4 px-6">
+<div class="flex items-center gap-4">
+<img alt="Eternal Echoes cover" class="w-10 h-12 rounded object-cover shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDzJ3xP6niDA36LDdL_DyMgFDH5JiwFxnw4q51-eFc1g-fLLlzlM0rCaY1OYtCv21adEW9fi55ar9YABA3l-XFTXe-LZWZrHGCWqSo3ccevc6wD6cICNVarbPrVmsMtWjyPoO8xIf3VUGWMwZ__DdBv9y3WzcIkL73gECmIpXR1dN1w1eH8tPftgN1e_lw2uFeY1ciczzlEpeh3FNU0qB-Vd4Rn8MCpMr0MgIDWdbCMNBYCjFC99SYZkw">
+<div>
+<p class="font-semibold text-text-main">Eternal Echoes</p>
+<p class="text-xs text-text-muted">Drama • Series Finale</p>
+</div>
+</div>
+</td>
+<td class="py-4 px-6">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-600">Whisper Romance</span>
+</td>
+<td class="py-4 px-6">
+<div class="flex items-center gap-2 text-sm text-text-main">
+<span class="w-2 h-2 rounded-full bg-green-500"></span>
+                    Approved
+                  </div>
+</td>
+<td class="py-4 px-6">
+<div class="flex items-center gap-2 text-sm text-text-muted">
+<img alt="Marcus Chen" class="w-6 h-6 rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCb8u27RYNBqT--z8jlCmtpgbUgWOKFhCCAb0JlYu-yYLT5r15ZzuhRJdh4C7IrV_OxvO6AlPBtI4AbEdl0clRFXpJPZ_-HCg02qWzGIMsrGumVAISBNc_QcO4oP-jK3pFaZ0eylSBsu_GMuOEXYgOKp_bIrsF7N5-6ySgPGJvrKAOpKF9x_JA_Iz8BjctydGQuX04mB_vaoWO-dGZbwZDTU3Houth2pTq0C6ZJbY2_zS_rS45q5dMIZg">
+<span>Marcus Chen • 3h ago</span>
+</div>
+</td>
+<td class="py-4 px-6 text-right">
+<button class="bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-text-main px-4 py-1.5 rounded-full font-medium text-xs transition-colors">View Files</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- END: Recent Shared Projects -->
+</div>
+</main>
+<!-- END: Main Content -->
+</body></html>

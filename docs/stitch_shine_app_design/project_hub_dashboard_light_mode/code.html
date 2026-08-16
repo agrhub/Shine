@@ -1,0 +1,210 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Shine Project Hub Dashboard - Light Mode</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              mint: '#3ECF8E',
+              mintLight: '#ECFDF5',
+              mintDark: '#065F46',
+            },
+            bg: {
+              main: '#F8F9FA',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="typography">
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-bg-main text-gray-900 antialiased flex">
+<!-- BEGIN: Sidebar -->
+<aside class="w-[260px] h-screen bg-white border-r border-gray-200 fixed left-0 top-0 flex flex-col justify-between" data-purpose="sidebar">
+<div class="p-6">
+<!-- Logo -->
+<div class="flex items-center gap-3 mb-10">
+<div class="w-8 h-8 bg-brand-mint rounded-lg flex items-center justify-center text-white font-bold text-xl">
+<svg class="w-5 h-5 fill-current" viewBox="0 0 24 24">
+<path d="M8 5v14l11-7z"></path>
+</svg>
+</div>
+<span class="text-xl font-bold tracking-tight">Shine</span>
+</div>
+<!-- Navigation -->
+<nav class="space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 bg-brand-mintLight text-brand-mintDark rounded-lg font-medium" href="#">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          Dashboard
+        </a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-lg font-medium transition-colors" href="#">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          My Projects
+        </a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-lg font-medium transition-colors" href="#">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          Team Shared
+        </a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-lg font-medium transition-colors" href="#">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          Asset Library
+        </a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-lg font-medium transition-colors" href="#">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path><path d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          Analytics
+        </a>
+</nav>
+</div>
+<!-- User Profile -->
+<div class="p-6 border-t border-gray-100 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors">
+<div class="flex items-center gap-3">
+<img alt="Alex Rivera" class="w-10 h-10 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBAZ-ChlvuxoSerZbhy1Sdx4hTh1m5_QZya31BnUjq97iSmvTnLTNcklJ6mg2GWiEqkE80Ws2SIG4W1g0DuqPOUSbmcvzBnjCAqmMqxWFmEVyaHDO1CYSp8MqlaCAARqO4HBxpgvVTTQpRG87BrxRRGMfne78GiEzdz22LV3J-sd8jzYZgdFJ7KcaXvRt5rN2pYtUQL9Hb-U08b4FtskdfQ5BQ5zBx7StilyYYRYHER6KVH2krZ9cq0vg">
+<div>
+<div class="text-sm font-semibold text-gray-900">Alex Rivera</div>
+<div class="text-[10px] font-bold text-brand-mint uppercase tracking-wider">Procreator</div>
+</div>
+</div>
+<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</div>
+</aside>
+<!-- END: Sidebar -->
+<!-- BEGIN: Main Content -->
+<main class="ml-[260px] flex-1 p-10 min-h-screen" data-purpose="main-content">
+<!-- Header Section -->
+<header class="flex justify-between items-start mb-10">
+<div>
+<h1 class="text-3xl font-bold text-gray-900 mb-2">Project Hub</h1>
+<p class="text-gray-500 text-sm">Manage your micro drama series and collaborative workflows.</p>
+</div>
+<button class="bg-brand-mint hover:bg-[#35B87E] text-white px-5 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+        New Series
+      </button>
+</header>
+<!-- Statistics Cards -->
+<section class="grid grid-cols-4 gap-6 mb-12" data-purpose="statistics-grid">
+<!-- Card 1 -->
+<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+<div class="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-3">Active Series</div>
+<div class="text-4xl font-bold text-gray-900">12</div>
+</div>
+<!-- Card 2 -->
+<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+<div class="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-3">Episodes Produced</div>
+<div class="text-4xl font-bold text-gray-900">148</div>
+</div>
+<!-- Card 3 -->
+<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 relative">
+<div class="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-3">Avg. Retention</div>
+<div class="flex items-baseline gap-3">
+<div class="text-4xl font-bold text-gray-900">84%</div>
+<span class="bg-[#D1FAE5] text-[#059669] text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider">Top 5%</span>
+</div>
+</div>
+<!-- Card 4 -->
+<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+<div class="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-3">Total Revenue</div>
+<div class="text-4xl font-bold text-gray-900">$12.4k</div>
+</div>
+</section>
+<!-- Recent Projects Section -->
+<section data-purpose="recent-projects">
+<div class="flex justify-between items-center mb-6">
+<h2 class="text-xl font-bold text-gray-900">Recent Projects</h2>
+<div class="flex bg-white rounded-lg border border-gray-200 p-1 shadow-sm">
+<button class="p-1.5 bg-gray-100 rounded-md text-gray-700">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+<button class="p-1.5 text-gray-400 hover:text-gray-700">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+</div>
+<div class="grid grid-cols-3 gap-6">
+<!-- Project Card 1 -->
+<article class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+<div class="relative h-48">
+<img alt="The Neon Betrayal" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDhOPxchien_L-LgsoJ1jeIndxLV1cLLKhSuWQUQk7guBez_BtLRKLlhBXEUWLr_9UIaEZPAgwZO0LhKYvGnN3AuQ2ljGsCFvXYcL4MTnbHZ_6cAfDsJLNxBXo912Dd-jK4mgIdlgTkG1Zo3RGPVx6BK50v4tQPLNob6bMq0Z7VpV6BKjF_Ngoci65_63Wx-G2PBZ4Bfr_4eyiBKiIpxtXQbk9R8cHGsKIahj0m0sjl8Y84aDicKi-7Qg">
+<div class="absolute top-4 right-4 bg-gray-900/80 backdrop-blur-sm text-white text-xs font-bold px-2 py-1 rounded">EP 04 / 12</div>
+</div>
+<div class="p-5 flex-1 flex flex-col justify-between">
+<div class="mb-6">
+<h3 class="text-lg font-bold text-gray-900 mb-1">The Neon Betrayal</h3>
+<p class="text-xs text-gray-500">Sci-Fi Thriller • Updated 2h ago</p>
+</div>
+<div>
+<div class="flex justify-between items-center mb-2">
+<span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Production Progress</span>
+<span class="text-xs font-bold text-gray-900">75%</span>
+</div>
+<div class="w-full bg-gray-100 rounded-full h-1.5 mb-5">
+<div class="bg-brand-mint h-1.5 rounded-full" style="width: 75%"></div>
+</div>
+<div class="flex justify-between items-center pt-4 border-t border-gray-100">
+<div class="flex -space-x-2">
+<img alt="Team member" class="w-6 h-6 rounded-full border-2 border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCu1YkqjutOmiO33vpoM1QKyCJ4gLM_kfyCdylvph2trBDXL8YzTsl9UfQaTmmAzI3euwEtCzRlSwboR8xVoObs3wpiooVrwxlLwW0WRJ4UTUL0UOuBaxIthZt-M-c2RpazbAQpj-FqLtWcPQ7MBuZzJfQyPstAp8Teef-qIEiyOdt4W1LzIIEsB1m48owHQzzrvicLlQgbafSEfedrupRfSKxszKrZ7SrxF_VY2TLoUxbfl93noz4FIg">
+<img alt="Team member" class="w-6 h-6 rounded-full border-2 border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuABwk0eWo_c6l9wdDEgzJFG9JHDHJa3ChCHPMcJfMbqtp7aKt78rzgbMwWZsFnvxh6ep3-biAj2ULhpSn52cMqf4va4Y_fa3zvXO71c1k7H23l06Q_kpcb7C9P6ywnyGVPdrqAZaW9Q-hr7cXMUGypP6YoRZVQE4Ovo9zwdiqOy72hGBGBOy_3pXvOT1qW1I2EsHYqlDrvl-rMFGmTwFQbHCdznC8SZqfxvHdMQ-VoboxCpuTbUSBCpqg">
+</div>
+<a class="text-sm font-semibold text-gray-900 hover:text-brand-mint transition-colors flex items-center gap-1" href="#">
+                  Continue Editing →
+                </a>
+</div>
+</div>
+</div>
+</article>
+<!-- Project Card 2 -->
+<article class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+<div class="relative h-48">
+<img alt="Whispers in Rome" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWmAf_-jkYblJo1vRPNHhOrmJ47H-MZumjnpBjJpnj1J00pe0Ko7AEJxx61hmpjslDpvF-1et0nQKcAYajbDRdd2WGTniFDNugA3n8tN6fYbkRJMnpREWrg0Mpp3yixthgVi9h3p1lUkxlkNJohSeXaSvT1mJXd3jc0qLzsnmsf_qw2nByTLCRGeo6Tgq1D0JxyU0FLP4NVuot3_4BQDT-fSFwtw636lmtG8j0W2XDUGE8i9vaKEdnWg">
+<div class="absolute top-4 right-4 bg-gray-900/80 backdrop-blur-sm text-white text-xs font-bold px-2 py-1 rounded">EP 08 / 26</div>
+</div>
+<div class="p-5 flex-1 flex flex-col justify-between">
+<div class="mb-6">
+<h3 class="text-lg font-bold text-gray-900 mb-1">Whispers in Rome</h3>
+<p class="text-xs text-gray-500">Historical Romance • Updated 1d ago</p>
+</div>
+<div>
+<div class="flex justify-between items-center mb-2">
+<span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Production Progress</span>
+<span class="text-xs font-bold text-gray-900">32%</span>
+</div>
+<div class="w-full bg-gray-100 rounded-full h-1.5 mb-5">
+<div class="bg-brand-mint h-1.5 rounded-full" style="width: 32%"></div>
+</div>
+<div class="flex justify-between items-center pt-4 border-t border-gray-100">
+<div class="flex -space-x-2">
+<img alt="Team member" class="w-6 h-6 rounded-full border-2 border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD4P789fwoSQUmBEe5jbDW3g96wGEIr9Ev-znaulpuTEf9KKZogMsQU7edClO7JGX2zgvNKrMN8ZfsFzfr-Wfxju6ki7Rm_AGMmeYzo8c9s7Z-nxn67bMmPbdsot-xl65NDgxiWMP05txqEIKIPDHVXD_Z90KSybqVGjylzfSZMzWR_HKq081s_uK_lVgHy7qWaO3msagLNf1eNwR3zizNWhf9WqlbAgBPGs_Mv8-iNTi9-Brpx_vYVAQ">
+</div>
+<a class="text-sm font-semibold text-gray-900 hover:text-brand-mint transition-colors flex items-center gap-1" href="#">
+                  Resume →
+                </a>
+</div>
+</div>
+</div>
+</article>
+<!-- Start New Drama Card -->
+<article class="bg-white/50 rounded-2xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center p-8 hover:bg-white transition-colors cursor-pointer group min-h-[380px]">
+<div class="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-4 group-hover:bg-brand-mint group-hover:text-white transition-colors text-gray-400">
+<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</div>
+<h3 class="text-lg font-bold text-gray-900 mb-2">Start New Drama</h3>
+<p class="text-sm text-gray-500 text-center">Use AI templates or start from scratch</p>
+</article>
+</div>
+</section>
+</main>
+<!-- END: Main Content -->
+</body></html>

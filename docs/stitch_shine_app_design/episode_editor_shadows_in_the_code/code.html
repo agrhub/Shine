@@ -1,0 +1,400 @@
+<!DOCTYPE html><html class="light" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Shine AI - Episode Editor Modal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+                "on-tertiary-container": "#484848",
+                "secondary": "#5f5e5e",
+                "on-error-container": "#93000a",
+                "on-primary-fixed-variant": "#005233",
+                "tertiary-container": "#b9b7b7",
+                "background": "#fcf9f8",
+                "error": "#ba1a1a",
+                "on-secondary-fixed-variant": "#474746",
+                "on-background": "#1c1b1b",
+                "surface-tint": "#006c45",
+                "on-secondary": "#ffffff",
+                "on-tertiary-fixed": "#1b1c1c",
+                "surface": "#fcf9f8",
+                "surface-container-lowest": "#ffffff",
+                "on-secondary-container": "#636262",
+                "tertiary-fixed": "#e4e2e1",
+                "inverse-primary": "#51df9c",
+                "outline-variant": "#bbcabe",
+                "surface-variant": "#e5e2e1",
+                "surface-bright": "#fcf9f8",
+                "on-surface-variant": "#3d4a41",
+                "surface-dim": "#dcd9d9",
+                "surface-container-high": "#ebe7e7",
+                "primary-container": "#3ecf8e",
+                "tertiary": "#5f5e5e",
+                "surface-container": "#f0edec",
+                "surface-container-low": "#f6f3f2",
+                "primary": "#006c45",
+                "on-primary-fixed": "#002112",
+                "secondary-fixed": "#e5e2e1",
+                "on-tertiary-fixed-variant": "#474747",
+                "outline": "#6c7a70",
+                "tertiary-fixed-dim": "#c8c6c6",
+                "on-surface": "#1c1b1b",
+                "on-tertiary": "#ffffff",
+                "secondary-fixed-dim": "#c8c6c5",
+                "on-primary": "#ffffff",
+                "on-primary-container": "#005434",
+                "on-error": "#ffffff",
+                "inverse-surface": "#313030",
+                "error-container": "#ffdad6",
+                "surface-container-highest": "#e5e2e1",
+                "on-secondary-fixed": "#1b1b1b",
+                "inverse-on-surface": "#f3f0ef",
+                "primary-fixed-dim": "#51df9c",
+                "primary-fixed": "#71fcb6",
+                "secondary-container": "#e2dfde"
+        },
+        "borderRadius": {
+                "DEFAULT": "1rem",
+                "lg": "2rem",
+                "xl": "3rem",
+                "full": "9999px"
+        },
+        "spacing": {
+                "base": "4px",
+                "margin-desktop": "32px",
+                "gutter": "16px",
+                "margin-mobile": "16px",
+                "container-max": "1440px"
+        },
+        "fontFamily": {
+                "body-md": [
+                        "Outfit"
+                ],
+                "label-xs": [
+                        "Outfit"
+                ],
+                "code-md": [
+                        "Outfit"
+                ],
+                "headline-lg": [
+                        "Outfit"
+                ],
+                "headline-lg-mobile": [
+                        "Outfit"
+                ],
+                "body-sm": [
+                        "Outfit"
+                ],
+                "display-lg": [
+                        "Outfit"
+                ]
+        },
+        "fontSize": {
+                "body-md": [
+                        "16px",
+                        {
+                                "lineHeight": "24px",
+                                "fontWeight": "400"
+                        }
+                ],
+                "label-xs": [
+                        "11px",
+                        {
+                                "lineHeight": "16px",
+                                "letterSpacing": "0.05em",
+                                "fontWeight": "500"
+                        }
+                ],
+                "code-md": [
+                        "14px",
+                        {
+                                "lineHeight": "20px",
+                                "fontWeight": "450"
+                        }
+                ],
+                "headline-lg": [
+                        "32px",
+                        {
+                                "lineHeight": "40px",
+                                "letterSpacing": "-0.01em",
+                                "fontWeight": "600"
+                        }
+                ],
+                "headline-lg-mobile": [
+                        "24px",
+                        {
+                                "lineHeight": "32px",
+                                "fontWeight": "600"
+                        }
+                ],
+                "body-sm": [
+                        "14px",
+                        {
+                                "lineHeight": "20px",
+                                "fontWeight": "400"
+                        }
+                ],
+                "display-lg": [
+                        "48px",
+                        {
+                                "lineHeight": "56px",
+                                "letterSpacing": "-0.02em",
+                                "fontWeight": "700"
+                        }
+                ]
+        }
+},
+    },
+  }
+</script>
+<style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #f0edec; /* surface-container */
+        }
+        /* Custom scrollbar for webkit */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #dcd9d9;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #b9b7b7;
+        }
+        
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        
+        .phone-frame {
+            border: 8px solid #1c1b1b;
+            border-radius: 2rem;
+            overflow: hidden;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="h-screen w-full flex items-center justify-center p-4 md:p-8">
+<!-- Modal Backdrop -->
+<div class="fixed inset-0 bg-on-background/40 backdrop-blur-sm z-40"></div>
+<!-- Modal Container -->
+<div class="relative w-full max-w-[1400px] h-[90vh] bg-surface-container-lowest rounded-xl shadow-2xl flex flex-col overflow-hidden z-50 border border-outline-variant">
+<!-- Header -->
+<header class="flex justify-between items-center px-6 py-4 border-b border-outline-variant bg-surface-container-lowest z-10 shrink-0">
+<div>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile md:font-headline-lg md:text-headline-lg text-on-surface">Episode Editor: Shadows in the Code</h2>
+<p class="font-body-sm text-body-sm text-secondary mt-1">Series: The Neon Betrayal</p>
+</div>
+<button class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-surface-container transition-colors text-secondary">
+<span class="material-symbols-outlined">close</span>
+</button>
+</header>
+<!-- Main Content (Split View) -->
+<div class="flex-1 flex flex-col md:flex-row overflow-hidden bg-surface"><nav class="w-60 flex flex-col border-r border-outline-variant bg-surface-container-low shrink-0 py-6">
+<ul class="flex flex-col gap-1 px-3">
+<li class="">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors text-secondary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined">description</span>
+<span class="font-body-sm">Script</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors bg-primary-container/10 text-primary font-medium" href="#">
+<span class="material-symbols-outlined">edit</span>
+<span class="font-body-sm">Editor</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-secondary hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined">music_note</span>
+<span class="font-body-sm">Voice &amp; Music</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-secondary hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined">closed_caption</span>
+<span class="font-body-sm">Caption</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-secondary hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined">publish</span>
+<span class="font-body-sm">Export &amp; Publish</span>
+</a>
+</li>
+</ul>
+</nav>
+<aside class="w-full md:w-64 flex flex-col border-r border-outline-variant bg-surface-container-lowest shrink-0 overflow-y-auto">
+<div class="p-4 flex-1">
+<h3 class="font-label-xs text-label-xs text-secondary mb-4 uppercase tracking-wider">Project Assets</h3>
+<div class="grid grid-cols-2 gap-3">
+<div class="relative group cursor-pointer aspect-[9/16] rounded-lg overflow-hidden border border-outline-variant bg-surface-container">
+<img class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBtkqUzKdcAYE1FhPsRYFIBbnfRkblPXgHUmyY2lO08hNiz9EwgjWw1MyufKF9NAOd561vhT54S9rHPjh7mk5DNdM3bdmAfnJn-oKwmvO7pMxhtB3TNPg-EGe9RK1EPnuZCnS-pCTmPAN6DilaM9Pnjtl5EOHd9QZP7lcBybJui1CzT_WCS5RzXGcrC4Aph9CSWziB0m12r78bXGkolWf3uivcxZyONaKfKL1rZfmc9HqFbpdoOlQsUBA">
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-2">
+<span class="text-white font-label-xs text-label-xs">scene_01.mp4</span>
+</div>
+</div>
+<div class="relative group cursor-pointer aspect-[9/16] rounded-lg overflow-hidden border border-outline-variant bg-surface-container">
+<img class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAsKwrz3QlbNiuWLZrPgfKEgoPBb_d73lHciGY1q3d8UJiVOtSSlhgdAiZOtFxmi-nQbSnj6EiVqvxnYrh-JvTyGMAUHCWcI_nz_SsAwKo1oTCGrj16XnFM9nXg9g9M71gTUcyHgijSt9lGD7YDlJUhRFqSGeYL8Vyv17Jn3-XpWvciHsoVrwE35Qfylclonh66cXSD7jL-N0C6q54tjtsgCYiC7h5rEVb0yHASJ6nlPmYLElva-c6ERw">
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-2">
+<span class="text-white font-label-xs text-label-xs">Mara_V2</span>
+</div>
+</div>
+<button class="aspect-[9/16] rounded-lg border border-dashed border-outline-variant hover:border-primary-container hover:bg-primary-container/5 transition-colors flex flex-col items-center justify-center gap-2 text-secondary hover:text-primary-container">
+<span class="material-symbols-outlined text-2xl">add_photo_alternate</span>
+<span class="font-label-xs text-label-xs">Upload</span>
+</button>
+</div>
+</div>
+</aside>
+<main class="flex-1 flex flex-col min-w-0 bg-surface-container-low overflow-hidden">
+<div class="flex-1 relative flex items-center justify-center p-4 lg:p-8 overflow-hidden min-h-[400px]">
+<div class="phone-frame bg-black relative h-full aspect-[9/16] max-h-full">
+<img class="absolute inset-0 w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAgrzJ0bQBpaka4if4heE6oSQa3WXXW9DWrd0Mkzxtu9fQh1Gpvt8jmdu49KwWajI-NOuDHHwFPyHAmmvxUcxtpFpQ2i2ck6Muac7YvLKFYusg2xbqDL1FoiH9Fl31c-A2TUKtGoScSLlFXGsgBHNEAziY9Tst7_SRNQRuwlFaEQTvFkQ6bKGb8jzQDxrLvlKTMzzK40sFkP3KiMTvwFoNUx56FfiZl9o5JNifjkTAYhgc7CmByzaNvDw">
+<div class="absolute top-4 right-4 flex gap-2">
+<div class="bg-black/50 backdrop-blur-md rounded-full px-2 py-1 flex items-center gap-1 border border-white/10">
+<span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+<span class="text-white font-code-md text-[10px]">REC</span>
+</div>
+</div>
+</div>
+<div class="absolute bottom-6 left-1/2 -translate-x-1/2 glass-panel rounded-full px-6 py-3 flex items-center gap-6 shadow-lg border border-white/20 z-10">
+<button class="text-on-surface hover:text-primary transition-colors"><span class="material-symbols-outlined">skip_previous</span></button>
+<button class="w-12 h-12 bg-primary-container text-on-primary-fixed rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-md">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</button>
+<button class="text-on-surface hover:text-primary transition-colors"><span class="material-symbols-outlined">skip_next</span></button>
+<div class="w-px h-6 bg-outline-variant mx-2"></div>
+<span class="font-code-md text-code-md text-on-surface">00:04:23:12</span>
+</div>
+</div>
+<div class="h-64 border-t border-outline-variant bg-surface-container-lowest shrink-0 flex flex-col">
+<div class="flex items-center px-4 py-2 border-b border-outline-variant bg-surface-container/50">
+<span class="font-label-xs text-label-xs text-secondary uppercase tracking-wider font-semibold">Timeline</span>
+<div class="ml-auto flex gap-2">
+<button class="p-1 text-secondary hover:text-on-surface rounded hover:bg-surface-container-high transition-colors"><span class="material-symbols-outlined text-sm">zoom_out</span></button>
+<button class="p-1 text-secondary hover:text-on-surface rounded hover:bg-surface-container-high transition-colors"><span class="material-symbols-outlined text-sm">zoom_in</span></button>
+</div>
+</div>
+<div class="flex-1 overflow-x-auto overflow-y-hidden relative p-4">
+<div class="absolute top-0 bottom-0 left-[30%] w-px bg-primary z-20">
+<div class="absolute -top-1 -translate-x-1/2 w-3 h-3 bg-primary rounded-full shadow-sm"></div>
+</div>
+<div class="flex flex-col gap-3 min-w-[800px]">
+<div class="flex h-12 gap-4">
+<div class="w-20 shrink-0 flex items-center"><span class="font-label-xs text-label-xs text-secondary">VIDEO 1</span></div>
+<div class="flex-1 bg-surface-container rounded-md relative border border-outline-variant/50">
+<div class="absolute left-4 w-48 h-full bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded flex items-center px-2 overflow-hidden">
+<span class="font-label-xs text-label-xs truncate">Sc_01_Alleyway</span>
+</div>
+</div>
+</div>
+<div class="flex h-10 gap-4">
+<div class="w-20 shrink-0 flex items-center"><span class="font-label-xs text-label-xs text-secondary">AUDIO 1</span></div>
+<div class="flex-1 bg-surface-container rounded-md relative border border-outline-variant/50">
+<div class="absolute left-4 w-64 h-full bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700 rounded flex items-center px-2 opacity-70">
+<div class="w-full h-full flex items-center justify-between px-1">
+<div class="w-1 bg-emerald-400 h-1/2 rounded-full"></div>
+<div class="w-1 bg-emerald-400 h-full rounded-full"></div>
+<div class="w-1 bg-emerald-400 h-3/4 rounded-full"></div>
+<div class="w-1 bg-emerald-400 h-1/4 rounded-full"></div>
+<div class="w-1 bg-emerald-400 h-full rounded-full"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex h-8 gap-4">
+<div class="w-20 shrink-0 flex items-center"><span class="font-label-xs text-label-xs text-secondary">SUBS</span></div>
+<div class="flex-1 bg-surface-container rounded-md relative border border-outline-variant/50">
+<div class="absolute left-10 w-32 h-full bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 rounded flex items-center justify-center">
+<span class="font-label-xs text-label-xs truncate text-yellow-800 dark:text-yellow-200">"Where are you..."</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<aside class="w-full md:w-80 flex flex-col border-l border-outline-variant bg-surface-container-lowest shrink-0 overflow-y-auto">
+<div class="p-6 flex flex-col gap-8">
+<section>
+<h3 class="font-label-xs text-label-xs text-secondary mb-3 uppercase tracking-wider flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">edit_note</span> AI Scene Prompt
+      </h3>
+<div class="bg-surface p-3 rounded-lg border border-outline-variant focus-within:border-primary-container focus-within:ring-1 focus-within:ring-primary-container transition-shadow">
+<textarea class="w-full bg-transparent border-none outline-none resize-none font-body-sm text-body-sm text-on-surface h-24 p-0 focus:ring-0" placeholder="Describe the scene...">Medium wide shot, low angle. Rain pounding on the neon-lit pavement. Mara standing alone looking at her watch, anxious. Cinematic lighting, cyberpunk aesthetic.</textarea>
+</div>
+<button class="w-full mt-4 bg-primary-container text-on-primary-fixed font-semibold py-2.5 rounded-full hover:bg-[#32b57a] transition-colors flex items-center justify-center gap-2 shadow-sm">
+<span class="material-symbols-outlined text-sm">magic_button</span> Synthesize Scene
+      </button>
+</section>
+<hr class="border-outline-variant">
+<section>
+<h3 class="font-label-xs text-label-xs text-secondary mb-4 uppercase tracking-wider">Production Balance</h3>
+<div class="flex items-center gap-4">
+<div class="relative w-16 h-16 flex items-center justify-center shrink-0">
+<svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+<path class="text-surface-container-high" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"></path>
+<path class="text-primary-container" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="65, 100" stroke-width="3"></path>
+</svg>
+<span class="absolute font-label-xs text-label-xs font-bold text-on-surface">65%</span>
+</div>
+<div>
+<p class="font-body-sm text-body-sm text-on-surface font-medium">AI Generated</p>
+<p class="font-label-xs text-label-xs text-secondary mt-1">Remaining capacity good for current scene scope.</p>
+</div>
+</div>
+</section>
+<hr class="border-outline-variant">
+<section>
+<h3 class="font-label-xs text-label-xs text-secondary mb-4 uppercase tracking-wider">Episode Settings</h3>
+<div class="space-y-4">
+<div>
+<label class="block font-label-xs text-label-xs text-secondary mb-1">Resolution</label>
+<select class="w-full bg-surface border border-outline-variant rounded-lg px-3 py-2 font-body-sm text-body-sm text-on-surface focus:border-primary-container focus:ring-1 focus:ring-primary-container outline-none">
+<option>4K Vertical (2160x3840)</option>
+<option>1080p Vertical</option>
+<option>4K Horizontal</option>
+</select>
+</div>
+<div>
+<label class="block font-label-xs text-label-xs text-secondary mb-1">Frame Rate</label>
+<select class="w-full bg-surface border border-outline-variant rounded-lg px-3 py-2 font-body-sm text-body-sm text-on-surface focus:border-primary-container focus:ring-1 focus:ring-primary-container outline-none">
+<option>24 FPS (Cinematic)</option>
+<option>30 FPS</option>
+<option>60 FPS</option>
+</select>
+</div>
+</div>
+</section>
+</div>
+</aside></div>
+<!-- Footer -->
+<footer class="px-6 py-4 border-t border-outline-variant bg-surface-container-lowest flex justify-between items-center z-10 shrink-0">
+<button class="px-6 py-2 rounded-full border border-outline-variant text-on-surface font-body-sm text-body-sm hover:bg-surface-container transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">add</span> Add Next Scene
+            </button>
+<button class="px-8 py-2 bg-primary-container text-on-primary-fixed font-bold rounded-full hover:bg-[#32b57a] transition-colors shadow-sm flex items-center gap-2">
+                Save &amp; Sync Episode
+            </button>
+</footer>
+</div>
+</body></html>

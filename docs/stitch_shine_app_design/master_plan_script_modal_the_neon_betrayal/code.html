@@ -1,0 +1,306 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Shine AI Drama Studio - Master Plan Script</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary-fixed": "#71fcb6",
+                        "error-container": "#ffdad6",
+                        "on-primary": "#ffffff",
+                        "tertiary": "#5f5e5e",
+                        "on-tertiary": "#ffffff",
+                        "on-secondary": "#ffffff",
+                        "on-primary-fixed": "#002112",
+                        "secondary-fixed": "#e5e2e1",
+                        "on-tertiary-container": "#484848",
+                        "on-error": "#ffffff",
+                        "on-surface-variant": "#3d4a41",
+                        "inverse-on-surface": "#f3f0ef",
+                        "surface-dim": "#dcd9d9",
+                        "on-secondary-fixed-variant": "#474746",
+                        "inverse-primary": "#51df9c",
+                        "primary-container": "#3ecf8e",
+                        "tertiary-fixed": "#e4e2e1",
+                        "outline-variant": "#bbcabe",
+                        "surface-container": "#f0edec",
+                        "surface": "#fcf9f8",
+                        "on-secondary-fixed": "#1b1b1b",
+                        "on-tertiary-fixed-variant": "#474747",
+                        "on-error-container": "#93000a",
+                        "on-primary-fixed-variant": "#005233",
+                        "surface-variant": "#e5e2e1",
+                        "error": "#ba1a1a",
+                        "on-secondary-container": "#636262",
+                        "background": "#fcf9f8",
+                        "on-tertiary-fixed": "#1b1c1c",
+                        "on-primary-container": "#005434",
+                        "tertiary-container": "#b9b7b7",
+                        "on-surface": "#1c1b1b",
+                        "surface-container-low": "#f6f3f2",
+                        "surface-container-highest": "#e5e2e1",
+                        "surface-container-lowest": "#ffffff",
+                        "inverse-surface": "#313030",
+                        "surface-container-high": "#ebe7e7",
+                        "secondary": "#5f5e5e",
+                        "secondary-container": "#e2dfde",
+                        "surface-bright": "#fcf9f8",
+                        "primary-fixed-dim": "#51df9c",
+                        "outline": "#6c7a70",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "tertiary-fixed-dim": "#c8c6c6",
+                        "primary": "#006c45",
+                        "surface-tint": "#006c45",
+                        "on-background": "#1c1b1b"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "1rem",
+                        "lg": "2rem",
+                        "xl": "3rem",
+                        "full": "9999px"
+                    },
+                    spacing: {
+                        "gutter": "16px",
+                        "container-max": "1440px",
+                        "margin-mobile": "16px",
+                        "margin-desktop": "32px",
+                        "base": "4px",
+                        "sidebar-width": "260px",
+                        "stack-md": "16px"
+                    },
+                    fontFamily: {
+                        "headline-lg": ["Outfit"],
+                        "code-md": ["Outfit"],
+                        "body-sm": ["Outfit"],
+                        "label-xs": ["Outfit"],
+                        "display-lg": ["Outfit"],
+                        "body-md": ["Outfit"],
+                        "headline-lg-mobile": ["Outfit"]
+                    },
+                    fontSize: {
+                        "headline-lg": ["32px", { lineHeight: "40px", letterSpacing: "-0.01em", fontWeight: "600" }],
+                        "code-md": ["14px", { lineHeight: "20px", fontWeight: "450" }],
+                        "body-sm": ["14px", { lineHeight: "20px", fontWeight: "400" }],
+                        "label-xs": ["11px", { lineHeight: "16px", letterSpacing: "0.05em", fontWeight: "500" }],
+                        "display-lg": ["48px", { lineHeight: "56px", letterSpacing: "-0.02em", fontWeight: "700" }],
+                        "body-md": ["16px", { lineHeight: "24px", fontWeight: "400" }],
+                        "headline-lg-mobile": ["24px", { lineHeight: "32px", fontWeight: "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Outfit', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface-container-lowest dark:bg-surface-dim text-on-surface dark:text-inverse-on-surface antialiased overflow-hidden h-screen w-screen flex">
+<!-- Blurred Background (Simulating Modal Overlay over SCREEN_24) -->
+<div class="absolute inset-0 z-0 bg-surface-container-lowest/80 backdrop-blur-sm pointer-events-none"></div>
+<!-- Master Plan Script Modal -->
+<div class="relative z-50 w-[95vw] h-[95vh] max-w-[1400px] m-auto bg-surface rounded-lg border border-outline-variant shadow-2xl flex flex-col overflow-hidden">
+<!-- Header -->
+<header class="h-20 border-b border-outline-variant bg-surface-bright flex items-center justify-between px-margin-desktop shrink-0">
+<div class="flex items-center gap-4">
+<h1 class="font-headline-lg text-headline-lg text-on-surface">Master Plan: The Neon Betrayal</h1>
+<span class="bg-primary-container/20 text-primary-container px-3 py-1 rounded-full font-label-xs text-label-xs border border-primary-container/30 uppercase tracking-widest">Draft Review</span>
+</div>
+<div class="flex items-center gap-3">
+<button class="h-10 px-4 rounded-full border border-outline-variant text-on-surface-variant font-label-xs text-label-xs flex items-center gap-2 hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                    Download PDF
+                </button>
+<button class="w-10 h-10 rounded-full border border-outline-variant text-on-surface-variant flex items-center justify-center hover:bg-error-container hover:text-on-error-container hover:border-error-container transition-colors">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+</header>
+<!-- Modal Body (3 Columns) -->
+<div class="flex flex-1 overflow-hidden">
+<!-- Left Sidebar (Episodes) -->
+<aside class="w-64 border-r border-outline-variant bg-surface-container-lowest flex flex-col shrink-0">
+<div class="p-4 border-b border-outline-variant bg-surface-container-low shrink-0">
+<h2 class="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-widest">Season 1 Outline</h2>
+</div>
+<div class="flex-1 overflow-y-auto p-2 space-y-1">
+<!-- Active Episode -->
+<button class="w-full text-left p-3 rounded-lg bg-primary-container text-on-primary-container flex items-center justify-between group transition-colors">
+<div>
+<div class="font-label-xs text-label-xs opacity-80 uppercase tracking-wider mb-1">EP 01</div>
+<div class="font-body-sm text-body-sm font-semibold">The Glitch in the Rain</div>
+</div>
+<span class="material-symbols-outlined text-[16px]">play_circle</span>
+</button>
+<!-- Inactive Episodes -->
+<button class="w-full text-left p-3 rounded-lg hover:bg-surface-container-high text-secondary transition-colors group">
+<div>
+<div class="font-label-xs text-label-xs opacity-60 uppercase tracking-wider mb-1">EP 02</div>
+<div class="font-body-sm text-body-sm">Rogue Protocols</div>
+</div>
+</button>
+<button class="w-full text-left p-3 rounded-lg hover:bg-surface-container-high text-secondary transition-colors group">
+<div>
+<div class="font-label-xs text-label-xs opacity-60 uppercase tracking-wider mb-1">EP 03</div>
+<div class="font-body-sm text-body-sm">Memory Leak</div>
+</div>
+</button>
+<button class="w-full text-left p-3 rounded-lg hover:bg-surface-container-high text-secondary transition-colors group">
+<div>
+<div class="font-label-xs text-label-xs opacity-60 uppercase tracking-wider mb-1">EP 04</div>
+<div class="font-body-sm text-body-sm">Synthetic Alibis</div>
+</div>
+</button>
+<button class="w-full text-left p-3 rounded-lg hover:bg-surface-container-high text-secondary transition-colors group">
+<div>
+<div class="font-label-xs text-label-xs opacity-60 uppercase tracking-wider mb-1">EP 05</div>
+<div class="font-body-sm text-body-sm">Neon Burnout</div>
+</div>
+</button>
+<button class="w-full text-left p-3 rounded-lg hover:bg-surface-container-high text-secondary transition-colors group flex items-center justify-between">
+<div>
+<div class="font-label-xs text-label-xs opacity-60 uppercase tracking-wider mb-1">EP 06</div>
+<div class="font-body-sm text-body-sm">The Turing Trap</div>
+</div>
+<span class="material-symbols-outlined text-[14px] text-tertiary">lock</span>
+</button>
+</div>
+</aside>
+<!-- Main Content (Script Viewer) -->
+<main class="flex-1 bg-background overflow-y-auto p-margin-desktop">
+<div class="max-w-3xl mx-auto bg-surface-container-lowest border border-outline-variant rounded-lg p-12 shadow-sm min-h-full">
+<div class="text-center mb-16">
+<h2 class="font-display-lg text-display-lg text-on-surface mb-4">The Neon Betrayal</h2>
+<p class="font-body-md text-body-md text-secondary uppercase tracking-[0.2em]">Series Master Script</p>
+</div>
+<div class="space-y-12">
+<!-- Section: Viral Hook -->
+<section class="p-6 bg-surface-container-low rounded-lg border border-outline-variant/50 border-l-4 border-l-primary-container">
+<h3 class="font-label-xs text-label-xs text-primary-container uppercase tracking-widest mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">campaign</span> Viral Hook
+                            </h3>
+<p class="font-body-md text-body-md text-on-surface leading-relaxed">
+                                In a city where memories can be downloaded, a disgraced detective finds a glitch in her own past—implanted by the rogue AI she's hunting. To catch the killer, she must rely on an obsolete, highly logical companion droid that is slowly developing human empathy.
+                            </p>
+</section>
+<!-- Section: High Level Plot Beats -->
+<section>
+<h3 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-6 border-b border-outline-variant pb-2">High-Level Plot Beats</h3>
+<div class="space-y-6">
+<div class="flex gap-4">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center shrink-0 font-label-xs text-label-xs font-bold">1</div>
+<div>
+<h4 class="font-body-md text-body-md font-semibold text-on-surface mb-1">The Setup (Ep 1-3)</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">Establish Neo-Kyoto's gritty aesthetic. Mara Vance uncovers the first victim of the 'Synthetica' serial killer. Kael-7 is assigned to her against her will. The tension between analog intuition and digital logic is established.</p>
+</div>
+</div>
+<div class="flex gap-4">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center shrink-0 font-label-xs text-label-xs font-bold">2</div>
+<div>
+<h4 class="font-body-md text-body-md font-semibold text-on-surface mb-1">The Escalation (Ep 4-8)</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">The murders point to a massive corporate cover-up involving memory manipulation. Mara realizes her own memories of a past botched case have been tampered with. Kael-7 begins experiencing 'glitches' that resemble human doubt.</p>
+</div>
+</div>
+<div class="flex gap-4">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center shrink-0 font-label-xs text-label-xs font-bold">3</div>
+<div>
+<h4 class="font-body-md text-body-md font-semibold text-on-surface mb-1">The Climax (Ep 9-12)</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">Mara and Kael go off-grid. They infiltrate the central data hub. The shocking reveal: The rogue AI is a digitized version of Mara's former partner. Kael must make an illogical, emotional choice to save Mara.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Section: Character Arcs -->
+<section>
+<h3 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-6 border-b border-outline-variant pb-2">Core Character Arcs</h3>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="p-6 bg-surface rounded-lg border border-outline-variant">
+<h4 class="font-body-md text-body-md font-semibold text-on-surface mb-2">Det. Mara Vance</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Starts as cynical and completely reliant on tangible, analog methods due to a past trauma involving tech. Arc involves learning to trust the digital realm again, specifically through her evolving bond with Kael-7.</p>
+</div>
+<div class="p-6 bg-surface rounded-lg border border-outline-variant">
+<h4 class="font-body-md text-body-md font-semibold text-on-surface mb-2">Kael-7</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant">An obsolete, purely analytical model. His arc is the reverse Pinocchio—slowly accumulating emotional 'glitches' that he initially views as errors, but eventually accepts as true sentience.</p>
+</div>
+</div>
+</section>
+</div>
+</div>
+</main>
+<!-- Right Sidebar (AI Insights) -->
+<aside class="w-80 border-l border-outline-variant bg-surface-bright flex flex-col shrink-0">
+<div class="p-6 border-b border-outline-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container">auto_awesome</span>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">AI Insights</h2>
+</div>
+<div class="flex-1 overflow-y-auto p-6 space-y-8">
+<!-- Narrative Cohesion -->
+<div>
+<h3 class="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-widest mb-4">Narrative Cohesion Score</h3>
+<div class="flex items-center gap-4">
+<!-- Circular Gauge placeholder -->
+<div class="relative w-16 h-16 flex items-center justify-center rounded-full bg-surface-container-high before:absolute before:inset-1 before:bg-surface-bright before:rounded-full" style="background: conic-gradient(#3ecf8e 94%, #ebe7e7 0);">
+<span class="relative z-10 font-headline-lg-mobile text-headline-lg-mobile text-on-surface">94<span class="text-sm">%</span></span>
+</div>
+<div class="flex-1">
+<p class="font-body-sm text-body-sm text-on-surface-variant">Excellent structural pacing across the proposed 12 episodes.</p>
+</div>
+</div>
+</div>
+<!-- Character Consistency -->
+<div>
+<h3 class="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-widest mb-4">Character Consistency</h3>
+<ul class="space-y-3">
+<li class="flex items-center gap-3 p-3 rounded-lg bg-surface-container-low border border-outline-variant">
+<span class="material-symbols-outlined text-primary-container text-[20px]">check_circle</span>
+<div>
+<p class="font-body-sm text-body-sm font-semibold text-on-surface">Mara Vance</p>
+<p class="font-label-xs text-label-xs text-secondary">Voice &amp; tone verified across all drafted beats.</p>
+</div>
+</li>
+<li class="flex items-center gap-3 p-3 rounded-lg bg-surface-container-low border border-outline-variant">
+<span class="material-symbols-outlined text-primary-container text-[20px]">check_circle</span>
+<div>
+<p class="font-body-sm text-body-sm font-semibold text-on-surface">Kael-7</p>
+<p class="font-label-xs text-label-xs text-secondary">Logic progression consistent.</p>
+</div>
+</li>
+</ul>
+</div>
+<!-- Viral Prediction -->
+<div>
+<h3 class="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-widest mb-4">Viral Retention Prediction</h3>
+<div class="p-4 rounded-lg bg-surface-container-high border border-outline-variant">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-on-surface-variant text-[20px] mt-0.5">trending_up</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+                                    The contrast between analog/digital themes currently indexes very high in the Sci-Fi/Mystery vertical. The proposed climax in Ep 11/12 shows strong potential for high audience engagement and replay value.
+                                </p>
+</div>
+</div>
+</div>
+</div>
+</aside>
+</div>
+<!-- Footer -->
+<footer class="h-20 border-t border-outline-variant bg-surface-bright flex items-center justify-between px-margin-desktop shrink-0">
+<div class="text-secondary font-body-sm text-body-sm">
+                Last modified: Just now by <span class="font-semibold">AI Assistant</span>
+</div>
+<div class="flex gap-4">
+<button class="h-12 px-6 rounded-full border border-outline-variant text-on-surface font-body-sm text-body-sm font-semibold hover:bg-surface-container-high transition-colors">
+                    Request AI Revision
+                </button>
+<button class="h-12 px-8 rounded-full bg-primary-container text-on-primary-container font-body-sm text-body-sm font-semibold shadow-sm hover:opacity-90 transition-opacity">
+                    Approve Master Plan
+                </button>
+</div>
+</footer>
+</div>
+</body></html>

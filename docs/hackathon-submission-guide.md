@@ -1,6 +1,6 @@
-# Shine (DramaFlowAI) Hackathon Submission Strategy Guide
+# Shine Hackathon Submission Strategy Guide
 
-This guide outlines the submission strategy, pitch deck narrative, and partner technology alignment for entering **Shine (DramaFlowAI)** into the **All Things Agentic Hackathon** (https://allthingsagentichackathon.devpost.com).
+This guide outlines the submission strategy, pitch deck narrative, and partner technology alignment for entering **Shine** into the **All Things Agentic Hackathon** (https://allthingsagentichackathon.devpost.com).
 
 ---
 
@@ -43,7 +43,7 @@ Shine is configured to compete primarily in **Track 1: Taskmaster** (Complete Au
 
 ### Minute 1: The Problem & The Solution
 - **Hook:** Show the explosive growth of vertical micro-dramas and the bottleneck of traditional production (high cost, character inconsistency, slow rendering).
-- **Solution:** Introduce **Shine (DramaFlowAI)** — the enterprise AI studio for micro-dramas.
+- **Solution:** Introduce **Shine** — the enterprise AI studio for micro-dramas.
 
 ### Minute 2: Live Agentic Workflow Demo
 1. **Multi-Agent Scripting:** Show the AI Director generating a 20-episode suspense series skeleton from a single prompt.
@@ -66,5 +66,5 @@ Shine is configured to compete primarily in **Track 1: Taskmaster** (Complete Au
 | **System Architecture Diagram** | ✅ Ready | `docs/architecture-document.md` (Section 3 & 12) |
 | **API & Data Models** | ✅ Ready | `docs/api-document.md` |
 | **Test Plan & Quality Assurance** | ✅ Ready | `docs/test-document.md` (135+ Test Cases) |
-| **UI/UX Mockups & Demos** | ✅ Ready | `docs/ui-ux-design-proposals.md` & `docs/UI/` |
+| **UI/UX Mockups & Demos** | ✅ Ready | `docs/ui-ux-design-proposals.md` & `docs/stitch_shine_app_design/` |
 | **Partner Technology Proofs** | ✅ Ready | Vertex AI, Parallel MCP, Grafana, OpenVideo |

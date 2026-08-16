@@ -1,0 +1,191 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>New Series Wizard - Core DNA</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style data-purpose="typography">
+    body {
+      font-family: 'Inter', sans-serif;
+      color: #1A1A1A;
+    }
+  </style>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'shine-green': '#65E397',
+            'shine-green-light': '#90E8B2',
+            'shine-green-bg': '#E6F9EE',
+            'shine-dark': '#111111',
+            'shine-gray-light': '#F7F7F7',
+            'shine-border': '#EAEAEA',
+            'shine-text-muted': '#6B7280',
+            'preview-blue': '#3B328C',
+            'preview-teal': '#1E685F',
+            'preview-dark': '#151726'
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-shine-gray-light min-h-screen flex flex-col font-sans antialiased">
+<!-- BEGIN: MainHeader -->
+<header class="bg-white border-b border-shine-border px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+<div class="flex items-center space-x-4">
+<h1 class="text-xl font-extrabold tracking-tight">SHINE</h1>
+<div class="h-6 w-px bg-shine-border"></div>
+<span class="text-sm font-semibold text-shine-text-muted tracking-wider uppercase">Series Onboarding</span>
+</div>
+<div class="flex items-center space-x-8">
+<!-- Stepper -->
+<div class="flex items-center space-x-6">
+<div class="flex items-center space-x-2">
+<div class="w-8 h-8 rounded-full border-2 border-shine-green flex items-center justify-center text-sm font-bold text-shine-dark">1</div>
+<span class="text-xs font-bold uppercase tracking-wider text-shine-dark">Core DNA</span>
+</div>
+<div class="w-16 h-px bg-shine-border"></div>
+<div class="flex items-center space-x-2">
+<div class="w-8 h-8 rounded-full border-2 border-shine-border flex items-center justify-center text-sm font-bold text-shine-text-muted">2</div>
+<span class="text-xs font-bold uppercase tracking-wider text-shine-text-muted">Trend Hunt</span>
+</div>
+<div class="w-16 h-px bg-shine-border"></div>
+<div class="flex items-center space-x-2">
+<div class="w-8 h-8 rounded-full border-2 border-shine-border flex items-center justify-center text-sm font-bold text-shine-text-muted">3</div>
+<span class="text-xs font-bold uppercase tracking-wider text-shine-text-muted">Compliance</span>
+</div>
+</div>
+</div>
+<div class="flex items-center space-x-6">
+<button class="text-sm font-bold tracking-wider text-shine-dark hover:text-shine-text-muted transition-colors uppercase">Save Draft</button>
+<button class="bg-shine-dark text-white px-6 py-2.5 rounded-full text-sm font-bold tracking-wider hover:bg-gray-800 transition-colors uppercase">Next Step</button>
+</div>
+</header>
+<!-- END: MainHeader -->
+<div class="flex flex-1">
+<!-- BEGIN: LeftSidebar -->
+<aside class="w-72 bg-white border-r border-shine-border p-8 flex flex-col flex-shrink-0">
+<div class="mb-10">
+<h2 class="text-xs font-bold uppercase tracking-wider text-shine-dark mb-4">Step 1: Genre Selection</h2>
+<p class="text-sm text-shine-text-muted leading-relaxed">
+          Selecting a genre automatically configures the AI engine's visual and script logic. Suspense will favor moody, high-contrast lighting, while Romance uses warmer, softer palettes.
+        </p>
+</div>
+<!-- AI Tip Card -->
+<div class="border border-shine-border rounded-xl p-5 bg-white shadow-sm">
+<div class="flex items-center space-x-2 mb-3">
+<div class="w-6 h-6 rounded-full bg-shine-green-bg flex items-center justify-center">
+<svg class="w-3.5 h-3.5 text-shine-green" fill="currentColor" viewBox="0 0 20 20">
+<path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.476.859h4z"></path>
+</svg>
+</div>
+<span class="text-xs font-bold tracking-wider text-shine-dark uppercase">AI Tip</span>
+</div>
+<p class="text-sm text-shine-text-muted italic leading-relaxed">
+          "Suspense dramas currently see a 24% higher retention rate in the US market for the 18-24 demographic."
+        </p>
+</div>
+</aside>
+<!-- END: LeftSidebar -->
+<!-- BEGIN: MainContent -->
+<main class="flex-1 p-16 max-w-5xl mx-auto w-full">
+<div class="mb-12">
+<h1 class="text-4xl font-extrabold tracking-tight text-shine-dark mb-3">Define Series DNA</h1>
+<p class="text-lg text-shine-text-muted">Select the primary genre and visual tone for your micro-drama.</p>
+</div>
+<!-- Genre Grid -->
+<div class="grid grid-cols-2 gap-6 mb-16">
+<!-- Genre Card 1 (Selected) -->
+<label class="relative block cursor-pointer group">
+<input checked="" class="peer sr-only" name="genre" type="radio">
+<div class="border-2 border-shine-green rounded-2xl p-6 bg-shine-green-bg/20 transition-all">
+<div class="w-10 h-10 rounded-full bg-shine-green flex items-center justify-center mb-4">
+<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<h3 class="text-xl font-bold text-shine-dark mb-2">Suspense / Mystery</h3>
+<p class="text-sm text-shine-text-muted mb-4">Moody lighting, sharp cuts, and high-tension pacing.</p>
+<span class="inline-block bg-shine-green text-shine-dark text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded">Selected</span>
+</div>
+</label>
+<!-- Genre Card 2 -->
+<label class="relative block cursor-pointer group">
+<input class="peer sr-only" name="genre" type="radio">
+<div class="border border-shine-border rounded-2xl p-6 bg-white hover:border-gray-300 transition-all h-full">
+<div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mb-4 group-hover:bg-gray-200 transition-colors">
+<svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<h3 class="text-xl font-bold text-shine-dark mb-2">Romance / Drama</h3>
+<p class="text-sm text-shine-text-muted">Soft focus, warm palettes, and emotional close-ups.</p>
+</div>
+</label>
+<!-- Genre Card 3 -->
+<label class="relative block cursor-pointer group">
+<input class="peer sr-only" name="genre" type="radio">
+<div class="border border-shine-border rounded-2xl p-6 bg-white hover:border-gray-300 transition-all h-full">
+<div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mb-4 group-hover:bg-gray-200 transition-colors">
+<svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<h3 class="text-xl font-bold text-shine-dark mb-2">Action / Thriller</h3>
+<p class="text-sm text-shine-text-muted">Fast-paced editing, dynamic camera work, and high-energy SFX.</p>
+</div>
+</label>
+<!-- Genre Card 4 -->
+<label class="relative block cursor-pointer group">
+<input class="peer sr-only" name="genre" type="radio">
+<div class="border border-shine-border rounded-2xl p-6 bg-white hover:border-gray-300 transition-all h-full">
+<div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mb-4 group-hover:bg-gray-200 transition-colors">
+<svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<h3 class="text-xl font-bold text-shine-dark mb-2">Satire / Comedy</h3>
+<p class="text-sm text-shine-text-muted">Vibrant colors, snappy dialogue, and experimental framing.</p>
+</div>
+</label>
+</div>
+<div class="w-full h-px bg-shine-border mb-12"></div>
+<!-- Visual Style Preset Section -->
+<div class="mb-10">
+<h2 class="text-2xl font-bold text-shine-dark mb-2">Visual Style Preset</h2>
+<p class="text-sm text-shine-text-muted mb-6">The AI Director will use this to influence every generated scene.</p>
+<div class="flex flex-wrap gap-3">
+<button class="px-6 py-2.5 rounded-full border-2 border-shine-green text-shine-dark font-bold text-xs uppercase tracking-wider bg-white">Cinematic Neon</button>
+<button class="px-6 py-2.5 rounded-full border border-shine-border text-shine-text-muted hover:border-gray-300 hover:text-shine-dark font-bold text-xs uppercase tracking-wider bg-white transition-colors">Nordic Noir</button>
+<button class="px-6 py-2.5 rounded-full border border-shine-border text-shine-text-muted hover:border-gray-300 hover:text-shine-dark font-bold text-xs uppercase tracking-wider bg-white transition-colors">Steady Handheld</button>
+<button class="px-6 py-2.5 rounded-full border border-shine-border text-shine-text-muted hover:border-gray-300 hover:text-shine-dark font-bold text-xs uppercase tracking-wider bg-white transition-colors">Anamorphic Vintage</button>
+</div>
+</div>
+<!-- Dynamic Lighting Preview -->
+<div class="border border-shine-border rounded-xl p-6 bg-white mb-24">
+<div class="flex items-center justify-between mb-4">
+<span class="text-xs font-bold uppercase tracking-wider text-shine-text-muted">Dynamic Lighting Preview</span>
+<span class="text-xs font-bold uppercase tracking-wider text-shine-green">Calculated in 0.4s</span>
+</div>
+<div class="grid grid-cols-3 gap-4">
+<div class="h-24 rounded-lg bg-preview-blue"></div>
+<div class="h-24 rounded-lg bg-preview-teal"></div>
+<div class="h-24 rounded-lg bg-preview-dark"></div>
+</div>
+</div>
+</main>
+<!-- END: MainContent -->
+</div>
+<!-- Floating Action Button -->
+<div class="fixed bottom-12 right-12 z-50">
+<button class="bg-shine-dark text-white px-8 py-4 rounded-full text-sm font-bold tracking-wider hover:bg-gray-800 transition-colors uppercase shadow-xl flex items-center space-x-3">
+<span>Define Series DNA</span>
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+</div>
+</body></html>

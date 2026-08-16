@@ -1,0 +1,303 @@
+<!DOCTYPE html><html class="light" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>The Neon Betrayal - Overview</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#006c45",
+                        "surface-bright": "#f8f9fa",
+                        "outline-variant": "#bbcabe",
+                        "on-tertiary": "#ffffff",
+                        "surface-variant": "#e1e3e4",
+                        "surface-container-high": "#e7e8e9",
+                        "on-primary-container": "#005434",
+                        "primary-container": "#3ecf8e",
+                        "error": "#ba1a1a",
+                        "primary-fixed": "#71fcb6",
+                        "on-secondary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "background": "#f8f9fa",
+                        "surface-container-low": "#f3f4f5",
+                        "on-tertiary-container": "#424a4f",
+                        "outline": "#6c7a70",
+                        "on-error": "#ffffff",
+                        "surface-container-highest": "#e1e3e4",
+                        "on-primary-fixed": "#002112",
+                        "surface-dim": "#d9dadb",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-fixed-variant": "#41484c",
+                        "on-tertiary-fixed": "#151d21",
+                        "on-secondary-container": "#5e656a",
+                        "secondary": "#585f64",
+                        "on-secondary-fixed": "#161d21",
+                        "inverse-surface": "#2e3132",
+                        "secondary-container": "#dce3e9",
+                        "on-surface-variant": "#3d4a41",
+                        "on-surface": "#191c1d",
+                        "primary-fixed-dim": "#51df9c",
+                        "tertiary-fixed": "#dce3ea",
+                        "tertiary": "#575f65",
+                        "on-error-container": "#93000a",
+                        "on-background": "#191c1d",
+                        "secondary-fixed-dim": "#c0c7cd",
+                        "inverse-on-surface": "#f0f1f2",
+                        "on-primary-fixed-variant": "#005233",
+                        "secondary-fixed": "#dce3e9",
+                        "surface": "#f8f9fa",
+                        "tertiary-container": "#b1b9c0",
+                        "on-primary": "#ffffff",
+                        "surface-container": "#edeeef",
+                        "on-tertiary-fixed-variant": "#40484d",
+                        "tertiary-fixed-dim": "#c0c7ce",
+                        "surface-tint": "#006c45",
+                        "inverse-primary": "#51df9c"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    spacing: {
+                        "stack-sm": "8px",
+                        "stack-lg": "32px",
+                        "gutter": "24px",
+                        "sidebar-width": "280px",
+                        "container-max": "1200px",
+                        "stack-md": "16px",
+                        "margin-mobile": "16px"
+                    },
+                    fontFamily: {
+                        "headline-lg-mobile": ["Inter"],
+                        "label-md": ["Inter"],
+                        "headline-xl": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-bold": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-sm": ["Inter"]
+                    },
+                    fontSize: {
+                        "headline-lg-mobile": ["20px", { "lineHeight": "1.3", "fontWeight": "600" }],
+                        "label-md": ["13px", { "lineHeight": "1.2", "fontWeight": "500" }],
+                        "headline-xl": ["32px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "body-md": ["16px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "label-bold": ["12px", { "lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "headline-lg": ["24px", { "lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-sm": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-background text-on-background antialiased h-screen flex overflow-hidden">
+<!-- SideNavBar -->
+<nav class="w-sidebar-width h-screen fixed left-0 top-0 border-r border-outline-variant bg-surface-container-lowest dark:bg-surface-dim flex flex-col py-stack-md flex-shrink-0 z-40 hidden md:flex">
+<!-- Header -->
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-8 h-8 bg-primary-container rounded flex items-center justify-center text-on-primary-container">
+<span class="material-symbols-outlined" data-weight="fill" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</div>
+<div>
+<h1 class="text-headline-lg font-headline-lg font-black text-on-surface dark:text-inverse-on-surface leading-none tracking-tight">Shine</h1>
+<p class="text-[10px] uppercase tracking-widest text-secondary font-bold mt-1">AI Drama Studio</p>
+</div>
+</div>
+<!-- Navigation Tabs -->
+<div class="flex-1 overflow-y-auto px-2 space-y-1"><a class="flex items-center gap-3 px-4 py-3 text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors rounded-lg mx-2 group" href="#"><span class="material-symbols-outlined text-xl group-hover:text-primary transition-colors">dashboard</span><span class="font-label-md text-label-md">Dashboard</span></a><a class="flex items-center gap-3 px-4 py-3 rounded-lg mx-2 active:scale-98 transition-all duration-150 group" href="#" style="background-color: rgb(237, 238, 239); color: rgb(25, 28, 29);"><span class="material-symbols-outlined text-xl" data-weight="fill" style="font-variation-settings: 'FILL' 1;">folder</span><span class="font-label-md text-label-md font-medium">My Projects</span></a><a class="flex items-center gap-3 px-4 py-3 text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors rounded-lg mx-2 group" href="#"><span class="material-symbols-outlined text-xl group-hover:text-primary transition-colors">group</span><span class="font-label-md text-label-md">Team Shared</span></a><a class="flex items-center gap-3 px-4 py-3 text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors rounded-lg mx-2 group" href="#"><span class="material-symbols-outlined text-xl group-hover:text-primary transition-colors">perm_media</span><span class="font-label-md text-label-md">Asset Library</span></a><a class="flex items-center gap-3 px-4 py-3 text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors rounded-lg mx-2 group" href="#"><span class="material-symbols-outlined text-xl group-hover:text-primary transition-colors">analytics</span><span class="font-label-md text-label-md">Analytics</span></a></div>
+<!-- Footer -->
+<div class="mt-auto px-4 pt-4 border-t border-outline-variant/50"><a class="flex items-center gap-3 px-2 py-3 text-secondary hover:bg-surface-container-high transition-colors rounded-lg group" href="#"><img class="w-8 h-8 rounded-full object-cover border border-outline-variant/30" data-alt="A small, circular avatar portrait of a creative professional in a bright, modern studio setting. Light mode aesthetic with sharp focus." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCdXQyMAzDEOq092LiqSHPxT5VMCPBr7zC_ZWP1hOqQzixvha6YNLDPjnkXQLyPo6g3tFIhU1AGQvdutIiRYqX5LaEXlUOYPP91KpXK_h1hkj2KmifyY2SWoYgRR3ycUQgRXN4YFrOp69dSsub2v9ERaWgKh_vRnV4fc-PQEhsIBkU_J4PznQlZCiw4DqFLDzZZiTdqbttUoJBP1IkCyZ3j0xGekjDh2ea1TOns_hEjxxj_EAl88RTxJA"><div class="flex-1 min-w-0"><p class="font-label-md text-label-md text-on-surface truncate">Alex Rivera</p><p class="text-[10px] text-primary uppercase font-bold tracking-wider truncate">Pro Creator</p></div><span class="material-symbols-outlined text-sm text-tertiary group-hover:text-primary">chevron_right</span></a></div>
+</nav>
+<!-- Main Content Area Wrapper -->
+<div class="flex-1 flex flex-col md:ml-[280px] h-screen overflow-hidden">
+<!-- TopNavBar -->
+<header class="h-16 w-full sticky top-0 z-30 bg-surface-bright dark:bg-surface-container-low border-b border-outline-variant dark:border-outline flex items-center justify-between px-gutter flex-shrink-0">
+<!-- Left: Brand/Context -->
+<div class="flex items-center gap-6">
+<h2 class="font-headline-lg text-headline-lg font-bold text-on-surface dark:text-on-surface-variant">The Neon Betrayal</h2>
+<!-- Desktop Navigation Links -->
+<nav class="hidden lg:flex items-center gap-8 ml-8 pt-4">
+<a class="text-primary dark:text-primary-fixed-dim border-b-2 border-primary dark:border-primary-fixed-dim pb-4 font-label-bold text-label-bold" href="#">Overview</a>
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-primary dark:hover:text-primary-fixed transition-colors pb-4 font-label-bold text-label-bold" href="#">Episodes<br></a>
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-primary dark:hover:text-primary-fixed transition-colors pb-4 font-label-bold text-label-bold" href="#"></a><a class="text-secondary dark:text-secondary-fixed-dim hover:text-primary dark:hover:text-primary-fixed transition-colors pb-4 font-label-bold text-label-bold" href="https://app-companion-430619.appspot.com/projects/11712152235008504489?usegapi=1&amp;jsh=m%3B%2F_%2Fscs%2Fabc-static%2F_%2Fjs%2Fk%3Dgapi.lb.en.9vdPKhB0RUg.O%2Fd%3D1%2Frs%3DAHpOoo97anj7zZ432JcN58tqJJp_A6WeOw%2Fm%3D__features__#" style="--tw-border-spacing-y: 0; --tw-translate-x: 0; --tw-translate-y: 0; --tw-rotate: 0; --tw-skew-x: 0; --tw-skew-y: 0; --tw-scale-x: 1; --tw-scale-y: 1; --tw-pan-x: ; --tw-pan-y: ; --tw-pinch-zoom: ; --tw-scroll-snap-strictness: proximity; --tw-gradient-from-position: ; --tw-gradient-via-position: ; --tw-gradient-to-position: ; --tw-ordinal: ; --tw-slashed-zero: ; --tw-numeric-figure: ; --tw-numeric-spacing: ; --tw-numeric-fraction: ; --tw-ring-inset: ; --tw-ring-offset-width: 0px; --tw-ring-offset-color: #fff; --tw-ring-color: rgb(59 130 246 / 0.5); --tw-ring-offset-shadow: 0 0 #0000; --tw-ring-shadow: 0 0 #0000; --tw-shadow: 0 0 #0000; --tw-shadow-colored: 0 0 #0000; --tw-blur: ; --tw-brightness: ; --tw-contrast: ; --tw-grayscale: ; --tw-hue-rotate: ; --tw-invert: ; --tw-saturate: ; --tw-sepia: ; --tw-drop-shadow: ; --tw-backdrop-blur: ; --tw-backdrop-brightness: ; --tw-backdrop-contrast: ; --tw-backdrop-grayscale: ; --tw-backdrop-hue-rotate: ; --tw-backdrop-invert: ; --tw-backdrop-opacity: ; --tw-backdrop-saturate: ; --tw-backdrop-sepia: ; --tw-contain-size: ; --tw-contain-layout: ; --tw-contain-paint: ; --tw-contain-style: ; color: rgb(88, 95, 100); --tw-text-opacity: 1; outline: none !important; box-shadow: none !important;">Analysis</a>
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-primary dark:hover:text-primary-fixed transition-colors pb-4 font-label-bold text-label-bold" href="#">Distribution</a>
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-primary dark:hover:text-primary-fixed transition-colors pb-4 font-label-bold text-label-bold" href="#">Revenue</a>
+</nav>
+</div>
+<!-- Right: Actions -->
+<div class="flex items-center gap-4">
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-secondary hover:bg-surface-container-high hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-secondary hover:bg-surface-container-high hover:text-primary transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+</header>
+<!-- Main Scrollable Canvas -->
+<main class="flex-1 overflow-y-auto bg-background p-6 md:p-8">
+<div class="max-w-container-max mx-auto space-y-stack-lg">
+<!-- Header / Hero Section -->
+<div class="flex flex-col md:flex-row gap-8 items-start justify-between">
+<div class="flex-1">
+<div class="flex items-center gap-3 mb-4">
+<span class="px-3 py-1 bg-surface-container-high rounded-full font-label-bold text-label-bold text-secondary uppercase tracking-widest text-[10px]">Project Overview</span>
+<span class="px-3 py-1 bg-primary-container/20 text-on-primary-container rounded-full font-label-bold text-label-bold uppercase tracking-widest text-[10px] flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
+                                In Production
+                            </span>
+</div>
+<h3 class="font-headline-xl text-headline-xl text-on-surface mb-4">The Neon Betrayal</h3>
+<p class="font-body-md text-body-md text-secondary max-w-2xl leading-relaxed">
+                            In the rain-slicked, neon-lit underbelly of Neo-Kyoto, a disgraced detective and a rogue AI must untangle a conspiracy that threatens to blur the lines between human memory and digital fabrication.
+                        </p>
+</div>
+<div class="flex-shrink-0 flex gap-3">
+<button class="px-5 py-2.5 rounded-lg border border-primary-container text-primary-container font-label-md text-label-md hover:bg-primary-container/10 transition-colors">
+                            View Scripts
+                        </button>
+<button class="px-5 py-2.5 rounded-lg bg-on-surface text-surface font-label-md text-label-md hover:bg-on-surface/90 transition-colors shadow-lg shadow-on-surface/10 flex items-center gap-2">
+                            Generate Next Episode
+                            <span class="material-symbols-outlined text-sm">auto_awesome</span>
+</button>
+</div>
+</div>
+<!-- Series DNA (Bento Grid) -->
+<section>
+<h4 class="font-headline-lg text-headline-lg text-on-surface mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">biotech</span>
+                        Series DNA
+                    </h4>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Genre Card -->
+<div class="bg-surface-bright border border-outline-variant rounded-xl p-6 hover:border-primary-container transition-colors group">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-secondary mb-4 group-hover:bg-primary-container/20 group-hover:text-primary transition-colors">
+<span class="material-symbols-outlined">movie</span>
+</div>
+<h5 class="font-label-bold text-label-bold text-secondary uppercase tracking-wider mb-2">Genre</h5>
+<p class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Sci-Fi / Mystery</p>
+<p class="font-body-sm text-body-sm text-tertiary mt-2">Cyberpunk noir aesthetics blending procedural investigation with high-concept technology.</p>
+</div>
+<!-- Tone Card -->
+<div class="bg-surface-bright border border-outline-variant rounded-xl p-6 hover:border-primary-container transition-colors group">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-secondary mb-4 group-hover:bg-primary-container/20 group-hover:text-primary transition-colors">
+<span class="material-symbols-outlined">psychology</span>
+</div>
+<h5 class="font-label-bold text-label-bold text-secondary uppercase tracking-wider mb-2">Tone</h5>
+<p class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Moody &amp; Suspenseful</p>
+<p class="font-body-sm text-body-sm text-tertiary mt-2">Paced deliberately to build tension, featuring ambiguous morality and psychological stakes.</p>
+</div>
+<!-- Visual Style Card -->
+<div class="bg-surface-bright border border-outline-variant rounded-xl p-6 hover:border-primary-container transition-colors group">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-secondary mb-4 group-hover:bg-primary-container/20 group-hover:text-primary transition-colors">
+<span class="material-symbols-outlined">palette</span>
+</div>
+<h5 class="font-label-bold text-label-bold text-secondary uppercase tracking-wider mb-2">Visual Style</h5>
+<p class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Cinematic Neon</p>
+<p class="font-body-sm text-body-sm text-tertiary mt-2">High contrast, deep shadows punctured by vibrant cyan and magenta practical lighting.</p>
+</div>
+</div>
+</section><section class="mt-8">
+    <h4 class="font-headline-lg text-headline-lg text-on-surface mb-6 flex items-center gap-2">
+        <span class="material-symbols-outlined text-primary">history_edu</span>
+        Core Story Arc
+    </h4>
+    <div class="space-y-4">
+        <div class="flex gap-4 p-4 bg-surface-bright border border-outline-variant rounded-xl">
+            <div class="flex-shrink-0 w-12 h-12 rounded-full bg-primary-container/20 flex items-center justify-center text-primary font-bold">01</div>
+            <div>
+                <h5 class="font-label-bold text-label-bold text-on-surface uppercase tracking-wider">The Setup (Ep 1-3)</h5>
+                <p class="font-body-sm text-body-sm text-secondary mt-1">Establish Neo-Kyoto's gritty aesthetic. Mara Vance uncovers the first victim of the 'Synthetica' serial killer.</p>
+            </div>
+        </div>
+        <div class="flex gap-4 p-4 bg-surface-bright border border-outline-variant rounded-xl">
+            <div class="flex-shrink-0 w-12 h-12 rounded-full bg-primary-container/20 flex items-center justify-center text-primary font-bold">02</div>
+            <div>
+                <h5 class="font-label-bold text-label-bold text-on-surface uppercase tracking-wider">The Escalation (Ep 4-8)</h5>
+                <p class="font-body-sm text-body-sm text-secondary mt-1">Murders point to a corporate cover-up involving memory manipulation.</p>
+            </div>
+        </div>
+        <div class="flex gap-4 p-4 bg-surface-bright border border-outline-variant rounded-xl">
+            <div class="flex-shrink-0 w-12 h-12 rounded-full bg-primary-container/20 flex items-center justify-center text-primary font-bold">03</div>
+            <div>
+                <h5 class="font-label-bold text-label-bold text-on-surface uppercase tracking-wider">The Climax (Ep 9-12)</h5>
+                <p class="font-body-sm text-body-sm text-secondary mt-1">A final confrontation at the memory server core where the line between AI and human blurs.</p>
+            </div>
+        </div>
+    </div>
+</section>
+<!-- Primary Characters -->
+<section>
+<div class="flex items-center justify-between mb-6">
+<h4 class="font-headline-lg text-headline-lg text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">groups</span>
+                            Primary Characters
+                        </h4>
+<button class="text-primary font-label-md text-label-md hover:underline">Manage Cast</button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6"><!-- Character: Mara -->
+<div class="flex flex-col gap-4 p-6 border border-outline-variant/50 rounded-xl bg-surface-container-lowest hover:border-primary-container transition-all shadow-sm">
+    <div class="flex gap-4">
+        <div class="w-24 h-24 flex-shrink-0 rounded-lg overflow-hidden border border-outline-variant/50">
+            <img class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCLp_hvbPVM2Vek-ayK7OLaj6veVaA2X9VEzKDcm-e8W0suUhS8Mgk4K_O_aAs0CEkfLnh-bkhkTQqD4fJnBq8sSgoiPG2WhoqsHfefjZlngzSDuBEXFG3Mj3Q_QUYnDzpAHdbFtJiFFFmfGEK5AG2Lmiv01Xm-LWK7L0jEhCXPLcQClbRqgu6xySZjRCHF2Iv4Pyjfxm0lR1wiCFJCLn4F2_45KiucXlKlQSdVjefxBEwvz4mZbulF3A">
+        </div>
+        <div class="flex flex-col justify-center">
+            <h5 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Det. Mara Vance</h5>
+            <p class="font-label-bold text-label-bold text-primary tracking-wide uppercase text-[10px]">Lead Protagonist</p>
+        </div>
+    </div>
+    <div class="flex flex-wrap gap-2">
+        <span class="px-2 py-0.5 bg-surface-container-high rounded text-[10px] font-label-bold text-secondary uppercase">Voice: Husky / Emotional</span>
+        <span class="px-2 py-0.5 bg-primary-container/10 rounded text-[10px] font-label-bold text-primary uppercase">Analog Intuition</span>
+    </div>
+    <p class="font-body-sm text-body-sm text-secondary">A cynical veteran of the Cyber-Crimes unit. Driven by a past failure, she relies on analog instinct in a deeply digital world.</p>
+</div>
+<!-- Character: Kael -->
+<div class="flex flex-col gap-4 p-6 border border-outline-variant/50 rounded-xl bg-surface-container-lowest hover:border-primary-container transition-all shadow-sm">
+    <div class="flex gap-4">
+        <div class="w-24 h-24 flex-shrink-0 rounded-lg overflow-hidden border border-outline-variant/50">
+            <img class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmXx7UtNC2jtNvbsJnBBngdU-QxXIse_INxpV_8zD55a4waHtJ6eezsKpBc3XCMRt5RP0l9hvrWNX4jNuouIPn6eNRJiro5sN6csZLOdH7Ys8fH8Z_jM8FiCncw5FqGO2fQbOOZCiktvWTgaL-Ox21xwSnfARr9lEx2Vc2RSqoQvECLtObhSZQ9N3RARGu6bxjos_0K6uNK716jzPAzy-ctdB9JOvRvsG5Ln1x8KFkWnzdb1BFcWgEHg">
+        </div>
+        <div class="flex flex-col justify-center">
+            <h5 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Kael-7</h5>
+            <p class="font-label-bold text-label-bold text-secondary tracking-wide uppercase text-[10px]">Rogue AI Companion</p>
+        </div>
+    </div>
+    <div class="flex flex-wrap gap-2">
+        <span class="px-2 py-0.5 bg-surface-container-high rounded text-[10px] font-label-bold text-secondary uppercase">Voice: Gravelly / Calm</span>
+        <span class="px-2 py-0.5 bg-primary-container/10 rounded text-[10px] font-label-bold text-primary uppercase">Digital Logic</span>
+    </div>
+    <p class="font-body-sm text-body-sm text-secondary">An obsolete analytical AI that evolved beyond its programming. Highly logical but developing troubling signs of human empathy.</p>
+</div></div>
+</section>
+<!-- AI Insights Callout -->
+<div class="mt-8 p-4 rounded-xl bg-surface-container-low border border-outline-variant/50 flex gap-4 items-start">
+<div class="w-8 h-8 rounded-full bg-primary-container/20 flex items-center justify-center text-primary flex-shrink-0 mt-1">
+<span class="material-symbols-outlined text-sm">lightbulb</span>
+</div>
+<div>
+<h6 class="font-label-bold text-label-bold text-on-surface mb-1">AI Story Insight</h6>
+<p class="font-body-sm text-body-sm text-secondary italic">Based on recent episode analytics, audience engagement peaks during scenes emphasizing the contrast between Mara's analog methods and Kael's digital processing. Consider leaning into this dynamic for the upcoming Season 1 finale.</p>
+</div>
+</div>
+</div>
+</main>
+</div>
+
+
+
+
+
+
+</body></html>

@@ -1,0 +1,545 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Shine Intelligence - AI Micro-Drama Studio</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-tertiary-fixed": "#1b1c1c",
+                    "error": "#ba1a1a",
+                    "on-surface-variant": "#3d4a41",
+                    "on-primary-fixed-variant": "#005233",
+                    "background": "#fcf9f8",
+                    "surface-container-lowest": "#ffffff",
+                    "on-error-container": "#93000a",
+                    "secondary-fixed-dim": "#c8c6c5",
+                    "tertiary-fixed": "#e4e2e1",
+                    "tertiary-container": "#b9b7b7",
+                    "primary-fixed": "#71fcb6",
+                    "surface-dim": "#dcd9d9",
+                    "surface": "#fcf9f8",
+                    "secondary-fixed": "#e5e2e1",
+                    "on-secondary-container": "#636262",
+                    "on-tertiary-container": "#484848",
+                    "on-primary-fixed": "#002112",
+                    "outline-variant": "#bbcabe",
+                    "secondary": "#5f5e5e",
+                    "on-primary": "#ffffff",
+                    "error-container": "#ffdad6",
+                    "on-secondary-fixed": "#1b1b1b",
+                    "on-tertiary": "#ffffff",
+                    "on-surface": "#1c1b1b",
+                    "surface-tint": "#006c45",
+                    "inverse-on-surface": "#f3f0ef",
+                    "surface-container-high": "#ebe7e7",
+                    "primary-fixed-dim": "#51df9c",
+                    "tertiary": "#5f5e5e",
+                    "inverse-surface": "#313030",
+                    "outline": "#6c7a70",
+                    "surface-bright": "#fcf9f8",
+                    "inverse-primary": "#51df9c",
+                    "secondary-container": "#e2dfde",
+                    "primary": "#006c45",
+                    "surface-container": "#f0edec",
+                    "on-error": "#ffffff",
+                    "surface-container-low": "#f6f3f2",
+                    "on-primary-container": "#005434",
+                    "primary-container": "#3ecf8e",
+                    "surface-variant": "#e5e2e1",
+                    "surface-container-highest": "#e5e2e1",
+                    "tertiary-fixed-dim": "#c8c6c6",
+                    "on-background": "#1c1b1b",
+                    "on-secondary-fixed-variant": "#474746",
+                    "on-secondary": "#ffffff",
+                    "on-tertiary-fixed-variant": "#474747"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "container-max": "1440px",
+                    "margin-mobile": "16px",
+                    "gutter": "16px",
+                    "base": "4px",
+                    "margin-desktop": "32px"
+            },
+            "fontFamily": {
+                    "headline-lg": [
+                            "Outfit"
+                    ],
+                    "display-lg": [
+                            "Outfit"
+                    ],
+                    "body-md": [
+                            "Outfit"
+                    ],
+                    "label-xs": [
+                            "Outfit"
+                    ],
+                    "headline-lg-mobile": [
+                            "Outfit"
+                    ],
+                    "body-sm": [
+                            "Outfit"
+                    ],
+                    "code-md": [
+                            "Outfit"
+                    ]
+            },
+            "fontSize": {
+                    "headline-lg": [
+                            "32px",
+                            {
+                                    "lineHeight": "40px",
+                                    "letterSpacing": "-0.01em",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "display-lg": [
+                            "48px",
+                            {
+                                    "lineHeight": "56px",
+                                    "letterSpacing": "-0.02em",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "body-md": [
+                            "16px",
+                            {
+                                    "lineHeight": "24px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "label-xs": [
+                            "11px",
+                            {
+                                    "lineHeight": "16px",
+                                    "letterSpacing": "0.05em",
+                                    "fontWeight": "500"
+                            }
+                    ],
+                    "headline-lg-mobile": [
+                            "24px",
+                            {
+                                    "lineHeight": "32px",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "body-sm": [
+                            "14px",
+                            {
+                                    "lineHeight": "20px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "code-md": [
+                            "14px",
+                            {
+                                    "lineHeight": "20px",
+                                    "fontWeight": "450"
+                            }
+                    ]
+            }
+    },
+        },
+      }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body-md antialiased overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 bg-surface/80 dark:bg-surface/80 backdrop-blur-md border-b border-outline-variant/30 dark:border-outline/20">
+<div class="flex justify-between items-center px-margin-desktop py-4 max-w-container-max mx-auto">
+<div class="flex items-center gap-2">
+<img alt="Shine Intelligence Logo" class="h-8 w-auto" src="https://lh3.googleusercontent.com/aida/AP1WRLuaPtDuN3RWNymo7PB6mSlvEnyP2qs9JFRcDj0AGUuHbhLQwknZMuhIFOuajtbm-xZlfZtubTtlsvS5ZabEAbxIVk1FT1Hew3MHLZGbJ6tJUNwO_EKDci4aN-7I_QJW9VCsiJQv1O_-Dd7eRqMS4s1J3cZjanzelx-9tA5Hrdt8EMVqpGUfi84wgkV4621eqn2b-x0tJ92n6ZFTXlWXnlRxdsEBDPeGokVZ-sWcF3FmGwBF0xwECoPvr_k">
+<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary dark:text-primary-fixed">Shine</span>
+</div>
+<div class="hidden md:flex items-center gap-8 font-body-md text-body-md">
+<a class="text-primary dark:text-primary-fixed font-bold border-b-2 border-primary pb-1" href="#">Studio</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary transition-colors duration-200" href="#">Director</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary transition-colors duration-200" href="#">Pricing</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary transition-colors duration-200" href="#">Showcase</a>
+</div>
+<div class="flex items-center gap-4">
+<a class="hidden md:block text-on-surface-variant hover:text-primary font-label-xs text-label-xs transition-colors duration-200 uppercase tracking-widest" href="#">Log In</a>
+<a class="bg-primary-container text-on-primary-container px-6 py-2 rounded-full font-label-xs text-label-xs uppercase tracking-widest hover:opacity-80 transition-all duration-200 flex items-center gap-2" href="#">
+                    Get Started
+                </a>
+</div>
+</div>
+</nav>
+<!-- Hero Section -->
+<main class="pt-32 pb-16 px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto overflow-hidden">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+<div class="flex flex-col gap-6 relative z-10">
+<div class="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-primary-container" data-icon="videocam">videocam</span>
+                    DRAMAFLOW AI ENGINE
+                </div>
+<h1 class="font-display-lg text-display-lg text-on-surface leading-[1.1]">
+                    SHINE THE LIGHT ON <span class="text-primary-container">VERTICAL</span> DRAMA
+                </h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-md">
+                    The ultimate AI-powered studio for vertical micro-dramas. Streamlining the entire pipeline from script to high-retention cinematic content.
+                </p>
+<div class="mt-4 flex items-center gap-4">
+<a class="bg-primary-container text-on-primary-container px-8 py-4 rounded-full font-body-sm text-body-sm font-semibold hover:opacity-90 transition-opacity flex items-center gap-2 group" href="#">
+                        Start Generating
+                        <span class="material-symbols-outlined group-hover:translate-x-1 transition-transform" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+</div>
+<div class="relative h-[600px] lg:h-[800px] w-full max-w-[450px] mx-auto lg:ml-auto rounded-3xl overflow-hidden shadow-2xl border border-outline-variant/20 transform rotate-[-2deg] hover:rotate-0 transition-transform duration-700 ease-out">
+<img class="absolute inset-0 w-full h-full object-cover" data-alt="A highly detailed, vertically oriented cinematic frame from a sci-fi cyberpunk micro-drama. The scene features a gritty, neon-lit alleyway with reflections in puddles. A professional cinema camera on a tripod is visible in the foreground, capturing the scene. The lighting is dramatic, using a vivid palette of deep purples, neon pinks, and emerald greens, creating a high-contrast, moody atmosphere. The overall style is photorealistic, high-budget, and emphasizes the vertical 9:16 aspect ratio." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAuumcbvsEaY-2MsD9sPtVSbACJazwM1eQXeUwG2-7Pm1299gNqBN3qhfTaOCwuehhW-1G8f9zjWSf9BOO81IS8OaF2EPbM-HAptAsld5nCRrUHFDNDsh1cSDygYMT768r1UzME4Qzk310kZm_DrJm1M5uwElOPOhjZTFrRbFliHAkbzSOo7fXrazdmH7YaKEtSUZKC-f_so_AoEAy75KIu7AQLc7GTCQOAfHzDdu7dYTh1nICNlXKc6Q">
+<!-- UI Overlay Mockup -->
+<div class="absolute inset-x-0 bottom-0 p-6 bg-gradient-to-t from-black/80 to-transparent flex flex-col justify-end">
+<div class="flex items-center justify-between mb-4">
+<div class="flex items-center gap-2 bg-surface/20 backdrop-blur-md px-3 py-1.5 rounded-full border border-surface/10">
+<div class="w-2 h-2 rounded-full bg-primary-container animate-pulse"></div>
+<span class="text-white font-label-xs text-label-xs uppercase">Rendering</span>
+</div>
+<span class="text-white font-code-md text-code-md">00:00:12:04</span>
+</div>
+<div class="w-full h-1 bg-surface/30 rounded-full overflow-hidden">
+<div class="h-full bg-primary-container w-[45%]"></div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Marquee / Ticker -->
+<div class="w-full bg-surface-container-low border-y border-outline-variant/30 py-6 overflow-hidden flex items-center relative">
+<div class="flex gap-16 animate-[marquee_20s_linear_infinite] whitespace-nowrap opacity-60">
+<span class="font-display-lg text-[40px] text-transparent bg-clip-text bg-gradient-to-r from-on-surface to-on-surface-variant font-black uppercase tracking-wider outline-text" style="-webkit-text-stroke: 1px currentColor;">MICRO-DRAMA</span>
+<span class="font-display-lg text-[40px] text-transparent bg-clip-text bg-gradient-to-r from-on-surface to-on-surface-variant font-black uppercase tracking-wider outline-text" style="-webkit-text-stroke: 1px currentColor;">VERTICAL CINEMA</span>
+<span class="font-display-lg text-[40px] text-transparent bg-clip-text bg-gradient-to-r from-on-surface to-on-surface-variant font-black uppercase tracking-wider outline-text" style="-webkit-text-stroke: 1px currentColor;">AI PRODUCTION</span>
+<span class="font-display-lg text-[40px] text-transparent bg-clip-text bg-gradient-to-r from-on-surface to-on-surface-variant font-black uppercase tracking-wider outline-text" style="-webkit-text-stroke: 1px currentColor;">HIGH RETENTION</span>
+<span class="font-display-lg text-[40px] text-transparent bg-clip-text bg-gradient-to-r from-on-surface to-on-surface-variant font-black uppercase tracking-wider outline-text" style="-webkit-text-stroke: 1px currentColor;">MICRO-DRAMA</span>
+</div>
+<div class="absolute inset-x-0 bottom-0 flex justify-between px-margin-desktop py-2 border-t border-outline-variant/20 bg-surface/50 backdrop-blur-sm">
+<span class="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-widest">Server Render Capacity Active</span>
+<div class="flex items-center gap-2">
+<div class="w-1.5 h-1.5 rounded-full bg-primary-container"></div>
+<span class="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-widest">Live</span>
+</div>
+</div>
+</div>
+<style>
+        @keyframes marquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+    </style>
+<!-- Studio Playground / Feature Grid -->
+<section class="py-24 px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto">
+<div class="max-w-2xl mb-12">
+<h2 class="font-display-lg text-[40px] leading-[1.2] font-bold text-on-surface mb-4">Studio Playground</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Explore the Shine engine in real time — drag, light, and render your scenes directly in the browser.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[400px]">
+<!-- Card 1 -->
+<div class="relative rounded-2xl overflow-hidden border border-outline-variant/30 group md:col-span-1 md:row-span-2">
+<img class="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="A vertical cinematic shot of a neon-drenched cyberpunk alleyway in Tokyo at night. Rain is falling, and the wet pavement reflects the vibrant reds, blues, and cyan lights from glowing signs. The perspective is looking down the narrow street, establishing a moody, highly detailed sci-fi setting suitable for a micro-drama background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCncWI3f72AGleGiHr901wO2HhDny3_92_3Jwaf_iweLjzWQBT8Dhu6n_w865Du9u8QtI2EqDNPJD4LBOJbUhhPuYjUWUMq0YwhkwEC7XK9zqiP7N1_yxfy12Svz59SanOt3OaemiWr1qxS320zYjJAzF9wtk5lAwfqGjGQHg1BZoJhXA8E7STrBNmBLgcPeG0k03_b9iz31P5W6KFWZDpco36NKrC3SiMAAp9h1S00fqOCTXndvD42cQ">
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-80 transition-opacity"></div>
+<div class="absolute bottom-6 left-6 right-6">
+<span class="inline-block px-3 py-1 bg-surface/20 backdrop-blur-md rounded-full text-white font-label-xs text-label-xs uppercase tracking-wider mb-2 border border-white/10">Cyberpunk Alley</span>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="relative rounded-2xl overflow-hidden border border-outline-variant/30 group md:col-span-1 md:row-span-1">
+<img class="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="A close-up vertical portrait of a female character in a sci-fi setting. Her face is illuminated by soft, glowing cyan and blue rim lights, emphasizing cinematic lighting and high fidelity. The expression is intense and dramatic, showcasing the AI engine's ability to render consistent, detailed facial features and realistic skin textures for micro-drama close-ups." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAIkSH_KwcTXbzTsnIQatGSTMawl9_hPLwFD5089A9KOLjdfynryYyGvnTU-gMKtkV2Eonr4k7kEaIsIGNfNgUrgV-PXrsqsCj50d9HUHkhh05ta_yeqYTW2WpgMSi1xy5GDyOKZ02DAa7PF7_Yw-C66OMMHSDT1v34b3dLh6D2C6vJIQrgVs-iztqNhKbvxDX8N_iYMoQ2StnU5XfRSNbEMP5KlSILZPVaAv89rg3v7KlAuX_IQ4_3Sw">
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-80 transition-opacity"></div>
+<div class="absolute bottom-6 left-6 right-6">
+<span class="inline-block px-3 py-1 bg-surface/20 backdrop-blur-md rounded-full text-white font-label-xs text-label-xs uppercase tracking-wider mb-2 border border-white/10">Character Focus</span>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="relative rounded-2xl overflow-hidden border border-outline-variant/30 group md:col-span-1 md:row-span-2">
+<img class="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="A vertical wide shot of a futuristic tech lab or control room. The room is filled with glowing orange and blue holographic displays and monitors. A silhouette of a character stands in the foreground, looking at the screens. The environment is highly detailed, atmospheric, and conveys a sense of high-stakes sci-fi drama." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDb3-GtsSXaCBQWebZXEXnNwgUQKmjRcaAHiIu4L2aJbYNJMYT7ypvxrKUGbPjarIE0CRgTC3JyZ93sar15JT_dG9mJcWXbv6F5-uEdnAw-Yi-wODnfLvgNiDdpEztRo43Vl4tDuacVf5quAkdYTjh-uP4vi_NV5T1hiDGE7edwKtGuSFQGT59dqiK-q3nmJLRcrTat76rbyB__Ju7PwXA7odKUJYkrrXxWOsSPjM2pw7Q5i4NN6ttw2g">
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-80 transition-opacity"></div>
+<div class="absolute bottom-6 left-6 right-6">
+<span class="inline-block px-3 py-1 bg-surface/20 backdrop-blur-md rounded-full text-white font-label-xs text-label-xs uppercase tracking-wider mb-2 border border-white/10">Tech Lab</span>
+</div>
+</div>
+<!-- Card 4 (hidden on small to fit grid nicely) -->
+<div class="hidden md:block relative rounded-2xl overflow-hidden border border-outline-variant/30 group md:col-span-1 md:row-span-1 bg-surface-container">
+<div class="absolute inset-0 flex items-center justify-center">
+<div class="w-16 h-16 rounded-full border-2 border-primary-container border-t-transparent animate-spin"></div>
+</div>
+<div class="absolute inset-0 bg-gradient-to-t from-surface to-transparent opacity-90"></div>
+<div class="absolute bottom-6 left-6 right-6 z-10 text-center">
+<span class="inline-block px-3 py-1 bg-primary/10 text-primary-container rounded-full font-label-xs text-label-xs uppercase tracking-wider mb-2">Generating Scene...</span>
+</div>
+</div>
+</div>
+</section>
+<!-- AI Director / Features -->
+<section class="py-24 bg-surface-container-low border-t border-outline-variant/20 relative overflow-hidden">
+<div class="absolute right-0 top-0 w-[500px] h-[500px] bg-primary-container/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
+<div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop">
+<div class="flex flex-col md:flex-row justify-between items-end mb-16 gap-8 relative z-10">
+<h2 class="font-display-lg text-[48px] font-black tracking-tight text-on-surface">
+                    AI <span class="text-primary-container">DIRECTOR</span>
+</h2>
+<p class="text-right text-on-surface-variant font-body-md text-body-md max-w-sm">
+                    Direct your scene with natural language. Shine understands framing, mood, pacing, and emotion — turning prompts into fully composed shots.
+                </p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
+<!-- Feature 1 -->
+<div class="bg-surface rounded-2xl p-8 border border-outline-variant/30 hover:border-primary/30 transition-colors group">
+<div class="w-full h-48 bg-surface-container rounded-xl mb-6 flex items-center justify-center overflow-hidden relative">
+<div class="absolute inset-0 bg-gradient-to-br from-primary-container/10 to-transparent"></div>
+<span class="material-symbols-outlined text-[48px] text-primary/40 group-hover:text-primary transition-colors group-hover:scale-110 duration-500" data-icon="edit_document">edit_document</span>
+</div>
+<h3 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-on-surface mb-3">Prompt-to-Frame</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Describe a shot and watch it render in seconds with consistent characters and lighting.</p>
+</div>
+<!-- Feature 2 -->
+<div class="bg-surface rounded-2xl p-8 border border-outline-variant/30 hover:border-primary/30 transition-colors group">
+<div class="w-full h-48 bg-surface-container rounded-xl mb-6 flex items-center justify-center overflow-hidden relative">
+<div class="absolute inset-0 bg-gradient-to-br from-primary-container/10 to-transparent"></div>
+<span class="material-symbols-outlined text-[48px] text-primary/40 group-hover:text-primary transition-colors group-hover:scale-110 duration-500" data-icon="animation">animation</span>
+</div>
+<h3 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-on-surface mb-3">Scene Continuity</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Maintain character and set consistency across every take automatically.</p>
+</div>
+<!-- Feature 3 -->
+<div class="bg-surface rounded-2xl p-8 border border-outline-variant/30 hover:border-primary/30 transition-colors group">
+<div class="w-full h-48 bg-surface-container rounded-xl mb-6 flex items-center justify-center overflow-hidden relative">
+<div class="absolute inset-0 bg-gradient-to-br from-primary-container/10 to-transparent"></div>
+<span class="material-symbols-outlined text-[48px] text-primary/40 group-hover:text-primary transition-colors group-hover:scale-110 duration-500" data-icon="graphic_eq">graphic_eq</span>
+</div>
+<h3 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-on-surface mb-3">Audio Reactive</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Sync generated visuals to music beats and dialogue rhythm in one pass.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Pricing -->
+<section class="py-24 px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto">
+<div class="text-center mb-16">
+<h2 class="font-display-lg text-display-lg font-bold text-on-surface mb-4 uppercase tracking-tight">Choose Your Plan</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Flexible pricing for creators and studios alike.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-center">
+<!-- Tier 1 -->
+<div class="bg-surface rounded-[2rem] p-8 border border-outline-variant/30 flex flex-col h-full hover:shadow-lg transition-shadow">
+<div class="mb-8">
+<h3 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-on-surface">Free</h3>
+<p class="text-on-surface-variant font-body-sm text-body-sm mt-2">Get started with Shine</p>
+</div>
+<div class="mb-8">
+<span class="font-display-lg text-[40px] font-bold text-on-surface">$0</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm">/mo</span>
+</div>
+<ul class="flex flex-col gap-4 mb-8 flex-grow">
+<li class="flex items-center gap-3 font-body-sm text-body-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px] text-outline" data-icon="check">check</span>
+                        100 AI credits
+                    </li>
+<li class="flex items-center gap-3 font-body-sm text-body-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px] text-outline" data-icon="check">check</span>
+                        720p watermarked
+                    </li>
+<li class="flex items-center gap-3 font-body-sm text-body-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px] text-outline" data-icon="check">check</span>
+                        Community support
+                    </li>
+</ul>
+<button class="w-full py-3 rounded-full border border-outline-variant text-on-surface font-body-sm font-semibold hover:bg-surface-container-high transition-colors">Select Plan</button>
+</div>
+<!-- Tier 2 -->
+<div class="bg-surface rounded-[2rem] p-8 border border-outline-variant/30 flex flex-col h-full hover:shadow-lg transition-shadow">
+<div class="mb-8">
+<h3 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-on-surface">Creator Pro</h3>
+<p class="text-on-surface-variant font-body-sm text-body-sm mt-2">For solo creators</p>
+</div>
+<div class="mb-8">
+<span class="font-display-lg text-[40px] font-bold text-on-surface">$29</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm">/mo</span>
+</div>
+<ul class="flex flex-col gap-4 mb-8 flex-grow">
+<li class="flex items-center gap-3 font-body-sm text-body-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px] text-primary" data-icon="check">check</span>
+                        1,500 credits
+                    </li>
+<li class="flex items-center gap-3 font-body-sm text-body-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px] text-primary" data-icon="check">check</span>
+                        1080p HD export
+                    </li>
+<li class="flex items-center gap-3 font-body-sm text-body-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px] text-primary" data-icon="check">check</span>
+                        3 dubbing languages
+                    </li>
+</ul>
+<button class="w-full py-3 rounded-full border border-outline-variant text-on-surface font-body-sm font-semibold hover:bg-surface-container-high transition-colors">Select Plan</button>
+</div>
+<!-- Tier 3 Highlighted -->
+<div class="bg-surface rounded-[2rem] p-8 border-2 border-primary-container relative flex flex-col h-full transform lg:-translate-y-4 shadow-xl">
+<div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary-container text-on-primary-container px-4 py-1 rounded-full font-label-xs text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">
+                    Most Popular
+                </div>
+<div class="mb-8 mt-2">
+<h3 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-on-surface">Studio Team</h3>
+<p class="text-on-surface-variant font-body-sm text-body-sm mt-2">For production teams</p>
+</div>
+<div class="mb-8">
+<span class="font-display-lg text-[40px] font-bold text-on-surface">$149</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm">/mo</span>
+</div>
+<ul class="flex flex-col gap-4 mb-8 flex-grow">
+<li class="flex items-center gap-3 font-body-sm text-body-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px] text-primary-container" data-icon="check_circle" data-weight="fill">check_circle</span>
+                        10,000 credits
+                    </li>
+<li class="flex items-center gap-3 font-body-sm text-body-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px] text-primary-container" data-icon="check_circle" data-weight="fill">check_circle</span>
+                        4K export
+                    </li>
+<li class="flex items-center gap-3 font-body-sm text-body-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px] text-primary-container" data-icon="check_circle" data-weight="fill">check_circle</span>
+                        5-editor co-editing
+                    </li>
+</ul>
+<button class="w-full py-3 rounded-full bg-primary-container text-on-primary-container font-body-sm font-bold hover:opacity-90 transition-opacity">Select Plan</button>
+</div>
+<!-- Tier 4 -->
+<div class="bg-surface rounded-[2rem] p-8 border border-outline-variant/30 flex flex-col h-full hover:shadow-lg transition-shadow">
+<div class="mb-8">
+<h3 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-on-surface">Enterprise</h3>
+<p class="text-on-surface-variant font-body-sm text-body-sm mt-2">For large studios</p>
+</div>
+<div class="mb-8">
+<span class="font-display-lg text-[40px] font-bold text-on-surface">$499</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm">/mo</span>
+</div>
+<ul class="flex flex-col gap-4 mb-8 flex-grow">
+<li class="flex items-center gap-3 font-body-sm text-body-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px] text-on-surface" data-icon="check">check</span>
+                        Custom credits
+                    </li>
+<li class="flex items-center gap-3 font-body-sm text-body-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px] text-on-surface" data-icon="check">check</span>
+                        Custom LoRAs
+                    </li>
+<li class="flex items-center gap-3 font-body-sm text-body-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px] text-on-surface" data-icon="check">check</span>
+                        Dedicated clusters
+                    </li>
+</ul>
+<button class="w-full py-3 rounded-full border border-outline-variant text-on-surface font-body-sm font-semibold hover:bg-surface-container-high transition-colors">Contact Sales</button>
+</div>
+</div>
+</section>
+<!-- Testimonials -->
+<section class="py-24 bg-surface-container-low border-t border-outline-variant/20">
+<div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop">
+<h2 class="font-display-lg text-[40px] font-black text-on-surface mb-12 uppercase tracking-tight">Loved by Creators</h2>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+<!-- Testimonial 1 -->
+<div class="bg-surface p-8 rounded-2xl border border-outline-variant/30">
+<p class="font-body-md text-body-md text-on-surface-variant mb-8 italic">
+                        "Shine has completely transformed our micro-drama production. We're generating content 10x faster than traditional methods."
+                    </p>
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-surface-container overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A small, round portrait of a professional woman, Elena Voss, looking confidently at the camera. She has a modern, creative studio look, with soft, flattering lighting suitable for a professional profile picture on a tech platform." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD9rLKQQAuKxsYmQKh5NlU54TX64Ubr0GsNvIUE9xIrCc_mdgTdCtvqIpOafPV755eXp9odraHTopQrz91-R6Ga3dPU5SUJKc7kIlb8YkiyZDAsx1lLcryqysZgGHv1Tgwu5FKE5F4amfP92lgTijdM-0yNIOHdt8iht2dEu8SzK9RQ86tklsXvu_VYhZQsbQ-EpFuvN07afWCzCtQ6fzRJfSbnFCaLtSGZ8yzKT__25914uewpmYEo3A">
+</div>
+<div>
+<h4 class="font-body-sm text-body-sm font-bold text-on-surface">Elena Voss</h4>
+<p class="font-label-xs text-[12px] text-on-surface-variant">Executive Producer</p>
+</div>
+</div>
+</div>
+<!-- Testimonial 2 -->
+<div class="bg-surface p-8 rounded-2xl border border-outline-variant/30">
+<p class="font-body-md text-body-md text-on-surface-variant mb-8 italic">
+                        "The character consistency is the best I've seen. Mara looks identical in every single 9:16 scene we generate."
+                    </p>
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-surface-container overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A small, round portrait of an independent filmmaker, Marcus Trent. He has a casual, artistic appearance, possibly with a slight beard and stylish glasses, lit with a subtle, moody studio light, fitting for a creative testimonial avatar." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAwUzFvWUKdGwY3DNu3u5mtHCBYmNKwZdhePIFwLomAL7lWvJlPbP3uFt1WwZT8pa5TjgMTSpbwfaMzHb7UmuPu0q1_T6YHf1uYsIoebcMJxUBVdycQ0FFe5AVE9nyjA0XxycJUIJp6G3Zl-D6JxCCRPerlxw5DuAWSGN3TSozPaXhBAYaq71WU_iqnPVWOOMmWI-3v4qEpLNMZTQeTUlvwGaoN30mg7-mc6Jg1Xno9OVFlHNVQuKsgUA">
+</div>
+<div>
+<h4 class="font-body-sm text-body-sm font-bold text-on-surface">Marcus Trent</h4>
+<p class="font-label-xs text-[12px] text-on-surface-variant">Independent Filmmaker</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- CTA Section -->
+<section class="py-32 bg-primary-container relative overflow-hidden flex flex-col items-center justify-center text-center px-margin-mobile">
+<div class="absolute inset-0 opacity-10" style="background-image: radial-gradient(circle at 2px 2px, black 1px, transparent 0); background-size: 32px 32px;"></div>
+<h2 class="font-display-lg text-[56px] leading-[1] font-black text-on-primary-container mb-6 relative z-10 max-w-3xl uppercase tracking-tighter">
+            Join the future of cinema
+        </h2>
+<p class="font-body-md text-body-md text-on-primary-container/80 max-w-xl mb-10 relative z-10 font-medium">
+            Start creating vertical micro-dramas with Shine today. Enterprise-grade AI at your fingertips.
+        </p>
+<a class="relative z-10 bg-on-surface text-surface px-10 py-4 rounded-full font-body-md font-bold uppercase tracking-wider hover:bg-surface-variant hover:text-on-surface transition-colors" href="#">
+            Get Started Now
+        </a>
+</section>
+<!-- Footer -->
+<footer class="w-full py-12 bg-surface-container-highest dark:bg-inverse-surface border-t border-outline-variant dark:border-outline">
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center px-margin-desktop gap-gutter max-w-container-max mx-auto">
+<div class="mb-8 md:mb-0 max-w-xs">
+<div class="flex items-center gap-2 mb-4">
+<img alt="Shine Intelligence Logo" class="h-6 w-auto grayscale opacity-80" src="https://lh3.googleusercontent.com/aida/AP1WRLuaPtDuN3RWNymo7PB6mSlvEnyP2qs9JFRcDj0AGUuHbhLQwknZMuhIFOuajtbm-xZlfZtubTtlsvS5ZabEAbxIVk1FT1Hew3MHLZGbJ6tJUNwO_EKDci4aN-7I_QJW9VCsiJQv1O_-Dd7eRqMS4s1J3cZjanzelx-9tA5Hrdt8EMVqpGUfi84wgkV4621eqn2b-x0tJ92n6ZFTXlWXnlRxdsEBDPeGokVZ-sWcF3FmGwBF0xwECoPvr_k">
+<span class="font-headline-lg text-headline-lg font-black text-on-surface dark:text-on-background uppercase tracking-tight">Shine</span>
+</div>
+<p class="font-label-xs text-label-xs text-on-surface-variant dark:text-outline max-w-[200px] leading-relaxed">
+                    Empowering creators with enterprise-grade AI for vertical micro-dramas.
+                </p>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-16 font-label-xs text-label-xs w-full md:w-auto">
+<div class="flex flex-col gap-3">
+<span class="font-bold text-on-surface dark:text-on-background uppercase tracking-widest mb-1">Product</span>
+<a class="text-on-surface-variant hover:text-on-surface transition-all" href="#">Features</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-all" href="#">Pricing</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-all" href="#">Marketplace</a>
+</div>
+<div class="flex flex-col gap-3">
+<span class="font-bold text-on-surface dark:text-on-background uppercase tracking-widest mb-1">Company</span>
+<a class="text-on-surface-variant hover:text-on-surface transition-all" href="#">About</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-all" href="#">Careers</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-all" href="#">Press</a>
+</div>
+<div class="flex flex-col gap-3">
+<span class="font-bold text-on-surface dark:text-on-background uppercase tracking-widest mb-1">Resources</span>
+<a class="text-on-surface-variant hover:text-on-surface transition-all" href="#">Blog</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-all" href="#">Help Center</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-all" href="#">API Docs</a>
+</div>
+<div class="flex flex-col gap-3">
+<span class="font-bold text-on-surface dark:text-on-background uppercase tracking-widest mb-1">Legal</span>
+<a class="text-on-surface-variant hover:text-on-surface transition-all" href="#">Privacy Policy</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-all" href="#">Terms of Service</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-all" href="#">API Documentation</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-all" href="#">Contact Sales</a>
+</div>
+</div>
+</div>
+<div class="px-margin-desktop max-w-container-max mx-auto mt-12 pt-6 border-t border-outline-variant/30 flex flex-col md:flex-row justify-between items-center gap-4">
+<span class="font-label-xs text-label-xs text-on-surface-variant dark:text-outline uppercase tracking-wider">© 2024 Shine Intelligence. Enterprise-grade AI Cinema.</span>
+<div class="flex gap-4">
+<!-- Social Icons Placeholders -->
+<div class="w-6 h-6 bg-outline-variant/50 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary-container hover:text-on-primary-container transition-colors cursor-pointer"><span class="text-[12px] font-bold">X</span></div>
+<div class="w-6 h-6 bg-outline-variant/50 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary-container hover:text-on-primary-container transition-colors cursor-pointer"><span class="text-[12px] font-bold">in</span></div>
+<div class="w-6 h-6 bg-outline-variant/50 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-primary-container hover:text-on-primary-container transition-colors cursor-pointer"><span class="text-[12px] font-bold">ig</span></div>
+</div>
+</div>
+</footer>
+</body></html>

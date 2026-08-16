@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-**Shine** (DramaFlowAI) is an enterprise-grade AI-powered platform tailored specifically for creating, producing, and distributing vertical short dramas (9:16 micro-dramas, popularized by Chinese-style Wēi Duǎnjù). Leveraging cutting-edge AI technologies (Google Vertex AI, Gemini, Google Veo), Shine streamlines the entire production pipeline from script generation and visual synthesis to audio mixing, auto-captioning, and cross-platform distribution. It is designed to empower modern creators and studios to produce high-retention, cinematic vertical video content at an unprecedented pace.
+**Shine** is an enterprise-grade AI-powered platform tailored specifically for creating, producing, and distributing vertical short dramas (9:16 micro-dramas, popularized by Chinese-style Wēi Duǎnjù). Leveraging cutting-edge AI technologies (Google Vertex AI, Gemini, Google Veo), Shine streamlines the entire production pipeline from script generation and visual synthesis to audio mixing, auto-captioning, and cross-platform distribution. It is designed to empower modern creators and studios to produce high-retention, cinematic vertical video content at an unprecedented pace.
 
 ## 2. Product Vision & Target Users
 
@@ -53,7 +53,7 @@ The central command center for all productions. Provides a high-level overview o
 A streamlined 3-step setup to define the core DNA of a new series.
 *   **Key Capabilities:** 
     - Genre selection (Suspense, Romance, Action, Satire) that automatically configures the AI engine's visual and script logic (e.g., moody lighting for suspense, warm palettes for romance).
-    - **Real-Time Viral Trend & Competitor Script Hunting (Parallel MCP):** Auto-scans TikTok, Douyin, X, and App Store top charts to discover real-time viral drama topics, high-retention hooks, and competitor script tropes, suggesting winning concept choices during onboarding.
+    - **Multi-Region Geo-Targeted Viral Trend & Competitor Script Hunting (Parallel MCP):** Auto-scans TikTok, Douyin, Kuaishou, YouTube Shorts, X, and App Store top charts filtered by country/region (`US` North America, `SEA_VN` Vietnam/Southeast Asia, `CN` China, `LATAM` Latin America, `JP_KR` East Asia, `EU` Europe) to discover real-time regional viral drama topics, hashtag velocity, high-retention hooks, and competitor script tropes.
     - **Cultural Compliance & Copyright Safety Engine (Parallel MCP / Gemini Guardrails):** Evaluates sensitive micro-drama themes (revenge, psychological drama, romantic tension) for multi-region content safety, age classification, and script/audio/image IP compliance before distribution.
 
 
@@ -114,7 +114,7 @@ Each clip on the VIDEO 1 track represents **one scene**, typically 4–8 seconds
 
 
 
-#### Web-Based Video Editor Timeline JSON Schema (Ref: `apps/vue-editor/tmp/data.ts`)
+#### Web-Based Video Editor Timeline JSON Schema (Ref: `apps/shine/tmp/data.ts`)
 
 The web-based timeline video editor and rendering engine operate on a standardized JSON state schema (`data.ts`):
 
@@ -401,13 +401,13 @@ Background music for scenes generated via `generateMusic()`:
     - **Music**: Lyria 3 via Vertex Interactions API (`interactions.create()`) via `generateMusic()`
     - **Live**: Gemini Live multimodal WebSocket (`connectLive()`) for real-time voice dubbing sessions
     - **File API**: `uploadFile()` / `waitForFileActive()` for large media upload to Gemini File API
-    - See implementation: [`GeminiClient.ts`](file:///D:/Workspace/Gits/CamHub/ams/AntStudio/server/src/integrations/ai/GeminiClient.ts)
+    - See implementation: [`GeminiClient.ts`](../../../../../ams/AntStudio/server/src/integrations/ai/GeminiClient.ts)
 *   **Multi-Episode Script Pipeline** (reference: BigBanana AI Director, LocalMiniDrama, Toonflow):
     - **Content hierarchy**: Series → Episodes → Scenes (4–8s clips) — same model as BigBanana's "项目 → 季 → 集" and LocalMiniDrama's 8-step pipeline
     - **Script-to-Asset-to-Keyframe** workflow: Story Skeleton Agent → Adaptation Strategy Agent → Script Agent → Supervision Agent → Visual Asset generation → Scene video clips → Episode assembly
     - **Character consistency** across all episodes via LoRA model injection in every Veo call (`referenceImages`), outfit continuity locking, and facial anchor mesh matching
     - **Canvas workflow** (inspired by LocalMiniDrama's LibTV-style canvas mode): each scene is a node in a visual pipeline — text → start frame → end frame → video clip → episode timeline
-    - Reference apps: [`BigBanana-AI-Director`](file:///D:/Workspace/Gits/CamHub/openvideo/apps/vue-editor/tmp/BigBanana-AI-Director-main), [`LocalMiniDrama`](file:///D:/Workspace/Gits/CamHub/openvideo/apps/vue-editor/tmp/LocalMiniDrama-main), [`Toonflow`](file:///D:/Workspace/Gits/CamHub/openvideo/apps/vue-editor/tmp/Toonflow-app-master)
+    - Reference apps: [`BigBanana-AI-Director`](../tmp/BigBanana-AI-Director-main), [`LocalMiniDrama`](../tmp/LocalMiniDrama-main), [`Toonflow`](../tmp/Toonflow-app-master)
 *   **Observability:** Grafana + OpenTelemetry for system health, render queue monitoring, and AI inference latency tracking per credential type.
 
 ## 7. User Journey Flows
@@ -534,7 +534,43 @@ Background music for scenes generated via `generateMusic()`:
 
 
 
+### 20. Strategic Market & Growth Features (Proposals 17–21)
+
+1. **1-Click Web Novel-to-Series Converter:** Auto-parses PDF/TXT/EPUB manuscripts, extracts character bibles, and generates a 50-episode structured JSON script in 60s using Gemini 3.5 Flash.
+2. **TikTok/Douyin Live-Stream Drama Engine:** Real-time WebSocket comment ingestion & audience polling triggering AntV G6 scene branch switches and live AI video clip generation.
+3. **AI Virtual Actor Royalty Marketplace (`/marketplace/actors`):** Creator hub for publishing 8-anchor Persona bibles and earning passive credit royalties when featured in third-party dramas.
+4. **Cultural Geo-Localization Agent (`POST /ai/cultural-adapt`):** Re-writes dialogue slang, adapts visual wardrobe presets, translates background signs, and tunes regional TTS accents for 6 global markets.
+5. **Predictive Paywall Placement & Monetization Doctor:** ML engagement curve analyzer recommending optimal paywall episode thresholds, coin pricing, and 30-day MRR projections.
+
+
+### 21. Technical Infrastructure & UX Improvements (Proposals 22–26)
+
+1. **Async Render Stream & Cloud Pub/Sub Queue (`GET /api/v1/render/stream`):** Real-time SSE / WebSocket render progress streaming preventing 504 Gateway Timeouts during 50-episode batch jobs.
+2. **AI Copyright Safety & Audio Fingerprinting (`POST /audio/copyright-verify`):** Pre-publishing audio scan auto-swapping copyrighted tracks with safe Lyria 3 / Artlist AI soundtracks.
+3. **Virtual Canvas Viewport & Lazy Asset Memory Manager:** WebGL texture windowing loading only 5 scene clips nearest to playhead to prevent browser RAM Out-Of-Memory crashes.
+4. **Touch-Optimized Tablet & Foldable Gesture Studio:** Pinch-to-zoom timeline scaling, drag-to-trim gesture handles, and floating AI action wheels for iPad and foldable devices.
+5. **Automated Revenue Split & Smart Rights Manager (`/billing/revenue-splits`):** Automated income distribution between writers, AI directors, and studio owners.
+
+
+### 22. AI Compliance, Vocal Control & Ecosystem Features (Proposals 27–30)
+
+1. **C2PA AI Provenance & SynthID Watermarking (`POST /export/c2pa-watermark`):** Cryptographic C2PA metadata embedding and Google SynthID invisible video/audio watermarking on MP4 exports for EU AI Act compliance.
+2. **Vocal Affect Steering & Intra-Scene Emotion Control (`POST /voices/steer-emotion`):** Micro-second SSML emotion switches (whispering, crying, laughing, screaming) matched to timeline keyframes.
+3. **AI Platform Recutter & Algorithm Optimizer (`POST /export/platform-recut`):** Automatic re-editing into platform cuts (59s YouTube Shorts vs 90s TikTok vs 15s IG Reels teaser).
+4. **Shine Creator Template & Prompt Marketplace (`/marketplace/templates`):** Creator Hub to buy, sell, or share pre-built Drama Presets, Virtual Sets, Color LUTs, and AntV G6 Story Trees for AI credit rewards.
+
+
+### 23. Hybrid AI Generation Providers & Google Flow Pool Router (Proposal 31)
+
+1. **Hybrid Provider Router:** Intelligently routes image and video generation requests between official paid GCP Vertex AI and internal Google Flow Account Pool (`FlowAdapter`, `FlowSyncService`, `CaptchaService`).
+2. **Google Flow Account Pool Manager (`/admin/flow-accounts`):** Admin portal interface for managing `google-flow` session tokens (`flowST`), tracking account credits, monitoring automated token refresh cycles, and configuring reCAPTCHA solver settings (`yescaptcha`, `capsolver`, `capmonster`, or local browser solver).
+3. **Zero-Cost Draft & Prototype Rendering:** Enables Free & Creator Pro tier users to generate draft storyboards and 9:16 Veo 3.1 video clips (`veo_3_1_t2v_fast_portrait`, `veo_3_1_i2v_s_fast_portrait_fl`, `veo_3_1_r2v_fast_portrait`) with 70–90% lower operational GPU cost.
+
 ---
+
+
+
+
 
 ## 8. Non-Functional Requirements
 

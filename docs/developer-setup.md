@@ -1,6 +1,6 @@
-# Shine (DramaFlowAI) Developer Setup Guide
+# Shine Developer Setup Guide
 
-This guide provides step-by-step instructions for setting up the local development environment for **Shine (DramaFlowAI) - AI Micro-Drama Video Studio**.
+This guide provides step-by-step instructions for setting up the local development environment for **Shine - AI Micro-Drama Video Studio**.
 
 ## 1. Prerequisites
 
@@ -79,9 +79,12 @@ GEMINI_MODEL_VOICE=gemini-live-2.5-flash-preview
 
 
 
-# Database
-MONGODB_URI=mongodb://localhost:27017/shine
-SQLITE_PATH=./data/shine.db
+# Pluggable Primary Database Provider ('sqlite' | 'mongodb')
+DB_PROVIDER=sqlite                                # Select primary DB: 'sqlite' (local file) or 'mongodb' (MongoDB Atlas)
+SQLITE_PATH=./data/shine.db                       # Path to SQLite database file
+MONGODB_URI=mongodb://localhost:27017/shine       # MongoDB connection URI
+
+
 
 # Object Storage (S3-compatible)
 S3_ENDPOINT=http://localhost:9000
@@ -98,44 +101,58 @@ YOUTUBE_CLIENT_ID=
 YOUTUBE_CLIENT_SECRET=
 
 # App
-PORT=3000
+PORT=3001
 JWT_SECRET=your-jwt-secret
-FRONTEND_URL=http://localhost:5173
+FRONTEND_URL=http://localhost:3000
 ```
 
-## 4. Local Development Setup
+## 4. Decoupled Workspace Local Development Setup
 
-Follow these steps to get the app running locally:
+The project uses a decoupled modular workspace structure:
 
-1. **Clone the repository:**
+- **Frontend SPA Workspace:** [`apps/shine/client`](../client)
+- **Backend Server Workspace:** [`apps/shine/server`](../server)
+- **UI Component Framework:** Element Plus (`element-plus`)
+- **UI Design Reference:** [`docs/design.md`](../docs/design.md)
+
+Follow these steps to get the full stack running locally:
+
+1. **Clone the repository & install dependencies:**
    ```bash
    git clone <repository-url>
-   cd shine
+   cd openvideo/apps/shine/client
+   pnpm install
    ```
 
-2. **Start Infrastructure Services (Docker):**
+2. **Frontend SPA Application Setup:**
+   - All UI views and components MUST use native Element Plus (`element-plus`) components and `@element-plus/icons-vue`.
+   - Do NOT invent ad-hoc inline CSS or custom HTML controls. Use standardized Element Plus components.
+
+3. **Start Infrastructure Services (MinIO & DB):**
    ```bash
    # Start MinIO (Object Storage)
    docker run -p 9000:9000 -p 9001:9001 -e "MINIO_ROOT_USER=minioadmin" -e "MINIO_ROOT_PASSWORD=minioadmin" quay.io/minio/minio server /data --console-address ":9001"
-
-   # Start MongoDB
-   docker run -p 27017:27017 -d mongo:latest
    ```
-   *Note: Ensure you create the `shine-assets` bucket in MinIO (http://localhost:9001).*
+   *Note: SQLite runs embedded automatically at `./data/shine.db`. If using MongoDB (`DB_PROVIDER=mongodb`), start MongoDB with `docker run -p 27017:27017 -d mongo:latest`.*
 
-3. **Backend Setup:**
+4. **Start Decoupled Backend API Server:**
    ```bash
-   cd backend # Adjust to your backend directory
-   npm install
-   # Run any necessary database migrations here
-   npm run dev
+   cd apps/shine/server
+   pnpm install
+   pnpm dev   # Runs Express server at http://localhost:3001
    ```
 
-4. **Frontend Setup:**
+5. **Start Decoupled Frontend SPA Application:**
    ```bash
-   cd ../frontend # Adjust to your frontend directory (Vue 3)
-   npm install
-   npm run dev
+   cd apps/shine/client
+   pnpm install
+   pnpm dev   # Runs Vite Vue 3 SPA at http://localhost:3000 consuming src/components/basic
+   ```
+
+6. **Start Full-Stack Simultaneously (Root script):**
+   ```bash
+   # From root workspace
+   pnpm dev   # Concurrently launches backend server (:3001) and frontend SPA (:3000)
    ```
 
 ## 5. Testing Vertex AI Connection
@@ -180,7 +197,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.dev
     ports:
-      - "5173:5173"
+      - "3000:3000"
     environment:
       - VITE_API_URL=http://localhost:3000
     volumes:
@@ -192,7 +209,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.dev
     ports:
-      - "3000:3000"
+      - "3001:3001"
     env_file:
       - .env
     depends_on:
@@ -277,6 +294,11 @@ To prevent accidental code deletion, regression, or corruption during automated 
 ### Protocol 5: Strict Contract & Comment Preservation
 - Retain all unrelated comments, docstrings, exported types, interfaces, and error handling branches unless explicitly instructed to refactor them.
 
+### Protocol 6: Zero Hardcoded Strings & i18n Dictionary Integrity
+- NEVER hardcode raw English or Vietnamese text strings directly inside Vue component templates.
+- ALL user-facing text strings MUST be bound to `$t('...')` / `useI18n()` translation keys.
+- Developers and AI Agents MUST populate all 6 locale JSON dictionary files (`src/locales/{en,vi,zh,jp,es,fr}.json`) whenever creating or modifying UI components.
+
 ---
 
 ## 11. Anti-Hallucination & Definition of Done (DoD) Protocols
@@ -304,5 +326,21 @@ When a user asks *"Did you double check?"* or raises a verification query:
 ### Rule 4: Prohibition of Superficial Symptom Patches
 - NEVER resolve errors or pass tests by swallowing exceptions, commenting out broken assertions, returning dummy 0-byte fallbacks, or creating empty stub functions.
 - Always fix the root-cause data flow and preserve underlying system contracts.
+
+### Rule 5: Store-Driven Data Fetching & Centralized Axios Client
+- Raw `fetch()` calls scattered across Vue page templates or view scripts are STRICTLY PROHIBITED.
+- All network interactions MUST call Pinia store actions (`src/stores/` or `src/store/modules/`).
+- All HTTP requests MUST use the centralized Axios client (`src/utils/http.ts`) featuring automatic JWT Bearer header injection and global 401 unauthorized redirect handlers.
+
+### Rule 6: Standardized Server API Response Format
+- All Express backend REST API endpoints MUST return JSON payloads formatted strictly as:
+  ```json
+  {
+    "code": 200,
+    "data": { ... },
+    "message": "Operation completed successfully",
+    "error": null
+  }
+  ```
 
 

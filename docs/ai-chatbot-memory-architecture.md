@@ -1,6 +1,6 @@
 # AI Director Chatbot Long-Term Memory & Vector RAG Architecture
 
-This document details the 4-tier long-term memory architecture, vector retrieval pipeline, and knowledge graph engine that enables the **AI Director Chatbot Agent** to seamlessly load and query massive multi-episode series data (projects, 50-episode scripts, character bibles, scene environments, voiceover WAVs, microsecond timeline JSONs, comment threads, and social retention analytics) in **Shine (DramaFlowAI)**.
+This document details the 4-tier long-term memory architecture, vector retrieval pipeline, and knowledge graph engine that enables the **AI Director Chatbot Agent** to seamlessly load and query massive multi-episode series data (projects, 50-episode scripts, character bibles, scene environments, voiceover WAVs, microsecond timeline JSONs, comment threads, and social retention analytics) in **Shine**.
 
 ---
 
