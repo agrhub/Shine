@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'shine_jwt_secret_key_2026';
+import { EnvConfig } from '@/config/env.js';
 
 export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -11,7 +10,7 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const decoded = jwt.verify(token, EnvConfig.jwtSecret) as any;
     
     // Attach user to request
     (req as any).user = {

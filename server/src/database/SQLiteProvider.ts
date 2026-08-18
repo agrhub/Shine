@@ -1,7 +1,8 @@
 import path from 'path';
 import fs from 'fs';
 import Database from 'better-sqlite3';
-import { IDatabaseProvider, UserEntity, SeriesEntity, EpisodeEntity, FlowAccountEntity } from './IDatabaseProvider.js';
+import { nanoid } from 'nanoid';
+import { IDatabaseProvider, UserEntity, SeriesEntity, EpisodeEntity, FlowAccountEntity, CreditTransactionEntity } from './IDatabaseProvider.js';
 
 export class SQLiteProvider implements IDatabaseProvider {
   private db: any = null;
@@ -9,6 +10,7 @@ export class SQLiteProvider implements IDatabaseProvider {
 
   // In-memory fallback stores if native bindings are unavailable
   private usersStore: UserEntity[] = [];
+  private creditTxStore: CreditTransactionEntity[] = [];
   private seriesStore: SeriesEntity[] = [];
   private episodesStore: EpisodeEntity[] = [];
   private flowStore: FlowAccountEntity[] = [];
@@ -43,6 +45,7 @@ export class SQLiteProvider implements IDatabaseProvider {
           password_hash TEXT,
           name TEXT,
           avatar_url TEXT,
+          role TEXT DEFAULT 'user',
           tier TEXT DEFAULT 'FREE',
           credits INTEGER DEFAULT 100,
           theme TEXT DEFAULT 'dark',
@@ -107,7 +110,25 @@ export class SQLiteProvider implements IDatabaseProvider {
           value TEXT NOT NULL,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS credit_transactions (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          activity TEXT NOT NULL,
+          details TEXT,
+          amount INTEGER NOT NULL,
+          balance_after INTEGER NOT NULL,
+          status TEXT DEFAULT 'Success',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(user_id) REFERENCES users(id)
+        );
       `);
+
+      try {
+        this.db.prepare("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'").run();
+      } catch {
+        // column already exists
+      }
 
       const countUser = (this.db.prepare('SELECT COUNT(*) as c FROM users').get() as any)?.c;
       if (countUser === 0) {
@@ -177,6 +198,7 @@ export class SQLiteProvider implements IDatabaseProvider {
 
   async createUser(user: UserEntity): Promise<UserEntity> {
     if (this.isFallback) {
+      user.role = user.role || 'user';
       user.theme = user.theme || 'dark';
       user.language = user.language || 'en';
       this.usersStore.push(user);
@@ -184,13 +206,14 @@ export class SQLiteProvider implements IDatabaseProvider {
     }
     try {
       this.db.prepare(`
-        INSERT INTO users (id, email, password_hash, name, tier, credits, theme, language)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO users (id, email, password_hash, name, role, tier, credits, theme, language)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         user.id,
         user.email,
         user.password_hash || '',
         user.name,
+        user.role || 'user',
         user.tier,
         user.credits,
         user.theme || 'dark',
@@ -203,6 +226,16 @@ export class SQLiteProvider implements IDatabaseProvider {
       `).run(user.id, user.email, user.password_hash || '', user.name, user.tier, user.credits);
     }
     return (await this.getUserById(user.id))!;
+  }
+
+  async countUsers(): Promise<number> {
+    if (this.isFallback) return this.usersStore.length;
+    try {
+      const row = this.db.prepare('SELECT COUNT(*) as count FROM users').get() as any;
+      return Number(row?.count || 0);
+    } catch {
+      return 0;
+    }
   }
 
   async getUserByEmail(email: string): Promise<UserEntity | null> {
@@ -276,6 +309,74 @@ export class SQLiteProvider implements IDatabaseProvider {
     }
 
     return (await this.getUserById(user.id)) || user;
+  }
+
+  async deductCredits(userId: string, amount: number, activity: string, details?: string): Promise<{ success: boolean; balance: number; transaction?: CreditTransactionEntity; error?: string }> {
+    const user = await this.getUserById(userId);
+    if (!user) {
+      return { success: false, balance: 0, error: 'User not found' };
+    }
+
+    const currentCredits = user.credits ?? 0;
+    if (currentCredits < amount) {
+      return { success: false, balance: currentCredits, error: `Insufficient credits. Required: ${amount}, Available: ${currentCredits}` };
+    }
+
+    const newBalance = currentCredits - amount;
+    user.credits = newBalance;
+    await this.updateUser(user);
+
+    const tx: CreditTransactionEntity = {
+      id: `tx_${nanoid(10)}`,
+      user_id: userId,
+      activity,
+      details: details || '',
+      amount: -amount,
+      balance_after: newBalance,
+      status: 'Success',
+      created_at: new Date().toISOString(),
+    };
+
+    await this.recordCreditTransaction(tx);
+    return { success: true, balance: newBalance, transaction: tx };
+  }
+
+  async getCreditHistory(userId?: string, limit = 50): Promise<CreditTransactionEntity[]> {
+    if (this.isFallback) {
+      const list = userId ? this.creditTxStore.filter((t) => t.user_id === userId) : this.creditTxStore;
+      return list.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')).slice(0, limit);
+    }
+    try {
+      if (userId) {
+        return this.db.prepare('SELECT * FROM credit_transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT ?').all(userId, limit) as CreditTransactionEntity[];
+      }
+      return this.db.prepare('SELECT * FROM credit_transactions ORDER BY created_at DESC LIMIT ?').all(limit) as CreditTransactionEntity[];
+    } catch {
+      return [];
+    }
+  }
+
+  async recordCreditTransaction(tx: CreditTransactionEntity): Promise<CreditTransactionEntity> {
+    if (this.isFallback) {
+      this.creditTxStore.unshift(tx);
+      return tx;
+    }
+    try {
+      this.db.prepare(`
+        INSERT INTO credit_transactions (id, user_id, activity, details, amount, balance_after, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        tx.id,
+        tx.user_id,
+        tx.activity,
+        tx.details || '',
+        tx.amount,
+        tx.balance_after,
+        tx.status || 'Success',
+        tx.created_at || new Date().toISOString()
+      );
+    } catch {}
+    return tx;
   }
 
   async createSeries(series: SeriesEntity): Promise<SeriesEntity> {
@@ -430,6 +531,17 @@ export class SQLiteProvider implements IDatabaseProvider {
         last_synced_at = CURRENT_TIMESTAMP
     `).run(account.id, account.email, account.session_token, account.access_token || '', account.project_id || '', account.status, account.credits_remaining);
     return account;
+  }
+
+  async deleteFlowAccount(idOrEmail: string): Promise<boolean> {
+    this.flowStore = this.flowStore.filter((f) => f.id !== idOrEmail && f.email !== idOrEmail);
+    if (this.isFallback) return true;
+    try {
+      this.db.prepare('DELETE FROM flow_accounts WHERE id = ? OR email = ?').run(idOrEmail, idOrEmail);
+      return true;
+    } catch {
+      return true;
+    }
   }
 
   async saveTimeline(
@@ -598,6 +710,38 @@ export class SQLiteProvider implements IDatabaseProvider {
       activeTimeline: version.timelineData,
       createdAt: saveRes.updatedAt,
     };
+  }
+
+  private assetsStore: any[] = [];
+
+  async saveAsset(asset: any): Promise<any> {
+    const idx = this.assetsStore.findIndex((a) => a.id === asset.id);
+    if (idx !== -1) {
+      this.assetsStore[idx] = { ...this.assetsStore[idx], ...asset };
+      return this.assetsStore[idx];
+    } else {
+      this.assetsStore.unshift(asset);
+      return asset;
+    }
+  }
+
+  async getAssets(filter?: { userId?: string; seriesId?: string; type?: string; characterId?: string; search?: string }): Promise<any[]> {
+    let filtered = [...this.assetsStore];
+    if (filter?.userId) filtered = filtered.filter(a => a.userId === filter.userId || a.user_id === filter.userId);
+    if (filter?.seriesId) filtered = filtered.filter(a => a.seriesId === filter.seriesId);
+    if (filter?.type && filter.type !== 'all') filtered = filtered.filter(a => a.type?.toLowerCase() === filter.type?.toLowerCase());
+    if (filter?.characterId) filtered = filtered.filter(a => a.characterId === filter.characterId);
+    if (filter?.search) {
+      const q = filter.search.toLowerCase();
+      filtered = filtered.filter(a => a.name?.toLowerCase().includes(q) || a.categoryLabel?.toLowerCase().includes(q) || a.prompt?.toLowerCase().includes(q));
+    }
+    return filtered;
+  }
+
+  async deleteAsset(id: string): Promise<boolean> {
+    const prevLen = this.assetsStore.length;
+    this.assetsStore = this.assetsStore.filter((a) => a.id !== id);
+    return this.assetsStore.length < prevLen;
   }
 
   async getSystemSetting<T = any>(key: string): Promise<T | null> {

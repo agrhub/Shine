@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
-import { IDatabaseProvider, UserEntity, SeriesEntity, EpisodeEntity, FlowAccountEntity } from './IDatabaseProvider.js';
+import { nanoid } from 'nanoid';
+import { IDatabaseProvider, UserEntity, SeriesEntity, EpisodeEntity, FlowAccountEntity, CreditTransactionEntity } from './IDatabaseProvider.js';
 
 const UserSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
@@ -42,14 +43,17 @@ const EpisodeSchema = new mongoose.Schema({
   synopsis: String,
   scene_core: String,
   conflict_escalation: String,
-  cliffhanger_hook: String,
   phase: String,
   scenes: [mongoose.Schema.Types.Mixed],
+  languageTracks: [mongoose.Schema.Types.Mixed],
+  activeLanguageCode: { type: String, default: 'vi-VN' },
   script: String,
   duration: { type: Number, default: 90 },
   status: { type: String, default: 'DRAFT' },
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
+}, {
+  strict: false,
 });
 
 const FlowAccountSchema = new mongoose.Schema({
@@ -82,38 +86,125 @@ const SystemSettingSchema = new mongoose.Schema({
   updated_at: { type: Date, default: Date.now }
 });
 
-const UserModel = mongoose.models.User || mongoose.model('User', UserSchema);
-const SeriesModel = mongoose.models.Series || mongoose.model('Series', SeriesSchema);
-const EpisodeModel = mongoose.models.Episode || mongoose.model('Episode', EpisodeSchema);
-const FlowAccountModel = mongoose.models.FlowAccount || mongoose.model('FlowAccount', FlowAccountSchema);
-const TimelineSnapshotModel = mongoose.models.TimelineSnapshot || mongoose.model('TimelineSnapshot', TimelineSnapshotSchema);
-const SystemSettingModel = mongoose.models.SystemSetting || mongoose.model('SystemSetting', SystemSettingSchema);
+const CreditTransactionSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  user_id: { type: String, required: true, index: true },
+  activity: { type: String, required: true },
+  details: String,
+  amount: { type: Number, required: true },
+  balance_after: { type: Number, required: true },
+  status: { type: String, default: 'Success' },
+  created_at: { type: Date, default: Date.now }
+});
+
+const SocialAccountSchema = new mongoose.Schema({
+  userId: { type: String, required: true },
+  platform: { type: String, required: true },
+  channelId: { type: String, required: true },
+  channelName: { type: String, required: true },
+  channelAvatarUrl: { type: String },
+  accessToken: { type: String, required: true },
+  refreshToken: { type: String },
+  tokenExpiresAt: { type: Date },
+  scopes: { type: [String], default: [] },
+  isActive: { type: Boolean, default: true },
+}, {
+  timestamps: true,
+});
+
+const AssetSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  user_id: { type: String, default: 'usr_default' },
+  name: { type: String, required: true },
+  type: { type: String, required: true },
+  ext: String,
+  size: String,
+  sizeBytes: Number,
+  categoryLabel: String,
+  categoryColor: String,
+  s3Key: String,
+  url: { type: String, required: true },
+  thumbnail: String,
+  seriesId: String,
+  episodeId: String,
+  sceneId: String,
+  characterId: String,
+  prompt: String,
+  provider: String,
+  aspect: String,
+  isVideo: Boolean,
+  isAudio: Boolean,
+  synthIdVerified: Boolean,
+  synthIdHash: String,
+  synthIdMetadata: mongoose.Schema.Types.Mixed,
+  metadata: mongoose.Schema.Types.Mixed,
+  created_at: { type: Date, default: Date.now }
+});
+
+const AIAccountSchema = new mongoose.Schema({
+  email: { type: String, required: true },
+  name: { type: String },
+  avatarUrl: { type: String },
+  accountType: { type: String, required: true },
+  status: { type: String, default: 'READY' },
+  flowST: { type: String },
+  flowAT: { type: String },
+  flowATExpiresAt: { type: Date },
+  projectId: { type: String },
+  credits: { type: Number, default: 0 },
+  errorMessage: { type: String },
+  lastFingerprint: { type: Map, of: String },
+  serviceKeys: { type: Map, of: String },
+  isActive: { type: Boolean, default: true },
+}, {
+  timestamps: true,
+});
+
+export const UserModel = mongoose.models.User || mongoose.model('User', UserSchema);
+export const SeriesModel = mongoose.models.Series || mongoose.model('Series', SeriesSchema);
+export const EpisodeModel = mongoose.models.Episode || mongoose.model('Episode', EpisodeSchema);
+export const FlowAccountModel = mongoose.models.FlowAccount || mongoose.model('FlowAccount', FlowAccountSchema);
+export const TimelineSnapshotModel = mongoose.models.TimelineSnapshot || mongoose.model('TimelineSnapshot', TimelineSnapshotSchema);
+export const SystemSettingModel = mongoose.models.SystemSetting || mongoose.model('SystemSetting', SystemSettingSchema);
+export const CreditTransactionModel = mongoose.models.CreditTransaction || mongoose.model('CreditTransaction', CreditTransactionSchema);
+export const SocialAccountModel = mongoose.models.SocialAccount || mongoose.model('SocialAccount', SocialAccountSchema);
+export const AssetModel = mongoose.models.Asset || mongoose.model('Asset', AssetSchema);
+export const AIAccountModel = mongoose.models.AIAccount || mongoose.model('AIAccount', AIAccountSchema);
+export const AIAccount = AIAccountModel;
+export const SocialAccount = SocialAccountModel;
+export const Asset = AssetModel;
+
+import { EnvConfig } from '@/config/env.js';
+
+import dns from 'dns';
 
 export class MongoDBProvider implements IDatabaseProvider {
   private mongoUri: string;
 
   constructor() {
-    this.mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/shine_db';
+    this.mongoUri = EnvConfig.mongoUri;
   }
 
   async initialize(): Promise<void> {
     if (mongoose.connection.readyState < 1) {
-      await mongoose.connect(this.mongoUri, { serverSelectionTimeoutMS: 5000 });
-      console.log('[MongoDBProvider] Connected to MongoDB at:', this.mongoUri);
-    }
+      try {
+        // Fix Node.js Windows SRV lookup issue (querySrv ECONNREFUSED)
+        if (this.mongoUri.startsWith('mongodb+srv://')) {
+          try {
+            dns.setServers(['8.8.8.8', '1.1.1.1']);
+          } catch {}
+        }
 
-    const userCount = await UserModel.countDocuments();
-    if (userCount === 0) {
-      await UserModel.create({ id: 'usr_default', email: 'creator@shine.ai', name: 'Creator Alpha', tier: 'PRO', credits: 1000 });
-      await SeriesModel.create([
-        { id: 'srs_01', user_id: 'usr_default', title: 'The Hidden Heiress Reclaims the Empire', genre: 'Revenge', tone: 'Tense & High Stakes', visual_style: 'Cinematic 9:16', target_audience: 'Young Adults', episode_count: 24, status: 'PUBLISHED' },
-        { id: 'srs_02', user_id: 'usr_default', title: 'Shadow CEO: Double Identity', genre: 'Suspense', tone: 'Mysterious', visual_style: 'Neo-Noir Dark', target_audience: 'Gen-Z', episode_count: 30, status: 'DRAFT' }
-      ]);
-      await EpisodeModel.create([
-        { id: 'ep_01', series_id: 'srs_01', episode_number: 1, title: 'Episode 1: The Banquet Betrayal', synopsis: 'A grand banquet turns into a corporate takeover when the exiled daughter returns.', status: 'PUBLISHED' },
-        { id: 'ep_02', series_id: 'srs_01', episode_number: 2, title: 'Episode 2: Unmasking the Imposter', synopsis: 'The CEO reveals the fraudulent stock transfer in front of the board.', status: 'DRAFT' }
-      ]);
-      await FlowAccountModel.create({ id: 'flow_01', email: 'pool_account_1@labs.google', session_token: 'flowST_mock_session_token_alpha', access_token: 'ya29.flow_mock_access_token_alpha', project_id: 'proj_pinhole_alpha', status: 'ACTIVE', credits_remaining: 100 });
+        console.log('[MongoDBProvider] url:', this.mongoUri);
+        await mongoose.connect(this.mongoUri, {
+          serverSelectionTimeoutMS: 5000,
+        });
+        console.log('[MongoDBProvider] Connected to MongoDB at:', this.mongoUri);
+      } catch (err: any) {
+        // Disconnect immediately to stop Mongoose buffering
+        try { await mongoose.disconnect(); } catch {}
+        throw err;
+      }
     }
   }
 
@@ -130,14 +221,59 @@ export class MongoDBProvider implements IDatabaseProvider {
     return (await UserModel.findOne({ id }).lean()) as any;
   }
 
+  async countUsers(): Promise<number> {
+    return await UserModel.countDocuments();
+  }
+
   async updateUserPreferences(userId: string, prefs: { theme?: string; language?: string }): Promise<UserEntity | null> {
-    const updated = await UserModel.findOneAndUpdate({ id: userId }, { $set: prefs }, { new: true }).lean();
+    const updated = await UserModel.findOneAndUpdate({ id: userId }, { $set: prefs }, { returnDocument: 'after' }).lean();
     return updated as any;
   }
 
   async updateUser(user: UserEntity): Promise<UserEntity> {
-    const updated = await UserModel.findOneAndUpdate({ id: user.id }, { $set: user }, { new: true, upsert: true }).lean();
+    const updated = await UserModel.findOneAndUpdate({ id: user.id }, { $set: user }, { returnDocument: 'after', upsert: true }).lean();
     return updated as any;
+  }
+
+  async deductCredits(userId: string, amount: number, activity: string, details?: string): Promise<{ success: boolean; balance: number; transaction?: CreditTransactionEntity; error?: string }> {
+    const user = await this.getUserById(userId);
+    if (!user) {
+      return { success: false, balance: 0, error: 'User not found' };
+    }
+
+    const currentCredits = user.credits ?? 0;
+    if (currentCredits < amount) {
+      return { success: false, balance: currentCredits, error: `Insufficient credits. Required: ${amount}, Available: ${currentCredits}` };
+    }
+
+    const newBalance = currentCredits - amount;
+    user.credits = newBalance;
+    await this.updateUser(user);
+
+    const tx: CreditTransactionEntity = {
+      id: `tx_${nanoid(10)}`,
+      user_id: userId,
+      activity,
+      details: details || '',
+      amount: -amount,
+      balance_after: newBalance,
+      status: 'Success',
+      created_at: new Date().toISOString(),
+    };
+
+    await this.recordCreditTransaction(tx);
+    return { success: true, balance: newBalance, transaction: tx };
+  }
+
+  async getCreditHistory(userId?: string, limit = 50): Promise<CreditTransactionEntity[]> {
+    const filter: any = {};
+    if (userId) filter.user_id = userId;
+    return (await CreditTransactionModel.find(filter).sort({ created_at: -1 }).limit(limit).lean()) as any;
+  }
+
+  async recordCreditTransaction(tx: CreditTransactionEntity): Promise<CreditTransactionEntity> {
+    const created = await CreditTransactionModel.create(tx);
+    return created.toObject() as any;
   }
 
   async createSeries(series: SeriesEntity): Promise<SeriesEntity> {
@@ -158,7 +294,7 @@ export class MongoDBProvider implements IDatabaseProvider {
   }
 
   async updateSeries(id: string, updates: Partial<SeriesEntity>): Promise<SeriesEntity | null> {
-    const updated = await SeriesModel.findOneAndUpdate({ id }, { $set: { ...updates, updated_at: new Date() } }, { new: true }).lean();
+    const updated = await SeriesModel.findOneAndUpdate({ id }, { $set: { ...updates, updated_at: new Date() } }, { returnDocument: 'after' }).lean();
     return updated as any;
   }
 
@@ -183,19 +319,32 @@ export class MongoDBProvider implements IDatabaseProvider {
   }
 
   async updateEpisode(id: string, updates: Partial<EpisodeEntity>): Promise<EpisodeEntity | null> {
-    const updated = await EpisodeModel.findOneAndUpdate({ id }, { $set: updates }, { new: true }).lean();
+    const updated = await EpisodeModel.findOneAndUpdate({ id }, { $set: updates }, { returnDocument: 'after' }).lean();
     return updated as any;
   }
 
   async getFlowAccounts(status?: string): Promise<FlowAccountEntity[]> {
+    if (mongoose.connection.readyState < 1) return [];
     const filter: any = {};
     if (status) filter.status = status;
     return (await FlowAccountModel.find(filter).sort({ credits_remaining: -1 }).lean()) as any;
   }
 
   async upsertFlowAccount(account: FlowAccountEntity): Promise<FlowAccountEntity> {
-    const updated = await FlowAccountModel.findOneAndUpdate({ email: account.email }, account, { upsert: true, new: true }).lean();
+    if (mongoose.connection.readyState < 1) return account;
+    const updated = await FlowAccountModel.findOneAndUpdate({ email: account.email }, account, { upsert: true, returnDocument: 'after' }).lean();
     return updated as any;
+  }
+
+  async deleteFlowAccount(idOrEmail: string): Promise<boolean> {
+    if (mongoose.connection.readyState < 1) return true;
+    const isObjectId = mongoose.Types.ObjectId.isValid(idOrEmail);
+    const filter = isObjectId
+      ? { $or: [{ _id: idOrEmail }, { id: idOrEmail }, { email: idOrEmail }] }
+      : { $or: [{ id: idOrEmail }, { email: idOrEmail }] };
+    await FlowAccountModel.deleteMany(filter);
+    await AIAccountModel.deleteMany(filter);
+    return true;
   }
 
   async saveTimeline(
@@ -301,16 +450,52 @@ export class MongoDBProvider implements IDatabaseProvider {
     };
   }
 
+  async saveAsset(asset: any): Promise<any> {
+    if (mongoose.connection.readyState < 1) return asset;
+    const doc = await AssetModel.findOneAndUpdate(
+      { id: asset.id },
+      { $set: { ...asset, created_at: asset.created_at || new Date() } },
+      { upsert: true, returnDocument: 'after' }
+    ).lean();
+    return doc;
+  }
+
+  async getAssets(filter?: { userId?: string; seriesId?: string; type?: string; characterId?: string; search?: string }): Promise<any[]> {
+    if (mongoose.connection.readyState < 1) return [];
+    const query: any = {};
+    if (filter?.userId) query.user_id = filter.userId;
+    if (filter?.seriesId) query.seriesId = filter.seriesId;
+    if (filter?.type && filter.type !== 'all') query.type = filter.type;
+    if (filter?.characterId) query.characterId = filter.characterId;
+    if (filter?.search) {
+      query.$or = [
+        { name: { $regex: filter.search, $options: 'i' } },
+        { categoryLabel: { $regex: filter.search, $options: 'i' } },
+        { prompt: { $regex: filter.search, $options: 'i' } },
+      ];
+    }
+    const docs = await AssetModel.find(query).sort({ created_at: -1 }).lean();
+    return docs;
+  }
+
+  async deleteAsset(id: string): Promise<boolean> {
+    if (mongoose.connection.readyState < 1) return false;
+    const res = await AssetModel.deleteOne({ id });
+    return res.deletedCount > 0;
+  }
+
   async getSystemSetting<T = any>(key: string): Promise<T | null> {
+    if (mongoose.connection.readyState < 1) return null;
     const doc = await SystemSettingModel.findOne({ key }).lean();
     return doc ? (doc as any).value : null;
   }
 
   async saveSystemSetting<T = any>(key: string, value: T): Promise<void> {
+    if (mongoose.connection.readyState < 1) return;
     await SystemSettingModel.findOneAndUpdate(
       { key },
       { $set: { key, value, updated_at: new Date() } },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
   }
 }

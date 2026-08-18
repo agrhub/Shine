@@ -97,7 +97,7 @@ If the target cannot be matched, return: `Unable to recognize audit target. Plea
 
 1. **8 Core Elements Covered**: High visual fidelity, dialogue economy, hyper-fast pacing, strict main axis, low cognitive friction, emotion over exposition, opening anticipation, Show Don't Tell.
 2. **Tone Consistency**: Tone matches skeleton genre throughout.
-3. **Character Arc Preservation**: Protagonist and key supporting retain developmental arcs.
+3. **Character Arc Preservation**: Protagonist and key supporter retain developmental arcs.
 4. **Deletion Decisions Justified**: Global cut table specifies non-essential subplots with valid rationale.
 
 ---

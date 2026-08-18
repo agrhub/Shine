@@ -184,14 +184,14 @@ export class GeminiClient {
   }
 
   public async generateText(options: { model?: string; prompt: string; systemInstruction?: string; jsonMode?: boolean }): Promise<string> {
-    const res = await this.generateContent(options.prompt, options.model || EnvConfig.geminiModelTextAnalysis, {
+    const res = await this.generateContent(options.prompt, options.model || EnvConfig.geminiModelText, {
       systemPrompt: options.systemInstruction,
       generationConfig: { responseMimeType: options.jsonMode ? 'application/json' : 'text/plain' },
     });
     return res.text;
   }
 
-  public async generateContent(prompt: string | any[], modelId: string = EnvConfig.geminiModelTextAnalysis, options: any = {}) {
+  public async generateContent(prompt: string | any[], modelId: string = EnvConfig.geminiModelText, options: any = {}) {
     try {
       const client = this.getClient(modelId);
       const parts: any[] = Array.isArray(prompt) ? prompt : [{ text: String(prompt) }];
@@ -230,11 +230,11 @@ export class GeminiClient {
   }
 
   public async generateImage(options: { model?: string; prompt: string; aspectRatio?: '1:1' | '9:16' | '16:9' }) {
-    const res = await this._generateImage(options.prompt, options.model || EnvConfig.geminiModelImageGeneration, options);
+    const res = await this._generateImage(options.prompt, options.model || EnvConfig.geminiModelImage, options);
     return res?.url?.split('base64,')[1] || null;
   }
 
-  public async _generateImage(prompt: string, modelId: string = EnvConfig.geminiModelImageGeneration, options: any = {}): Promise<{ url: string; mimeType: string } | null> {
+  public async _generateImage(prompt: string, modelId: string = EnvConfig.geminiModelImage, options: any = {}): Promise<{ url: string; mimeType: string } | null> {
     try {
       const client = this.getClient(modelId);
       const isImagenModel = modelId.startsWith('imagen-');
@@ -279,7 +279,7 @@ export class GeminiClient {
     }
   }
 
-  public async generateVideo(prompt: string, modelId: string = EnvConfig.geminiModelVideoGeneration, options: any = {}): Promise<{ url?: string; mimeType?: string; sceneId?: string; statusUrl?: string; jobId?: string; status?: string } | null> {
+  public async generateVideo(prompt: string, modelId: string = EnvConfig.geminiModelVideo, options: any = {}): Promise<{ url?: string; mimeType?: string; sceneId?: string; statusUrl?: string; jobId?: string; status?: string } | null> {
     try {
       const client = this.getClient(modelId);
       const genConfig: any = {};

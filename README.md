@@ -53,7 +53,7 @@
 
 ### 🚀 7. Dual-Mode Render & Export (B8)
 - **Local In-Browser Render**: Zero-server-cost fast client rendering via WebCodecs (`mediabunny` / `ExportModal`).
-- **Cloud Server Queue**: Scalable background rendering via FFmpeg for high-resolution distribution bundles.
+- **Cloud Server Queue**: Scalable background rendering via OpenVideo engine for high-resolution distribution bundles.
 - **Post-Render Review**: In-app video preview player with instant download and direct publishing triggers.
 
 ### 🛡️ 8. AI Watermarking & Provenance
@@ -75,7 +75,7 @@ graph TD
     Server -->|Video Generation| VideoAI[Image-to-Video Pipeline]
     Server -->|Cloud Storage| S3[Backblaze B2 / AWS S3]
     Server -->|Persistence| DB[(MongoDB / SQLite)]
-    Server -->|Cloud Render| FFmpeg[FFmpeg Render Worker]
+    Server -->|Cloud Render| OpenVideo[OpenVideo Render Worker]
     Server -->|Authenticity| C2PA[C2PA & SynthID Service]
 ```
 
@@ -89,7 +89,7 @@ graph TD
 | **Internationalization** | [Vue I18n](https://vue-i18n.intlify.dev/) (EN, VI, ZH, JA, KO) |
 | **Backend API** | [Node.js](https://nodejs.org/), [Express](https://expressjs.com/), [Socket.io](https://socket.io/) |
 | **Database** | [MongoDB](https://www.mongodb.com/) (`mongoose`) / SQLite (`better-sqlite3`) |
-| **Media Processing** | [FFmpeg](https://ffmpeg.org/) (`fluent-ffmpeg`), [Mediabunny](https://github.com/) |
+| **Media Processing** | [OpenVideo](https://openvideo.dev/) (`@openvideo/core`), [Mediabunny](https://github.com/) |
 | **AI Services** | Google Gemini (`@google/genai`), Vertex AI, SynthID |
 | **Observability** | [OpenTelemetry](https://opentelemetry.io/) traces & metrics |
 
@@ -122,7 +122,6 @@ graph TD
 
 - **Node.js**: `v20.x` or higher
 - **Package Manager**: `pnpm` (`v9.x` or `v10.x`)
-- **FFmpeg**: (Optional for server rendering) Installed and available in your `PATH`
 
 ### 1. Clone the Repository
 

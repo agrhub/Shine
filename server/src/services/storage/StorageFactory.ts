@@ -142,8 +142,35 @@ export class StorageFactory {
    * Get streaming readable stream from active storage adapter.
    */
   public static async getFileStream(key: string): Promise<any> {
+    // Check if URL matches /api/assets/file/{storageKey}
+    const match = key.match(/(?:\/api\/assets\/file\/)(.+)$/);
+    if (match && match[1]) {
+      key = decodeURIComponent(match[1]);
+    }
     const adapter = await this.getActiveAdapter();
     return adapter.getFileStream(key);
+  }
+
+  /**
+   * Resolves internal /api/assets/file/* format or raw storage key to a public S3 / Cloud Storage URL.
+   */
+  public static async resolvePublicUrl(urlOrKey: string): Promise<string> {
+    if (!urlOrKey || typeof urlOrKey !== 'string') return urlOrKey;
+    const adapter = await this.getActiveAdapter();
+
+    // Check if URL matches /api/assets/file/{storageKey}
+    const match = urlOrKey.match(/(?:\/api\/assets\/file\/)(.+)$/);
+    if (match && match[1]) {
+      const storageKey = decodeURIComponent(match[1]);
+      return await adapter.getFileUrl(storageKey);
+    }
+
+    // If it's a raw storage key path like 'assets/...' or 'renders/...'
+    if (!urlOrKey.startsWith('http://') && !urlOrKey.startsWith('https://') && !urlOrKey.startsWith('data:') && !urlOrKey.startsWith('blob:')) {
+      return await adapter.getFileUrl(urlOrKey);
+    }
+
+    return urlOrKey;
   }
 
   public static async reset(): Promise<void> {

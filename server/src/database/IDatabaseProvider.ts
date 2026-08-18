@@ -4,6 +4,7 @@ export interface UserEntity {
   password_hash?: string;
   name: string;
   avatar?: string;
+  role?: 'admin' | 'owner' | 'creator' | 'user' | string;
   api_key?: string;
   api_key_rotated_at?: string;
   two_factor_enabled?: boolean;
@@ -49,9 +50,82 @@ export interface EpisodeEntity {
   scenes?: any[];
   script?: string;
   duration: number;
-  status: string;
+  status: 'DRAFT' | 'RENDER' | 'READY_TO_PUBLISH' | 'PUBLISHED' | 'ARCHIVED';
+  languageTracks?: any[];
+  activeLanguageCode?: string;
+  videoUrlsByLang?: Record<string, string>;
   created_at?: string;
   updated_at?: string;
+}
+
+export enum SocialPlatform {
+  YOUTUBE = 'youtube',
+  FACEBOOK = 'facebook',
+  TIKTOK = 'tiktok',
+}
+
+export interface SocialAccountEntity {
+  id?: string;
+  userId: string;
+  platform: SocialPlatform | string;
+  channelId: string;
+  channelName: string;
+  channelAvatarUrl?: string;
+  accessToken: string;
+  refreshToken?: string;
+  tokenExpiresAt?: string | Date;
+  scopes?: string[];
+  isActive?: boolean;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+}
+
+export enum AIModelType {
+  TEXT = 'text',
+  IMAGE = 'image',
+  VIDEO = 'video',
+  AUDIO = 'audio',
+  MUSIC = 'music',
+  VOICE = 'voice',
+}
+
+export enum AIAccountStatus {
+  READY = 'READY',
+  UNAUTHORIZED = 'UNAUTHORIZED',
+  ERROR = 'ERROR',
+  ACTIVE = 'ACTIVE',
+}
+
+export enum AIAccountType {
+  GOOGLE_FLOW = 'google-flow',
+  GOOGLE_VERTEX = 'google-vertex',
+  API_KEY = 'api-key',
+  ANTIGRAVITY = 'antigravity',
+  STANDARD = 'standard',
+  OPENAI = 'openai',
+  CUSTOM = 'custom',
+  GOOGLE_CLOUD = 'google-cloud',
+}
+
+export interface IAIAccount {
+  id?: string;
+  email: string;
+  name?: string;
+  avatarUrl?: string;
+  accountType: string;
+  status: AIAccountStatus | string;
+  flowST?: string;
+  flowAT?: string;
+  flowATExpiresAt?: Date;
+  projectId?: string;
+  credits?: number;
+  errorMessage?: string;
+  lastFingerprint?: Map<string, string>;
+  serviceKeys?: Map<string, string>;
+  isActive: boolean;
+  save(...args: any[]): Promise<any>;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface FlowAccountEntity {
@@ -78,6 +152,46 @@ export interface TimelineSnapshotEntity {
   created_at?: string;
 }
 
+export interface CreditTransactionEntity {
+  id: string;
+  user_id: string;
+  activity: string;
+  details?: string;
+  amount: number;
+  balance_after: number;
+  status: 'Success' | 'Failed';
+  created_at?: string;
+}
+
+export interface AssetEntity {
+  id: string;
+  user_id?: string;
+  name: string;
+  type: 'image' | 'video' | 'audio' | 'voice' | 'text' | 'render' | string;
+  ext?: string;
+  size?: string;
+  sizeBytes?: number;
+  categoryLabel?: string;
+  categoryColor?: string;
+  s3Key?: string;
+  url: string;
+  thumbnail?: string;
+  seriesId?: string;
+  episodeId?: string;
+  sceneId?: string;
+  characterId?: string;
+  prompt?: string;
+  provider?: string;
+  aspect?: string;
+  isVideo?: boolean;
+  isAudio?: boolean;
+  synthIdVerified?: boolean;
+  synthIdHash?: string;
+  synthIdMetadata?: any;
+  metadata?: any;
+  created_at?: string;
+}
+
 export interface IDatabaseProvider {
   initialize(): Promise<void>;
 
@@ -85,8 +199,14 @@ export interface IDatabaseProvider {
   createUser(user: UserEntity): Promise<UserEntity>;
   getUserByEmail(email: string): Promise<UserEntity | null>;
   getUserById(id: string): Promise<UserEntity | null>;
+  countUsers(): Promise<number>;
   updateUser(user: UserEntity): Promise<UserEntity>;
   updateUserPreferences(userId: string, prefs: { theme?: string; language?: string }): Promise<UserEntity | null>;
+
+  // Credits & Deductions
+  deductCredits(userId: string, amount: number, activity: string, details?: string): Promise<{ success: boolean; balance: number; transaction?: CreditTransactionEntity; error?: string }>;
+  getCreditHistory(userId?: string, limit?: number): Promise<CreditTransactionEntity[]>;
+  recordCreditTransaction(tx: CreditTransactionEntity): Promise<CreditTransactionEntity>;
 
   // Series
   createSeries(series: SeriesEntity): Promise<SeriesEntity>;
@@ -111,8 +231,15 @@ export interface IDatabaseProvider {
   // Flow Accounts
   getFlowAccounts(status?: string): Promise<FlowAccountEntity[]>;
   upsertFlowAccount(account: FlowAccountEntity): Promise<FlowAccountEntity>;
+  deleteFlowAccount(idOrEmail: string): Promise<boolean>;
+
+  // Assets Library & Storage
+  saveAsset(asset: AssetEntity): Promise<AssetEntity>;
+  getAssets(filter?: { userId?: string; seriesId?: string; type?: string; characterId?: string; search?: string }): Promise<AssetEntity[]>;
+  deleteAsset(id: string): Promise<boolean>;
 
   // System Settings
   getSystemSetting<T = any>(key: string): Promise<T | null>;
   saveSystemSetting<T = any>(key: string, value: T): Promise<void>;
 }
+

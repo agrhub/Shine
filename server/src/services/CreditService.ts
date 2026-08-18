@@ -1,0 +1,47 @@
+import { getDatabaseProvider } from '@/database/index.js';
+
+export type CreditTaskKey =
+  | 'scriptGeneration'
+  | 'characterAnchors'
+  | 'sceneImage'
+  | 'videoGeneration'
+  | 'voiceoverTts'
+  | 'bgmMusic'
+  | 'videoRender'
+  | 'cliffhangerHook'
+  | 'subtitleTranslate';
+
+export class CreditService {
+  static async deductUserCredits(
+    userId: string | undefined,
+    taskKey: CreditTaskKey,
+    activityName: string,
+    details: string
+  ): Promise<{ success: boolean; balance: number; error?: string }> {
+    const db = await getDatabaseProvider();
+    const effectiveUserId = userId || 'usr_default';
+
+    // Fetch dynamic rates configured by Admin
+    let amount = 10;
+    try {
+      const studioConfig = await db.getSystemSetting<any>('studio_infrastructure_config');
+      const rates = studioConfig?.creditRates || {};
+      const defaultRates: Record<CreditTaskKey, number> = {
+        scriptGeneration: 15,
+        characterAnchors: 10,
+        sceneImage: 15,
+        videoGeneration: 50,
+        voiceoverTts: 10,
+        bgmMusic: 10,
+        videoRender: 30,
+        cliffhangerHook: 5,
+        subtitleTranslate: 5,
+      };
+      amount = Number(rates[taskKey] ?? defaultRates[taskKey] ?? 10);
+    } catch {
+      amount = 10;
+    }
+
+    return await db.deductCredits(effectiveUserId, amount, activityName, details);
+  }
+}

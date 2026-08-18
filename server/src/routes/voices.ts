@@ -1,7 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { geminiClient, GEMINI_SUPPORTED_VOICES, type GeminiVoiceMetadata } from '@/integrations/ai/gemini/GeminiClient.js';
+import { ttsService } from '@/services/TtsService.js';
 import { StorageFactory } from '@/services/storage/StorageFactory.js';
 import { SynthIDService } from '@/services/SynthIDService.js';
+import { CreditService } from '@/services/CreditService.js';
+import { getDatabaseProvider } from '@/database/index.js';
+import { getUserId } from '@/utils/auth.js';
+import { Logger } from '@/utils/logger.js';
 
 const router = Router();
 
@@ -23,30 +28,90 @@ router.get('/presets', async (req: Request, res: Response) => {
   });
 });
 
-// POST /v1/voices/tts — Real Gemini Native Audio neural voice synthesis
+// POST /v1/voices/tts — Real Neural Voice synthesis via TTSService / Gemini Audio
 router.post('/tts', async (req: Request, res: Response) => {
   try {
-    const { voiceId, text, emotion, intensity, language, speed, pitch, multiSpeaker, episodeId, sceneId } = req.body;
+    const { voiceId, text, emotion, intensity, language, speed, pitch, multiSpeaker: reqMultiSpeaker, episodeId, sceneId, dialogue } = req.body;
 
     if (!text) {
       return res.status(400).json({ code: 400, data: null, message: 'text is required', error: 'INVALID_PAYLOAD' });
+    }
+
+    const userId = getUserId(req);
+    const deduct = await CreditService.deductUserCredits(userId, 'voiceoverTts', 'Voiceover Synthesis', `Scene: ${sceneId || 'voice'}`);
+    if (!deduct.success && deduct.error?.includes('Insufficient')) {
+      return res.status(402).json({ code: 402, data: null, message: deduct.error, error: 'INSUFFICIENT_CREDITS' });
+    }
+
+    // Auto-detect and build multiSpeaker config from dialogue if multiple characters are speaking
+    let multiSpeaker = reqMultiSpeaker;
+    if (!multiSpeaker && Array.isArray(dialogue) && dialogue.length > 0) {
+      try {
+        const db = await getDatabaseProvider();
+        let seriesChars: any[] = [];
+        if (episodeId) {
+          const ep = await db.getEpisodeById(episodeId);
+          if (ep && ep.series_id) {
+            const srs = await db.getSeriesById(ep.series_id);
+            seriesChars = srs?.characters || srs?.master_plan?.characters || [];
+          }
+        }
+
+        const distinctNames = Array.from(new Set(dialogue.map((d: any) => String(d.character || '').trim()).filter(Boolean)));
+        if (distinctNames.length > 1) {
+          const speakers = distinctNames.map((name) => {
+            const matched = seriesChars.find(c => (c.name || '').toLowerCase() === name.toLowerCase());
+            return {
+              name,
+              voiceId: matched?.voiceId || (matched?.gender === 'female' ? 'Aoede' : 'Puck'),
+            };
+          });
+          multiSpeaker = {
+            enabled: true,
+            speakers,
+          };
+        }
+      } catch (err: any) {
+        Logger.warn(`[voicesRouter] Auto multiSpeaker extraction fallback: ${err.message}`);
+      }
     }
 
     const selectedVoiceId = voiceId || 'Puck';
     const calculatedSpeed = speed || (intensity ? 1.0 + (intensity - 50) * 0.004 : 1.0);
     const calculatedPitch = pitch || (intensity ? (intensity - 50) * 0.005 : 0);
 
-    const generatedAudio = await geminiClient.generateAudio(text, selectedVoiceId, undefined, {
+    let internalUrl = '';
+    let s3Key = '';
+    let audioSizeBytes = 1024 * 128;
+    let audioMimeType = 'audio/wav';
+
+    // First attempt TTSService (e.g. ElevenLabs / Custom TTS)
+    const ttsRes = await ttsService.generateVoice({
+      text,
+      voiceId: selectedVoiceId,
+      language: language || 'en',
       speed: calculatedSpeed,
-      pitch: calculatedPitch,
-      emotion,
-      multiSpeaker,
     });
 
-    // Upload synthesized audio via StorageFactory (returns storage key only)
-    const s3Result = await StorageFactory.uploadMedia(generatedAudio.url, 'audio', 'wav', generatedAudio.mimeType || 'audio/wav');
-    const s3Key = s3Result.key;
-    const internalUrl = `/api/assets/file/${s3Key}`;
+    if (ttsRes?.audioUrl && !ttsRes.audioUrl.includes('default')) {
+      internalUrl = ttsRes.audioUrl;
+      s3Key = ttsRes.audioUrl.replace('/api/assets/file/', '');
+      audioMimeType = 'audio/mpeg';
+    } else {
+      // Fallback to Gemini Native Audio neural voice synthesis
+      const generatedAudio = await geminiClient.generateAudio(text, selectedVoiceId, undefined, {
+        speed: calculatedSpeed,
+        pitch: calculatedPitch,
+        emotion,
+        multiSpeaker,
+      });
+
+      const s3Result = await StorageFactory.uploadMedia(generatedAudio.url, 'audio', 'wav', generatedAudio.mimeType || 'audio/wav');
+      s3Key = s3Result.key;
+      internalUrl = `/api/assets/file/${s3Key}`;
+      audioSizeBytes = s3Result.size;
+      audioMimeType = generatedAudio.mimeType || 'audio/wav';
+    }
 
     const voiceMeta = GEMINI_SUPPORTED_VOICES.find(v => v.id === selectedVoiceId) || {
       id: selectedVoiceId,
@@ -69,8 +134,8 @@ router.post('/tts', async (req: Request, res: Response) => {
       data: {
         s3Key,
         url: internalUrl,
-        sizeBytes: s3Result.size,
-        mimeType: generatedAudio.mimeType,
+        sizeBytes: audioSizeBytes,
+        mimeType: audioMimeType,
         voiceId: selectedVoiceId,
         voiceName: voiceMeta.name,
         text,

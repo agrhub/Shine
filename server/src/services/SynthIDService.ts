@@ -23,7 +23,9 @@ export interface SynthIDEmbedResult {
   headers: Record<string, string>;
 }
 
-const SYNTHID_SECRET = process.env.SYNTHID_SECRET_KEY || 'shine_synthid_google_deepmind_cryptographic_anchor_2026';
+import { EnvConfig } from '@/config/env.js';
+
+const SYNTHID_SECRET = EnvConfig.synthIdSecret;
 
 export class SynthIDService {
   /**

@@ -5,6 +5,8 @@ import { scriptAgent } from '../agents/ScriptAgent.js';
 import { supervisionAgent } from '../agents/SupervisionAgent.js';
 import { trendRadarAgent } from '../agents/TrendRadarAgent.js';
 import { masterPlanRefineAgent } from '../agents/MasterPlanRefineAgent.js';
+import { CreditService } from '../services/CreditService.js';
+import { getUserId } from '@/utils/auth.js';
 
 export const aiRouter = Router();
 
@@ -34,6 +36,13 @@ aiRouter.get('/trends/viral-topics', async (req, res) => {
 aiRouter.post('/generate-master-plan', async (req, res) => {
   try {
     const { title, genre, tone, synopsis, totalEpisodes, episodeDurationSeconds, country, region, ratio, viralTopic, referenceAssets } = req.body;
+
+    const userId = getUserId(req);
+    const deduct = await CreditService.deductUserCredits(userId, 'scriptGeneration', 'Script Master Plan Generation', `Series: ${title || 'Untitled'}`);
+    if (!deduct.success && deduct.error?.includes('Insufficient')) {
+      return res.status(402).json({ code: 402, data: null, message: deduct.error, error: 'INSUFFICIENT_CREDITS' });
+    }
+
     const plan = await storySkeletonAgent.execute({
       title: title || 'Untitled Series',
       genre: genre || 'Suspense / Mystery',
@@ -67,6 +76,12 @@ aiRouter.post('/generate-master-plan', async (req, res) => {
 aiRouter.post('/generate-outline', async (req, res) => {
   try {
     const { title, genre, tone, synopsis, totalEpisodes } = req.body;
+    const userId = getUserId(req);
+    const deduct = await CreditService.deductUserCredits(userId, 'scriptGeneration', 'Story Outline Generation', `Series: ${title || 'Untitled'}`);
+    if (!deduct.success && deduct.error?.includes('Insufficient')) {
+      return res.status(402).json({ code: 402, data: null, message: deduct.error, error: 'INSUFFICIENT_CREDITS' });
+    }
+
     const outline = await storySkeletonAgent.execute({
       title: title || 'Undercover Mastermind',
       genre: genre || 'Suspense',
@@ -98,6 +113,12 @@ aiRouter.post('/refine-master-plan', async (req, res) => {
       });
     }
 
+    const userId = getUserId(req);
+    const deduct = await CreditService.deductUserCredits(userId, 'scriptGeneration', 'Master Plan Refine', `Plan: ${currentPlan?.title || 'Series'}`);
+    if (!deduct.success && deduct.error?.includes('Insufficient')) {
+      return res.status(402).json({ code: 402, data: null, message: deduct.error, error: 'INSUFFICIENT_CREDITS' });
+    }
+
     const result = await masterPlanRefineAgent.execute({ currentPlan, userInstruction });
 
     return res.json({
@@ -120,6 +141,12 @@ aiRouter.post('/refine-master-plan', async (req, res) => {
 aiRouter.post('/generate-script', async (req, res) => {
   try {
     const { title, genre, tone, synopsis, episodeNumber, totalEpisodes } = req.body;
+    const userId = getUserId(req);
+    const deduct = await CreditService.deductUserCredits(userId, 'scriptGeneration', 'Screenplay Script Generation', `Series: ${title || 'Untitled'} (Ep ${episodeNumber || 1})`);
+    if (!deduct.success && deduct.error?.includes('Insufficient')) {
+      return res.status(402).json({ code: 402, data: null, message: deduct.error, error: 'INSUFFICIENT_CREDITS' });
+    }
+
     const pipelineResult = await directorAgent.runPipeline({
       title: title || 'Undercover Mastermind',
       genre: genre || 'Suspense',
@@ -173,4 +200,50 @@ aiRouter.post('/verify-compliance', async (req, res) => {
     });
   }
 });
+
+import { analysisService } from '../services/AnalysisService.js';
+import { productionAgentService } from '../services/ProductionAgentService.js';
+
+// POST /api/ai/analyze-pacing — Script pacing & emotional retention trajectory analysis
+aiRouter.post('/analyze-pacing', async (req, res) => {
+  try {
+    const { scriptData } = req.body;
+    const result = await analysisService.analyzeScriptPacing(scriptData);
+    return res.json({
+      code: 200,
+      data: result,
+      message: 'Script pacing and retention analysis completed',
+      error: null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      code: 500,
+      data: null,
+      message: `Pacing analysis failed: ${err.message}`,
+      error: err.message,
+    });
+  }
+});
+
+// POST /api/ai/generate-storyboard — Generate cinematic storyboard visual panels
+aiRouter.post('/generate-storyboard', async (req, res) => {
+  try {
+    const { scenes } = req.body;
+    const result = await productionAgentService.generateStoryboardPanels(scenes || []);
+    return res.json({
+      code: 200,
+      data: result,
+      message: 'Visual storyboard panels generated successfully via Production Agent',
+      error: null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      code: 500,
+      data: null,
+      message: `Storyboard generation failed: ${err.message}`,
+      error: err.message,
+    });
+  }
+});
+
 

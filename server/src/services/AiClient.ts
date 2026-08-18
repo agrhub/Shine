@@ -1,37 +1,22 @@
-import { geminiClient } from '../integrations/ai/gemini/GeminiClient.js';
-import { Logger } from '../utils/logger.js';
+import { aiProviderRouter } from '../integrations/ai/router/AIProviderRouter.js';
 
 export class MultiProviderAIClient {
   async generateText(prompt: string, systemPrompt?: string): Promise<string> {
-    try {
-      return await geminiClient.generateText({
-        prompt,
-        systemInstruction: systemPrompt,
-        model: process.env.GEMINI_MODEL_TEXT_ANALYSIS || 'gemini-2.5-flash',
-      });
-    } catch (err: any) {
-      Logger.error(`[AIClient] generateText error: ${err.message}`);
-      throw err;
-    }
+    return await aiProviderRouter.generateText(prompt, { systemInstruction: systemPrompt });
   }
 
   async generateJSON<T>(prompt: string, fallbackData?: T): Promise<T> {
-    try {
-      const rawText = await geminiClient.generateText({
-        prompt,
-        jsonMode: true,
-        model: process.env.GEMINI_MODEL_TEXT_ANALYSIS || 'gemini-2.5-flash',
-      });
+    return await aiProviderRouter.generateJSON<T>(prompt, fallbackData);
+  }
 
-      const match = rawText.match(/```json([\s\S]*?)```/) || rawText.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-      const jsonStr = match ? match[1] || match[0] : rawText;
-      return JSON.parse(jsonStr) as T;
-    } catch (err: any) {
-      Logger.error(`[AIClient] generateJSON error: ${err.message}`);
-      if (fallbackData !== undefined) return fallbackData;
-      throw err;
-    }
+  async generateImage(prompt: string, options?: { aspectRatio?: '9:16' | '1:1' | '16:9'; model?: string; systemPrompt?: string }) {
+    return await aiProviderRouter.generateImage(prompt, options);
+  }
+
+  async generateVideo(prompt: string, options?: { aspectRatio?: '9:16' | '1:1' | '16:9'; model?: string }) {
+    return await aiProviderRouter.generateVideo(prompt, options);
   }
 }
 
 export const aiClient = new MultiProviderAIClient();
+

@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { chromium, BrowserContext, Browser } from 'playwright';
-import { getAdminSettings } from '../../../models/AdminSettings.js';
-import { Logger } from '../../../utils/logger.js';
+import { Logger } from '@/utils/logger.js';
+import { EnvConfig } from '@/config/env.js';
+import { getDatabaseProvider } from '@/database/index.js';
 
 export type CaptchaMode = 'yescaptcha' | 'capsolver' | 'capmonster' | 'ezcaptcha' | 'browser' | 'personal' | 'remote_browser';
 
@@ -25,21 +26,48 @@ export class CaptchaService {
     }
 
     public async solve(options: CaptchaSolveOptions): Promise<string | null> {
-        const settings = await getAdminSettings();
-        const config = settings.apiConfigs.captcha;
+        let captchaConfig = EnvConfig.captcha;
+        try {
+            const db = await getDatabaseProvider();
+            const studioConfig = await db.getSystemSetting('studio_config');
+            if (studioConfig?.captcha) {
+                captchaConfig = { ...captchaConfig, ...studioConfig.captcha };
+            }
+        } catch {}
 
-        if (!config) {
-            Logger.warn('[CaptchaService] Captcha not configured');
-            return null;
+        const apiKey = captchaConfig.apiKey || '';
+        const baseUrl = (captchaConfig.baseUrl || 'https://api.capsolver.com').replace(/\/$/, '');
+        let method = captchaConfig.method || 'capsolver';
+
+        // Auto-detect CapSolver vs YesCaptcha vs others based on key prefix or baseUrl
+        if (apiKey.startsWith('CAP-') || baseUrl.includes('capsolver.com')) {
+            method = 'capsolver';
+        } else if (baseUrl.includes('yescaptcha.com')) {
+            method = 'yescaptcha';
+        }
+
+        const config = {
+            method,
+            service: {
+                apiKey,
+                baseUrl,
+            },
+        };
+
+        if (!apiKey || apiKey === 'dummy_key') {
+            Logger.warn('[CaptchaService] Captcha not configured or missing API key, attempting local browser');
+            return this.solveLocalBrowser(options, (config as any).localBrowser, 'playwright');
         }
 
         switch (config.method) {
-            case 'yescaptcha':
-                return this.solveExternalService(options, config.yescaptcha, 'RecaptchaV3TaskProxylessM1');
             case 'capsolver':
+                return this.solveExternalService(options, config.service, 'ReCaptchaV3EnterpriseTaskProxyless');
+            case 'yescaptcha':
+                return this.solveExternalService(options, config.service, 'RecaptchaV3TaskProxylessM1');
             case 'capmonster':
             case 'ezcaptcha':
-                return this.solveExternalService(options, config.yescaptcha, 'ReCaptchaV3TaskProxyless');
+            case '2captcha':
+                return this.solveExternalService(options, config.service, 'ReCaptchaV3TaskProxyless');
             case 'remote_browser':
                 return this.solveRemoteBrowser(options, (config as any).remoteBrowser);
             case 'browser':
@@ -47,8 +75,7 @@ export class CaptchaService {
             case 'personal':
                 return this.solveLocalBrowser(options, (config as any).localBrowser, 'stealth');
             default:
-                Logger.error(`[CaptchaService] Unsupported method: ${config.method}`);
-                return null;
+                return this.solveExternalService(options, config.service, 'ReCaptchaV3EnterpriseTaskProxyless');
         }
     }
 

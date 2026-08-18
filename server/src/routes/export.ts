@@ -63,6 +63,7 @@ exportRouter.get('/render-job/:jobId/status', (req: Request, res: Response) => {
       status: job.status,
       progress: job.progress,
       outputUrl: job.outputUrl,
+      outputsByLang: job.outputsByLang || (job.outputUrl ? { default: job.outputUrl } : {}),
       error: job.error || null,
     },
     message: job.status === 'completed' ? 'Render complete!' : 'Rendering in progress...',

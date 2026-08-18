@@ -1,10 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { SocialAccount } from '../models/SocialAccount.js';
 import axios from 'axios';
 import { geminiClient } from '../integrations/ai/gemini/GeminiClient.js';
 import { requireAuth } from '../middleware/RequireAuth.js';
 import { directorAgent } from '../agents/DirectorAgent.js';
-import { getDatabaseProvider } from '../database/index.js';
+import { SocialAccount, getDatabaseProvider } from '../database/index.js';
 
 const router = Router();
 

@@ -1,8 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { nanoid } from 'nanoid';
 import { geminiClient } from '@/integrations/ai/gemini/GeminiClient.js';
+import { aiProviderRouter } from '@/integrations/ai/router/AIProviderRouter.js';
 import { StorageFactory } from '@/services/storage/StorageFactory.js';
-import { SynthIDService } from '~/services/SynthIDService';
+import { SynthIDService } from '@/services/SynthIDService.js';
+import { CreditService } from '@/services/CreditService.js';
+import { SfxService } from '@/services/SfxService.js';
+import { getDatabaseProvider } from '@/database/index.js';
+import { getUserId } from '@/utils/auth.js';
 
 const router = Router();
 
@@ -189,76 +194,6 @@ router.post('/spatial-mix', async (req: Request, res: Response) => {
       data: null,
       message: `Spatial audio mixing failed: ${err.message}`,
       error: 'SPATIAL_MIX_FAILED',
-    });
-  }
-});
-
-// POST /api/audio/generate — Real AI Music & BGM Generation (Returns S3 key only)
-router.post('/generate', async (req: Request, res: Response) => {
-  try {
-    const { episodeId, sceneId, genre, mood, duration, tempo, prompt } = req.body;
-    if (!episodeId) {
-      return res.status(400).json({
-        code: 400,
-        data: null,
-        message: 'episodeId is required',
-        error: 'INVALID_PAYLOAD',
-      });
-    }
-
-    const musicPrompt = prompt || `Cinematic vertical micro-drama background score, mood: ${mood || 'Suspenseful and Tense'}, genre: ${genre || 'Orchestral Hybrid'}, tempo: ${tempo || '120 BPM'}, dramatic strings and subtle electronic pulse.`;
-
-    let rawAudioUrl = '';
-    let mimeType = 'audio/mp3';
-
-    try {
-      const musicResult = await geminiClient.generateMusic(musicPrompt);
-      if (musicResult && musicResult.url) {
-        rawAudioUrl = musicResult.url;
-        mimeType = musicResult.mimeType || 'audio/mp3';
-      }
-    } catch (err: any) {
-      console.warn('[AudioGeneration] Lyria/Music API direct failed:', err.message);
-    }
-
-    if (!rawAudioUrl) {
-      throw new Error('No audio generated from AI Music model. Verify API quotas.');
-    }
-
-    // Upload generated AI music track via StorageFactory (returns storage key only)
-    const s3Result = await StorageFactory.uploadMedia(rawAudioUrl, 'music', 'mp3', mimeType);
-    const s3Key = s3Result.key;
-    const internalUrl = `/api/assets/file/${s3Key}`;
-    const jobId = `aud_${nanoid(8)}`;
-
-    return res.status(201).json({
-      code: 201,
-      data: {
-        jobId,
-        episodeId,
-        sceneId: sceneId || 'scene_01',
-        s3Key,
-        url: internalUrl,
-        sizeBytes: s3Result.size,
-        mimeType,
-        genre: genre || 'Cinematic Orchestral',
-        duration: duration || 30,
-        tempo: tempo || '120 BPM',
-        mood: mood || 'Suspenseful',
-        status: 'completed',
-        tracks: [
-          { name: 'Main BGM Theme', s3Key, url: internalUrl, volume: 0.8 },
-        ],
-      },
-      message: 'AI music & BGM generated and stored to S3 successfully',
-      error: null,
-    });
-  } catch (err: any) {
-    return res.status(500).json({
-      code: 500,
-      data: null,
-      message: `Audio generation or S3 upload failed: ${err.message}`,
-      error: 'AUDIO_GENERATION_FAILED',
     });
   }
 });

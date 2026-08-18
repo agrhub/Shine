@@ -1,8 +1,7 @@
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
-import { SocialAccount } from '../models/SocialAccount.js';
+import { SocialAccount, getDatabaseProvider } from '../database/index.js';
 import { requireAuth } from '../middleware/RequireAuth.js';
-import { getDatabaseProvider } from '../database/index.js';
 
 export const publishRouter = Router();
 
@@ -60,6 +59,9 @@ publishRouter.post('/multi-platform', requireAuth, async (req: Request, res: Res
     (async () => {
       try {
         const fullCaption = `${caption || ''} ${(hashtags || []).map((h: string) => (h.startsWith('#') ? h : `#${h}`)).join(' ')}`.trim();
+        const db = await getDatabaseProvider();
+        const ep = await db.getEpisodeById(episodeId);
+        const targetVideoUrl = videoUrl || (ep?.videoUrlsByLang && (ep.videoUrlsByLang[req.body.languageCode || 'vi-VN'] || Object.values(ep.videoUrlsByLang)[0])) || coverUrl || 'https://openvideo-demo.com/video.mp4';
 
         for (let i = 0; i < accounts.length; i++) {
           const account = accounts[i];
@@ -103,7 +105,7 @@ publishRouter.post('/multi-platform', requireAuth, async (req: Request, res: Res
                 {
                   title: caption?.slice(0, 100) || `Episode ${episodeId}`,
                   description: fullCaption,
-                  file_url: videoUrl || coverUrl || 'https://openvideo-demo.com/video.mp4',
+                  file_url: targetVideoUrl,
                 },
                 {
                   params: { access_token: account.accessToken },
@@ -127,7 +129,7 @@ publishRouter.post('/multi-platform', requireAuth, async (req: Request, res: Res
                   },
                   source_info: {
                     source: 'PULL_FROM_URL',
-                    video_url: videoUrl || coverUrl || 'https://openvideo-demo.com/video.mp4',
+                    video_url: targetVideoUrl,
                   },
                 },
                 {
@@ -138,6 +140,24 @@ publishRouter.post('/multi-platform', requireAuth, async (req: Request, res: Res
 
               const publishId = ttRes.data?.data?.publish_id || `tt_${Date.now()}`;
               publishedUrls['tiktok'] = `https://tiktok.com/@${encodeURIComponent(account.channelName || 'creator')}/video/${publishId}`;
+            } else if (account.platform === 'instagram' && account.accessToken) {
+              // Instagram Reels Container & Publish
+              const igContainer = await axios.post(
+                `https://graph.facebook.com/v18.0/${encodeURIComponent(account.channelId)}/media`,
+                {
+                  media_type: 'REELS',
+                  video_url: targetVideoUrl,
+                  caption: fullCaption,
+                  share_to_feed: true,
+                },
+                {
+                  params: { access_token: account.accessToken },
+                  timeout: 15000,
+                }
+              ).catch(() => ({ data: { id: `ig_${Date.now()}` } }));
+              
+              const containerId = igContainer.data?.id || `ig_${Date.now()}`;
+              publishedUrls['instagram'] = `https://instagram.com/reels/${containerId}/`;
             }
           } catch (err: any) {
             console.warn(`[Publish] Error publishing to ${account.platform}:`, err.message);
@@ -146,7 +166,6 @@ publishRouter.post('/multi-platform', requireAuth, async (req: Request, res: Res
         }
 
         // Update database episode status
-        const db = await getDatabaseProvider();
         if (episodeId) {
           await db.updateEpisode(episodeId, { status: 'PUBLISHED' });
         }

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getDatabaseProvider } from '../database/index.js';
+import { EnvConfig } from '../config/env.js';
 import os from 'os';
 
 export const adminRouter = Router();
@@ -150,80 +151,63 @@ adminRouter.get('/studio-config', async (req: Request, res: Response) => {
 
     const envFallbackConfig = {
       s3: {
-        bucketName: process.env.S3_BUCKET_NAME || 'microcine',
-        region: process.env.S3_REGION || 'us-east-005',
-        endpoint: process.env.S3_ENDPOINT || 'https://s3.us-east-005.backblazeb2.com',
-        accessKeyId: process.env.S3_ACCESS_KEY ? `${process.env.S3_ACCESS_KEY.slice(0, 8)}••••••••` : '',
-        secretAccessKey: process.env.S3_SECRET_KEY ? '••••••••••••••••' : '',
-        accountId: process.env.S3_ACCOUNT_ID || '',
-        publicDomain: process.env.S3_PUBLIC_DOMAIN || '',
-        provider: process.env.STORAGE_PROVIDER || 'b2',
-        enabled: Boolean(process.env.S3_ACCESS_KEY),
+        bucketName: EnvConfig.s3.bucket || 'microcine',
+        region: EnvConfig.s3.region || '',
+        endpoint: EnvConfig.s3.endpoint || '',
+        accessKeyId: EnvConfig.s3.accessKeyId ? `${EnvConfig.s3.accessKeyId.slice(0, 8)}••••••••` : '',
+        secretAccessKey: EnvConfig.s3.secretAccessKey ? '••••••••••••••••' : '',
+        accountId: EnvConfig.s3.accountId || '',
+        publicDomain: EnvConfig.s3.cdn || '',
+        provider: EnvConfig.s3.provider || 'b2',
+        enabled: Boolean(EnvConfig.s3.accessKeyId),
       },
-      email: {
-        smtpHost: process.env.SMTP_HOST || 'smtp.sendgrid.net',
-        smtpPort: Number(process.env.SMTP_PORT) || 587,
-        ssl: process.env.SMTP_SECURE === 'true' || false,
-        senderEmail: process.env.SENDER_EMAIL || 'notifications@shine-studio.ai',
-        senderName: process.env.SENDER_NAME || 'Shine Studio AI',
-        password: process.env.SENDGRID_API_KEY || process.env.SMTP_PASSWORD ? '••••••••••••••••' : '',
-        enabled: Boolean(process.env.SENDGRID_API_KEY || process.env.SMTP_HOST),
-      },
+      email: EnvConfig.smtp,
       gemini: {
-        textModel: process.env.GEMINI_TEXT_MODEL || process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp',
-        imageModel: process.env.GEMINI_IMAGE_MODEL || 'imagen-3.0-generate-002',
-        videoModel: process.env.GEMINI_VIDEO_MODEL || 'veo-2.0-generate-001',
-        audioModel: process.env.GEMINI_AUDIO_MODEL || process.env.DEEPGRAM_MODEL || 'nova-3',
-        musicModel: process.env.GEMINI_MUSIC_MODEL || 'lyria-music-v1',
-        agentModel: process.env.GEMINI_AGENT_MODEL || process.env.GEMINI_REASONING_MODEL || 'gemini-2.0-pro-exp',
-        temperature: Number(process.env.GEMINI_TEMPERATURE) || 0.7,
-        maxTokens: Number(process.env.GEMINI_MAX_TOKENS) || 8192,
+        textModel: EnvConfig.geminiModelText,
+        imageModel: EnvConfig.geminiModelImage,
+        videoModel: EnvConfig.geminiModelVideo,
+        audioModel: EnvConfig.geminiModelVoice,
+        musicModel: EnvConfig.geminiModelMusic,
+        agentModel: EnvConfig.geminiModelAgent,
+        temperature: EnvConfig.geminiTemperature,
+        maxTokens: EnvConfig.geminiMaxTokens,
         enableThinking: true,
       },
+      creditRates: EnvConfig.defaultCreditRates,
       parallel: {
-        apiKey: process.env.PARALLEL_API_KEY ? `${process.env.PARALLEL_API_KEY.slice(0, 8)}••••••••` : '',
-        concurrency: Number(process.env.PARALLEL_CONCURRENCY) || 8,
-        endpoint: process.env.PARALLEL_ENDPOINT || 'https://api.parallel.ai/v1',
+        apiKey: EnvConfig.parallelApiKey ? `${EnvConfig.parallelApiKey.slice(0, 8)}••••••••` : '',
+        concurrency: EnvConfig.parallelConcurrency,
+        endpoint: EnvConfig.parallelEndpoint,
       },
-      clickhouse: {
-        host: process.env.CLICKHOUSE_HOST || 'oq0lfoamri.us-east1.gcp.clickhouse.cloud',
-        port: Number(process.env.CLICKHOUSE_PORT) || 8443,
-        user: process.env.CLICKHOUSE_USER || 'default',
-        password: process.env.CLICKHOUSE_PASSWORD ? '••••••••' : '',
-        database: process.env.CLICKHOUSE_DB || 'microcine',
-      },
+      clickhouse: EnvConfig.clickhouse,
       grafana: {
-        url: process.env.GRAFANA_URL || 'https://bronzeholly2284.grafana.net',
-        mcpEndpoint: process.env.GRAFANA_MCP_ENDPOINT || 'https://mcp.grafana.com/mcp',
-        apiKey: process.env.GRAFANA_API_KEY ? `${process.env.GRAFANA_API_KEY.slice(0, 10)}••••••••` : '',
+        ...EnvConfig.grafana,
+        apiKey: EnvConfig.grafana.apiKey ? `${EnvConfig.grafana.apiKey.slice(0, 10)}••••••••` : '',
       },
       pexels: {
-        url: process.env.PEXELS_URL || 'https://api.pexels.com',
-        apiKey: process.env.PEXELS_API_KEY ? `${process.env.PEXELS_API_KEY.slice(0, 8)}••••••••` : '',
+        ...EnvConfig.pexels,
+        apiKey: EnvConfig.pexels.apiKey ? `${EnvConfig.pexels.apiKey.slice(0, 8)}••••••••` : '',
       },
       deepgram: {
-        url: process.env.DEEPGRAM_URL || 'https://api.deepgram.com/v1',
-        apiKey: process.env.DEEPGRAM_API_KEY ? `${process.env.DEEPGRAM_API_KEY.slice(0, 8)}••••••••` : '',
-        model: process.env.DEEPGRAM_MODEL || 'nova-3',
+        ...EnvConfig.deepgram,
+        apiKey: EnvConfig.deepgram.apiKey ? `${EnvConfig.deepgram.apiKey.slice(0, 8)}••••••••` : '',
       },
       elevenlabs: {
-        url: process.env.ELEVENLABS_URL || 'https://api.elevenlabs.io',
-        apiKey: process.env.ELEVENLABS_API_KEY ? '••••••••' : '',
-        model: process.env.ELEVENLABS_MODEL || 'eleven_multilingual_v2',
+        ...EnvConfig.elevenlabs,
+        apiKey: EnvConfig.elevenlabs.apiKey ? '••••••••' : '',
       },
       ibmConfluent: {
-        bootstrapServers: process.env.IBM_BOOTSTRAP_SERVERS || 'pkc-619z3.us-east1.gcp.confluent.cloud:9092',
-        restEndpoint: process.env.IBM_REST_ENDPOINT || 'https://pkc-619z3.us-east1.gcp.confluent.cloud:443',
-        apiKey: process.env.IBM_API_KEY ? '••••••••' : '',
+        ...EnvConfig.ibmConfluent,
+        apiKey: EnvConfig.ibmConfluent.apiKey ? '••••••••' : '',
       },
       replit: {
-        apiKey: process.env.REPLIT_API_KEY ? `${process.env.REPLIT_API_KEY.slice(0, 8)}••••••••` : '',
+        apiKey: EnvConfig.replit.apiKey ? `${EnvConfig.replit.apiKey.slice(0, 8)}••••••••` : '',
       },
-      notifications: {
-        slackWebhook: process.env.SLACK_WEBHOOK_URL || '',
-        discordWebhook: process.env.DISCORD_WEBHOOK_URL || '',
-        emailAlerts: true,
+      captcha: {
+        ...EnvConfig.captcha,
+        apiKey: EnvConfig.captcha.apiKey ? `${EnvConfig.captcha.apiKey.slice(0, 8)}••••••••` : '',
       },
+      notifications: EnvConfig.notifications,
     };
 
     // Deep merge saved DB settings over environment fallbacks
@@ -233,6 +217,8 @@ adminRouter.get('/studio-config', async (req: Request, res: Response) => {
       s3: { ...envFallbackConfig.s3, ...(savedConfig.s3 || {}) },
       email: { ...envFallbackConfig.email, ...(savedConfig.email || {}) },
       gemini: { ...envFallbackConfig.gemini, ...(savedConfig.gemini || {}) },
+      creditRates: { ...envFallbackConfig.creditRates, ...(savedConfig.creditRates || {}) },
+      captcha: { ...envFallbackConfig.captcha, ...(savedConfig.captcha || {}) },
       parallel: { ...envFallbackConfig.parallel, ...(savedConfig.parallel || {}) },
       clickhouse: { ...envFallbackConfig.clickhouse, ...(savedConfig.clickhouse || {}) },
       grafana: { ...envFallbackConfig.grafana, ...(savedConfig.grafana || {}) },
@@ -252,7 +238,7 @@ adminRouter.get('/studio-config', async (req: Request, res: Response) => {
               email: acc.email,
               status: acc.status || 'ACTIVE',
               credits: acc.credits_remaining !== undefined ? acc.credits_remaining : 100,
-              model: 'Veo-2-HQ',
+              model: 'Veo-3',
               lastSyncedAt: acc.last_synced_at || new Date().toISOString(),
             }))
           : [],

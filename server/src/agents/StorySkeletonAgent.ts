@@ -21,9 +21,12 @@ export interface CharacterPersona {
   name: string;
   role: 'protagonist' | 'antagonist' | 'supporter';
   gender?: 'male' | 'female' | 'neutral';
+  age?: number;
   nationality?: string;
   voiceId?: string;
   identity: string;
+  appearance?: string; // Facial features, physical build, age appearance matching target country
+  costumeStyle?: string; // Signature cultural/regional wardrobe, styling, and signature accessories
   traits: string;
   circumstance: string;
   action: string;
@@ -71,21 +74,28 @@ export interface EpisodeSkeleton {
   durationSeconds?: number;
 }
 
+export interface StoryCore {
+  coreAttraction: string;
+  psychologicalPleasure: string;
+  goldFingerRule: string;
+}
+
 export interface MasterPlanOutput {
   seriesId: string;
   title: string;
   genre: string;
   tone: string;
   country: string;
-  targetLanguage: string;
   ratio: string;
   totalEpisodes: number;
-  totalDurationSeconds: number;
-  storyCore: {
-    coreAttraction: string;
-    psychologicalPleasure: string;
-    goldFingerRule: string;
+  totalDurationSeconds?: number;
+  targetLanguage: string;
+  settingContext?: {
+    era: string; // e.g. Modern 2026, Cyberpunk, 1990s retro
+    location: string; // e.g. High-tech metropolis, bustling apartment complex, corporate towers
+    culturalAtmosphere: string; // Local lifestyle, social classes, architecture and visual aesthetic
   };
+  storyCore: StoryCore;
   hiddenLine: string;
   targetAudience: string;
   viralHook: string;
@@ -128,7 +138,7 @@ export class StorySkeletonAgent {
       .map(v => `  * "${v.id}": ${v.description}`)
       .join('\n');
 
-    // Step 1: Generate the Core Architecture (Story Core, Characters, Three Acts, Reversals, Paywalls)
+    // Step 1: Generate the Core Architecture (Story Core, Characters, Setting Context, Three Acts, Reversals, Paywalls)
     Logger.info(`[StorySkeletonAgent] Generating Master Plan Core for "${input.title}" (${totalEpisodes} eps, ${durationDisplay}/ep, Target: ${langInfo.name})...`);
     
     const corePrompt = `
@@ -138,7 +148,7 @@ Target Country: ${country} (${langInfo.name} - ${langInfo.nativeName}).
 LANGUAGE SPECIFICATION (MANDATORY):
 ${langInfo.promptInstruction}
 - The story must resonate culturally with audiences in ${country}.
-- All titles, loglines, synopses, character descriptions, and narrative hooks MUST BE IN ${langInfo.name.toUpperCase()} (${langInfo.nativeName}).
+- All titles, loglines, synopses, character descriptions, settings, and narrative hooks MUST BE IN ${langInfo.name.toUpperCase()} (${langInfo.nativeName}).
 
 Project Parameters:
 - Series Title: ${input.title || 'Untitled Series'}
@@ -151,10 +161,16 @@ Project Parameters:
 - Duration per Episode: ${durationDisplay} (${totalDurationSeconds} seconds)
 - Viral Topic: ${input.viralTopic || 'None'}
 
+Setting Context (Regional & Cultural Atmosphere for Visual Consistency):
+- era: Specific time period in target language (e.g. "Modern 2026", "1990s retro", "Near future")
+- location: Specific geographic and architectural setting in ${country} (e.g. "Urban apartment complex and corporate financial towers")
+- culturalAtmosphere: Local social context, cultural habits, and ambient visual mood of ${country}.
+
 Characters Specification (mandatory for each character persona):
 - name: Culturally authentic character name for ${country}
 - role: "protagonist" | "antagonist" | "supporter"
 - gender: "male" | "female" | "neutral" (MANDATORY: Must accurately assign biological/character gender "female", "male", or "neutral" based on character name, identity, pronouns, and role in ${langInfo.name})
+- age: Authentic character age (e.g. 25)
 - nationality: Authentic nationality / citizenship (e.g. "${country}")
 - voiceId: Selected voice preset precisely matching character gender, age, personality, and tone from the official Gemini Voice Catalog below (MUST strictly match the character's gender):
   [Male Voices]
@@ -164,6 +180,8 @@ ${femaleVoicesCatalog}
   [Neutral Voices]
 ${neutralVoicesCatalog}
 - identity: Social standing / profession
+- appearance: Specific physical features, face structure, hairstyle, and age appearance reflecting authentic people in ${country}
+- costumeStyle: Distinctive wardrobe, clothing style, color palette, and signature accessories matching their social status and local context in ${country}
 - traits: Key personality traits
 - circumstance: Initial context / backstory / trigger
 - action: Core goal and strategic actions
@@ -171,7 +189,7 @@ ${neutralVoicesCatalog}
 - speechStyle: Vocal tone and speaking style
 - empathyElements: Emotional resonance points for audience
 
-Generate the storyCore, hiddenLine, targetAudience, viralHook, estimatedRetention, characters (≤ 4), threeActs, majorReversals (~3), and paywallHooks (at ~10%, ~30%, ~50%, ~70%, ~90%).
+Generate the settingContext, storyCore, hiddenLine, targetAudience, viralHook, estimatedRetention, characters (≤ 4), threeActs, majorReversals (~3), and paywallHooks (at ~10%, ~30%, ~50%, ~70%, ~90%).
 ${totalEpisodes <= CHUNK_SIZE ? `Generate all ${totalEpisodes} episodes in the episodes array.` : `Provide the first ${CHUNK_SIZE} episodes (1 to ${CHUNK_SIZE}) in the episodes array.`}
 
 Respond strictly in JSON matching the MasterPlanOutput schema.
@@ -227,6 +245,7 @@ Respond strictly in JSON matching the MasterPlanOutput schema.
 
         return {
           ...c,
+          age: Number(c.age) || (c.role === 'supporter' ? 35 : 24),
           gender,
           nationality,
           voiceId,

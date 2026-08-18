@@ -39,6 +39,10 @@ export interface ScriptScene {
   lightingMood?: string;
   cameraMovement?: string;
   action: string;
+  characterCostumes?: Array<{
+    character: string;
+    wardrobe: string;
+  }>;
   dialogue: Array<{
     character: string;
     line: string;
@@ -106,6 +110,10 @@ CRITICAL RULES (NON-NEGOTIABLE):
    - EVERY individual scene's "durationSeconds" MUST BE between 5 and 8 seconds (5 <= durationSeconds <= 8).
    - Generate between ${minScenes} and ${maxScenes} concise, rapid-fire scenes so the sum of all scenes' "durationSeconds" equals approximately ${targetDuration} seconds!
 
+3. CHARACTER COSTUME & VISUAL CONTINUITY:
+   - Every scene must explicitly describe each appearing character's costume and wardrobe tailored to the location and dramatic situation (e.g. casual homewear, luxury office suit, rain-soaked jacket, evening attire).
+   - The "visualPrompt" MUST explicitly integrate the character's LoRA tag, costume/wardrobe description, environment, and cinematography style.
+
 Master Plan Continuity Context:
 - Story Core: ${input.storyCore?.coreAttraction || input.synopsis || 'High-stakes micro-drama conflict'}
 - Golden Rule / Leverage: ${input.storyCore?.goldFingerRule || 'Hidden family empire and corporate authority'}
@@ -114,7 +122,7 @@ Master Plan Continuity Context:
 - Conflict Escalation: ${input.conflictEscalation || 'Direct confrontation between rivals'}
 - Cliffhanger Hook: ${input.cliffhangerHook || 'Shocking reveal ending on high tension'}
 - Cast Characters:
-${(input.characters || []).map(c => `- ${c.name} (${c.role || 'Character'}): ${c.identity || ''} | Traits: ${c.traits || ''} | Speech: ${c.speechStyle || 'Sharp and concise'} | LoRA: ${c.loraAnchor || 'master_lora_anchor'}`).join('\n')}
+${(input.characters || []).map((c: any) => `- ${c.name} (${c.role || 'protagonist'}): ${c.identity || ''} | Appearance: ${c.appearance || 'Authentic local'} | Wardrobe Style: ${c.costumeStyle || 'Signature styling'} | Speech: ${c.speechStyle || 'Sharp'} | LoRA: ${c.loraAnchor || 'master_lora_anchor'}`).join('\n')}
 
 Task:
 Generate a complete, production-ready screenplay broken down into ${minScenes} to ${maxScenes} consecutive scenes totaling ${targetDuration} seconds for this episode:
@@ -124,10 +132,11 @@ Generate a complete, production-ready screenplay broken down into ${minScenes} t
    - "timeOfDay": Lighting ambiance (e.g., "Fluorescent Night", "Moody Dawn")
    - "cameraMovement": Vertical camera blocking (e.g., "Close-up slow dolly in", "POV quick pan", "Low-angle tracking")
    - "action": Concrete character blocking and physical expressions in vertical 9:16 framing (under 40 words, in ${langInfo.name}).
+   - "characterCostumes": Array of objects [{ "character": "Character Name", "wardrobe": "Exact clothing details in this scene" }].
    - "dialogue": Sharp, impactful lines conforming to each character's speechStyle in ${langInfo.name}.
    - "bgmMood": Background music emotional direction.
    - "sfxCues": Array of sound effect triggers (e.g., ["Teacup crash", "Door slam", "Subtle heartbeat"]).
-   - "visualPrompt": Highly descriptive image/video prompt in English including character LoRA tags for Midjourney/Flux/Veo-2.
+   - "visualPrompt": Highly descriptive image/video prompt in English including character LoRA tags, costume description, and lighting for Midjourney/Flux/Veo-2.
    - "durationSeconds": 5 to 8 seconds per scene (sum of all scenes = ${targetDuration} seconds).
 
 Respond strictly in JSON matching the ScriptItem schema:
@@ -148,14 +157,24 @@ Respond strictly in JSON matching the ScriptItem schema:
       "timeOfDay": "NIGHT",
       "lightingMood": "Cinematic Neon Rim Light",
       "cameraMovement": "Medium close-up slow dolly in",
-      "action": "Description of physical action in vertical 9:16 framing",
-      "dialogue": [
-        { "character": "LINH", "line": "You think this empire belongs to you?", "emotion": "Cold and composed", "speechTone": "Subtle whisper" }
+      "action": "Description of action...",
+      "characterCostumes": [
+        {
+          "character": "Lead Name",
+          "wardrobe": "Dark navy tailored suit, untied collar, silver wristwatch"
+        }
       ],
-      "durationSeconds": 6,
-      "bgmMood": "Deep atmospheric drone building to tense pulse",
-      "sfxCues": ["Champagne glass shatter", "Heavy breath"],
-      "visualPrompt": "Vertical 9:16, cinematic neon rim lighting, Linh standing in penthouse overlooking rain-slicked metropolis, sharp focus, 8k"
+      "dialogue": [
+        {
+          "character": "Lead Name",
+          "line": "Dialogue line...",
+          "speechTone": "cold and commanding"
+        }
+      ],
+      "bgmMood": "Tense cinematic pulse",
+      "sfxCues": ["Clock ticking"],
+      "visualPrompt": "Vertical 9:16 shot, master_lora_anchor handsome Asian male lead in dark navy tailored suit...",
+      "durationSeconds": 6
     }
   ]
 }

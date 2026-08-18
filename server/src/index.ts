@@ -1,3 +1,4 @@
+//import './services/compositor/polyfills.js';
 import express, { Request, Response } from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
@@ -34,13 +35,13 @@ import { PatchSyncService } from './realtime/PatchSyncService';
 import { flowSyncService } from './integrations/ai/flow/FlowSyncService';
 import { aiProviderRouter } from './integrations/ai/router/AIProviderRouter';
 import { telemetryService } from './config/telemetry';
-import { connectMongoDB } from './database/mongo';
+import { getDatabaseProvider } from './database/index.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Connect to MongoDB Cloud / Local (non-blocking — falls back to SQLite)
-connectMongoDB().catch((err) => console.warn('[MongoDB] Non-blocking init warning:', err));
+// Initialize active DB Provider (SQLite or MongoDB with automatic fallback)
+getDatabaseProvider().catch((err) => console.warn('[Database] Provider initialization warning:', err));
 
 app.use(cors());
 app.use(express.json());
@@ -86,28 +87,11 @@ app.use('/api', publishRouter);
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
-    service: 'Shine (DramaFlowAI) API Server',
+    service: 'Shine API Server',
     version: '0.1.0-alpha',
     db_provider: process.env.DB_PROVIDER || 'sqlite',
     timestamp: new Date().toISOString(),
   });
-});
-
-// ─── AI Provider Router Test Endpoint (Proposal 31, FR-129) ──────────────────
-app.post('/api/ai/test-route', async (req: Request, res: Response) => {
-  try {
-    const { prompt, type, userTier, mode, aspectRatio } = req.body;
-    const result = await aiProviderRouter.routeGeneration({
-      prompt: prompt || 'Vertical 9:16 micro drama suspense scene',
-      type: type || 'TEXT',
-      userTier: userTier || 'FREE',
-      mode: mode || 'DRAFT_STORYBOARD',
-      aspectRatio: aspectRatio || '9:16',
-    });
-    res.json({ success: true, result });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
 });
 
 // ─── Start Services & WebSocket HTTP Server ──────────────────────────────────

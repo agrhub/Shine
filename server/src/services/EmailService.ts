@@ -1,32 +1,33 @@
 import nodemailer from 'nodemailer';
 import { Logger } from '../utils/logger.js';
+import { EnvConfig } from '@/config/env.js';
 
 export class EmailService {
   private transporter: nodemailer.Transporter | undefined;
   private fromEmail: string | undefined;
   
   constructor() {
-    const host = process.env.SMTP_HOST;
+    const smtp = EnvConfig.smtp;
     
-    if (host) {
+    if (smtp.enabled || smtp.host) {
       this.transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || '587'),
-        secure: process.env.SMTP_SECURE === 'true',
+        host: smtp.host,
+        port: smtp.port,
+        secure: smtp.ssl,
         auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS,
+          user: smtp.senderEmail,
+          pass: smtp.password,
         }
       });
       Logger.info('[EmailService] Configured with real SMTP');
-      this.fromEmail = (process.env.SMTP_NAME || "Shine Studio") + " <" + (process.env.SMTP_USER || "") + ">";
+      this.fromEmail = `${smtp.senderName} <${smtp.senderEmail}>`;
     } else {
       Logger.info('[EmailService] Configured with mock Ethereal SMTP (Test Mode)');
     }
   }
 
   public async sendPasswordRecovery(email: string, resetToken: string) {
-    const resetUrl = `${process.env.APP_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+    const resetUrl = `${EnvConfig.appUrl}/reset-password?token=${resetToken}`;
     const mailOptions = {
       from: this.fromEmail,
       to: email,
@@ -91,7 +92,7 @@ export class EmailService {
   }
 
   public async sendAdminSystemAlert(serviceName: string, errorMessage: string) {
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@shinestudio.app';
+    const adminEmail = EnvConfig.adminEmail;
     const mailOptions = {
       from: this.fromEmail,
       to: adminEmail,
@@ -122,7 +123,7 @@ export class EmailService {
       }
       const info = await this.transporter.sendMail(options);
       Logger.info(`[EmailService] Sent email to ${options.to}. MessageId: ${info.messageId}`);
-      if (info.messageId && !process.env.SMTP_HOST) {
+      if (info.messageId && !EnvConfig.smtp.enabled) {
         Logger.info(`[EmailService] Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
       }
     } catch (err: any) {

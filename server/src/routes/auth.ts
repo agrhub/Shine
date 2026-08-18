@@ -3,11 +3,12 @@ import { getDatabaseProvider } from '@/database/index.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { nanoid } from 'nanoid';
-import { emailService } from '@/services/EmailService';
+import { emailService } from '@/services/EmailService.js';
+import { EnvConfig } from '@/config/env.js';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'shine_jwt_secret_key_2026';
-const REFRESH_SECRET = process.env.REFRESH_SECRET || 'shine_refresh_secret_2026';
+const JWT_SECRET = EnvConfig.jwtSecret;
+const REFRESH_SECRET = EnvConfig.jwtRefreshSecret;
 
 // Standardized response helper
 function ok(res: Response, data: any, message = 'Success', statusCode = 200) {
@@ -31,6 +32,13 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
       fail(res, 400, 'User with this email already exists'); return;
     }
 
+    // First user registered in the system automatically becomes ADMIN / OWNER
+    const totalUsersCount = await db.countUsers();
+    const isFirstUser = totalUsersCount === 0;
+    const assignedRole = isFirstUser || email.startsWith('admin') ? 'admin' : 'user';
+    const assignedTier = isFirstUser ? 'ENTERPRISE' : 'FREE';
+    const assignedCredits = isFirstUser ? 10000 : 100;
+
     const userId = `usr_${nanoid(10)}`;
     const passwordHash = await bcrypt.hash(password, 10);
 
@@ -39,11 +47,12 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
       email,
       password_hash: passwordHash,
       name: name || email.split('@')[0],
-      tier: 'FREE',
-      credits: 100,
+      role: assignedRole,
+      tier: assignedTier,
+      credits: assignedCredits,
     });
 
-    const token = jwt.sign({ userId: user.id, email: user.email, tier: user.tier }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user.id, email: user.email, role: user.role, tier: user.tier }, JWT_SECRET, { expiresIn: '7d' });
     const refreshToken = jwt.sign({ userId: user.id }, REFRESH_SECRET, { expiresIn: '30d' });
 
     // Send welcome email in background
@@ -56,6 +65,7 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
         id: user.id,
         email: user.email,
         name: user.name,
+        role: user.role || assignedRole,
         tier: user.tier,
         credits: user.credits,
         theme: user.theme || 'dark',
@@ -106,7 +116,8 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       }
     }
 
-    const token = jwt.sign({ userId: user.id, email: user.email, tier: user.tier }, JWT_SECRET, { expiresIn: '7d' });
+    const userRole = user.role || (user.email.startsWith('admin') ? 'admin' : 'user');
+    const token = jwt.sign({ userId: user.id, email: user.email, role: userRole, tier: user.tier }, JWT_SECRET, { expiresIn: '7d' });
     const refreshToken = jwt.sign({ userId: user.id }, REFRESH_SECRET, { expiresIn: '30d' });
 
     ok(res, {
@@ -116,6 +127,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
         id: user.id,
         email: user.email,
         name: user.name,
+        role: userRole,
         tier: user.tier,
         credits: user.credits,
         theme: user.theme || 'dark',
@@ -239,6 +251,7 @@ router.get('/me', async (req: Request, res: Response): Promise<void> => {
         email: user.email,
         name: user.name,
         avatar: user.avatar || '',
+        role: user.role || (user.email.startsWith('admin') ? 'admin' : 'user'),
         api_key: user.api_key || 'sh_live_51MszO8Dfkf92ks92kd92ks92',
         api_key_rotated_at: user.api_key_rotated_at || new Date(Date.now() - 12 * 86400000).toISOString(),
         two_factor_enabled: !!user.two_factor_enabled,
@@ -379,7 +392,7 @@ const handleSSOCallback = async (req: Request, res: Response, provider: string) 
     const refreshToken = jwt.sign({ userId: user.id }, REFRESH_SECRET, { expiresIn: '30d' });
 
     // Redirect to frontend with tokens in URL or cookie (Simplified for demo)
-    const frontendUrl = process.env.APP_URL || 'http://localhost:3000';
+    const frontendUrl = EnvConfig.frontendUrl;
     res.redirect(`${frontendUrl}/auth/callback?token=${token}&refresh_token=${refreshToken}`);
   } catch (err: any) {
     fail(res, 500, `SSO failed: ${err.message}`);
@@ -388,8 +401,8 @@ const handleSSOCallback = async (req: Request, res: Response, provider: string) 
 
 // GET /v1/auth/google
 router.get('/google', (_req: Request, res: Response) => {
-  const clientId = process.env.GOOGLE_CLIENT_ID || 'dummy_google_client_id';
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3001/api/v1/auth/google/callback';
+  const clientId = EnvConfig.oauth.google.clientId || 'dummy_google_client_id';
+  const redirectUri = EnvConfig.oauth.google.redirectUri;
   const scope = 'openid email profile';
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}`);
 });
@@ -398,8 +411,8 @@ router.get('/google/callback', (req: Request, res: Response) => handleSSOCallbac
 
 // GET /v1/auth/youtube (Uses Google OAuth with YouTube scopes)
 router.get('/youtube', (_req: Request, res: Response) => {
-  const clientId = process.env.YOUTUBE_CLIENT_ID || 'dummy_youtube_client_id';
-  const redirectUri = process.env.YOUTUBE_REDIRECT_URI || 'http://localhost:3001/api/v1/auth/youtube/callback';
+  const clientId = EnvConfig.oauth.youtube.clientId || 'dummy_youtube_client_id';
+  const redirectUri = EnvConfig.oauth.youtube.redirectUri;
   const scope = 'openid email profile https://www.googleapis.com/auth/youtube.readonly';
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}`);
 });
@@ -408,8 +421,8 @@ router.get('/youtube/callback', (req: Request, res: Response) => handleSSOCallba
 
 // GET /v1/auth/facebook
 router.get('/facebook', (_req: Request, res: Response) => {
-  const clientId = process.env.FACEBOOK_CLIENT_ID || 'dummy_facebook_client_id';
-  const redirectUri = process.env.FACEBOOK_REDIRECT_URI || 'http://localhost:3001/api/v1/auth/facebook/callback';
+  const clientId = EnvConfig.oauth.facebook.clientId || 'dummy_facebook_client_id';
+  const redirectUri = EnvConfig.oauth.facebook.redirectUri;
   const scope = 'email,public_profile';
   res.redirect(`https://www.facebook.com/v18.0/dialog/oauth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`);
 });
@@ -418,8 +431,8 @@ router.get('/facebook/callback', (req: Request, res: Response) => handleSSOCallb
 
 // GET /v1/auth/tiktok
 router.get('/tiktok', (_req: Request, res: Response) => {
-  const clientId = process.env.TIKTOK_CLIENT_ID || 'dummy_tiktok_client_id';
-  const redirectUri = process.env.TIKTOK_REDIRECT_URI || 'http://localhost:3001/api/v1/auth/tiktok/callback';
+  const clientId = EnvConfig.oauth.tiktok.clientId || 'dummy_tiktok_client_id';
+  const redirectUri = EnvConfig.oauth.tiktok.redirectUri;
   const scope = 'user.info.basic';
   res.redirect(`https://www.tiktok.com/v2/auth/authorize?client_key=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}`);
 });

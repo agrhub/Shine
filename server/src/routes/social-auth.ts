@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { SocialAccount, SocialPlatform } from '../models/SocialAccount.js';
+import { SocialAccount, SocialPlatform } from '@/database/index.js';
 import axios from 'axios';
 import { requireAuth } from '../middleware/RequireAuth.js';
+import { EnvConfig } from '@/config/env.js';
 
 const router = Router();
 
@@ -9,21 +10,21 @@ const router = Router();
 router.get('/connect/:platform', requireAuth, (req: Request, res: Response) => {
   const { platform } = req.params;
   const userId = (req as any).user.id;
-  const redirectUri = process.env.APP_URL ? `${process.env.APP_URL}/api/v1/social/callback/${platform}` : `http://localhost:3001/api/v1/social/callback/${platform}`;
+  const redirectUri = `${EnvConfig.appUrl}/api/v1/social/callback/${platform}`;
   const state = Buffer.from(JSON.stringify({ userId })).toString('base64');
   
   let url = '';
   switch (platform) {
     case SocialPlatform.YOUTUBE:
-      const ytClientId = process.env.YOUTUBE_CLIENT_ID || 'mock_yt_client_id';
+      const ytClientId = EnvConfig.oauth.youtube.clientId || 'mock_yt_client_id';
       url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${ytClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent('https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl')}&state=${state}&access_type=offline`;
       break;
     case SocialPlatform.FACEBOOK:
-      const fbClientId = process.env.FACEBOOK_CLIENT_ID || 'mock_fb_client_id';
+      const fbClientId = EnvConfig.oauth.facebook.clientId || 'mock_fb_client_id';
       url = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent('pages_manage_posts,pages_read_engagement')}&state=${state}`;
       break;
     case SocialPlatform.TIKTOK:
-      const ttClientId = process.env.TIKTOK_CLIENT_ID || 'mock_tt_client_id';
+      const ttClientId = EnvConfig.oauth.tiktok.clientId || 'mock_tt_client_id';
       url = `https://www.tiktok.com/v2/auth/authorize?client_key=${ttClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent('video.upload,video.publish,comment.list,comment.list.manage')}&state=${state}`;
       break;
     default:
@@ -50,12 +51,12 @@ router.get('/callback/:platform', async (req: Request, res: Response) => {
     let channelId = '';
     let channelName = '';
 
-    const redirectUri = process.env.APP_URL ? `${process.env.APP_URL}/api/v1/social/callback/${platform}` : `http://localhost:3001/api/v1/social/callback/${platform}`;
+    const redirectUri = `${EnvConfig.appUrl}/api/v1/social/callback/${platform}`;
 
     // Real API Exchange
     if (platform === SocialPlatform.YOUTUBE) {
-      const ytClientId = process.env.YOUTUBE_CLIENT_ID;
-      const ytClientSecret = process.env.YOUTUBE_CLIENT_SECRET;
+      const ytClientId = EnvConfig.oauth.youtube.clientId;
+      const ytClientSecret = EnvConfig.oauth.youtube.clientSecret;
       
       if (!ytClientId || !ytClientSecret) throw new Error('YouTube credentials missing');
       
@@ -77,8 +78,8 @@ router.get('/callback/:platform', async (req: Request, res: Response) => {
       channelName = channelRes.data.items?.[0]?.snippet?.title || 'YouTube Channel';
       
     } else if (platform === SocialPlatform.FACEBOOK) {
-      const fbClientId = process.env.FACEBOOK_CLIENT_ID;
-      const fbClientSecret = process.env.FACEBOOK_CLIENT_SECRET;
+      const fbClientId = EnvConfig.oauth.facebook.clientId;
+      const fbClientSecret = EnvConfig.oauth.facebook.clientSecret;
       
       if (!fbClientId || !fbClientSecret) throw new Error('Facebook credentials missing');
       
@@ -104,8 +105,8 @@ router.get('/callback/:platform', async (req: Request, res: Response) => {
       }
       
     } else if (platform === SocialPlatform.TIKTOK) {
-      const ttClientId = process.env.TIKTOK_CLIENT_ID;
-      const ttClientSecret = process.env.TIKTOK_CLIENT_SECRET;
+      const ttClientId = EnvConfig.oauth.tiktok.clientId;
+      const ttClientSecret = EnvConfig.oauth.tiktok.clientSecret;
       
       if (!ttClientId || !ttClientSecret) throw new Error('TikTok credentials missing');
       
@@ -137,11 +138,11 @@ router.get('/callback/:platform', async (req: Request, res: Response) => {
         scopes: ['publish', 'comments'],
         isActive: true,
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     // Redirect to frontend Integrations Settings page
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = EnvConfig.frontendUrl;
     res.redirect(`${frontendUrl}/dashboard/settings?integration_success=${platform}`);
   } catch (err: any) {
     res.status(500).send(`Failed to connect social account: ${err.message}`);

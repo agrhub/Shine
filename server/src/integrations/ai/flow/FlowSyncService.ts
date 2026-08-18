@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { chromium, BrowserContext, Browser } from 'playwright';
-import { AIAccount, AIAccountStatus, IAIAccount } from '../../../models/AIAccount.js';
-import { Logger } from '../../../utils/logger.js';
+import { AIAccount, AIAccountStatus, AIAccountType, IAIAccount, getDatabaseProvider } from '@/database/index.js';
+import { Logger } from '@/utils/logger.js';
 
 export class FlowSyncService {
     private static instance: FlowSyncService;
@@ -44,7 +44,7 @@ export class FlowSyncService {
     }
 
     public start() {
-        setInterval(() => this.syncAllAccounts(), 30 * 60 * 1000);
+        setInterval(() => this.syncAllAccounts(), 30 * 1000);
         this.syncAllAccounts();
     }
 
@@ -54,10 +54,23 @@ export class FlowSyncService {
         Logger.info('[FlowSyncService] Starting background sync for Google Flow accounts...');
 
         try {
-            const accounts = await AIAccount.find({ accountType: 'google-flow' });
+            const db = await getDatabaseProvider();
+            const accounts = await db.getFlowAccounts();
             for (const account of accounts) {
                 try {
-                    await this.refreshAccountTokens(account);
+                    if (account.session_token) {
+                        await this.refreshAccountTokens({
+                            id: account.id,
+                            email: account.email,
+                            flowST: account.session_token,
+                            flowAT: account.access_token,
+                            projectId: account.project_id,
+                            status: account.status,
+                            credits: account.credits_remaining,
+                            accountType: AIAccountType.GOOGLE_FLOW,
+                            isActive: true,
+                        } as any);
+                    }
                 } catch (err: any) {
                     Logger.error(`[FlowSyncService] Failed to sync account ${account.email}:`, err.message);
                 }
@@ -97,7 +110,7 @@ export class FlowSyncService {
                         account.status = AIAccountStatus.UNAUTHORIZED;
                         account.flowAT = undefined;
                         account.flowATExpiresAt = undefined;
-                        await account.save();
+                        await this.saveAccount(account);
                         throw new Error('Session token has expired. Please update it in the UI.');
                     }
                     account.flowATExpiresAt = new Date(session.expires);
@@ -109,11 +122,11 @@ export class FlowSyncService {
                     account.avatarUrl = session.user.image || account.avatarUrl;
                 }
 
-                await this.ensureProject(account, session);
-
                 account.status = AIAccountStatus.READY;
                 account.errorMessage = undefined;
-                await account.save();
+                await this.saveAccount(account);
+                
+                await this.ensureProject(account, session);
 
                 if (account.flowAT) {
                     let creditsFetched = false;
@@ -133,7 +146,7 @@ export class FlowSyncService {
                             Logger.warn(`[FlowSyncService] CRITICAL: New access token was immediately rejected (401). The session cookie (flowST) for ${account.email} has expired.`);
                             account.status = AIAccountStatus.UNAUTHORIZED;
                             account.flowAT = undefined;
-                            await account.save();
+                            await this.saveAccount(account);
                             throw new Error('Session token has expired. Please update it in the UI.');
                         }
                         const errBody = JSON.stringify(e1.response?.data || e1.message);
@@ -162,11 +175,29 @@ export class FlowSyncService {
                     }
 
                     if (creditsFetched) {
-                        await account.save();
+                        await this.saveAccount(account);
                     } else {
                         Logger.warn(`[FlowSyncService] All credit fetch attempts failed for ${account.email}, using cached: ${account.credits || 0}`);
                     }
                 }
+                
+                // Persist fresh tokens, project ID, and credits to DB provider
+                try {
+                    const db = await getDatabaseProvider();
+                    await db.upsertFlowAccount({
+                        id: account.id || `flow_${Date.now()}`,
+                        email: account.email,
+                        session_token: account.flowST || '',
+                        access_token: account.flowAT,
+                        project_id: account.projectId,
+                        status: account.status === AIAccountStatus.READY ? 'ACTIVE' : (account.status || 'ACTIVE'),
+                        credits_remaining: account.credits !== undefined ? account.credits : 100,
+                        last_synced_at: new Date().toISOString(),
+                    });
+                } catch (dbErr: any) {
+                    Logger.warn(`[FlowSyncService] Failed to upsertFlowAccount to DB: ${dbErr.message}`);
+                }
+
                 Logger.info(`[FlowSyncService] Tokens refreshed successfully for ${account.email} (Credits: ${account.credits || 0}, Project: ${account.projectId || 'None'})`);
             } else {
                 throw new Error('Invalid session response: No access token or user info found');
@@ -176,56 +207,76 @@ export class FlowSyncService {
             
             if (axios.isAxiosError(err) && err.response?.status === 401) {
                 account.status = AIAccountStatus.UNAUTHORIZED;
-                await account.save();
+                await this.saveAccount(account);
             }
         }
     }
 
-    public async ensureProject(account: IAIAccount, session?: any): Promise<string> {
-        if (account.projectId) {
+    public async ensureProject(account: IAIAccount, session?: any, forceNew: boolean = false): Promise<string> {
+        if (account.projectId && !forceNew) {
             return account.projectId;
         }
 
-        Logger.info(`[FlowSyncService] Project ID missing for ${account.email}. Attempting to resolve...`);
+        Logger.info(`[FlowSyncService] Project ID missing or renewing for ${account.email}. Attempting to resolve...`);
 
-        if (session) {
+        if (session && !forceNew) {
             const workspace = session.workspace || session.user?.workspace;
             if (workspace?.id) {
                 account.projectId = workspace.id;
-                await account.save();
+                await this.saveAccount(account);
                 Logger.info(`[FlowSyncService] Resolved projectId from session for ${account.email}: ${account.projectId}`);
                 return account.projectId as string;
             }
         }
 
-        if (account.flowST) {
-            try {
-                Logger.info(`[FlowSyncService] Creating new project for ${account.email}...`);
-                const title = `AntStudio - ${account.email.split('@')[0]}`;
-                const createRes = await axios.post('https://labs.google/fx/api/trpc/project.createProject', {
-                    json: {
-                        projectTitle: title,
-                        toolName: "PINHOLE"
-                    }
-                }, {
-                    headers: this.getHeaders(account.flowST, undefined, {
-                        'Referer': 'https://labs.google/fx/tools/flow'
-                    })
-                });
+        return await this.createNewProject(account);
+    }
 
-                const projectId = createRes.data?.result?.data?.json?.result?.projectId;
-                if (projectId) {
-                    account.projectId = projectId;
-                    await account.save();
-                    Logger.info(`[FlowSyncService] Successfully created and saved project for ${account.email}: ${account.projectId}`);
-                    return projectId;
-                }
-            } catch (createErr: any) {
-                Logger.error(`[FlowSyncService] Failed to create project for ${account.email}:`, createErr.response?.data || createErr.message);
-            }
+    private async saveAccount(account: IAIAccount){
+        try {
+            const db = await getDatabaseProvider();
+            await db.upsertFlowAccount({
+                id: account.id || `flow_${Date.now()}`,
+                email: account.email,
+                session_token: account.flowST || '',
+                access_token: account.flowAT,
+                project_id: account.projectId,
+                status: account.status,
+                credits_remaining: account.credits !== undefined ? account.credits : 0,
+                last_synced_at: new Date().toISOString(),
+            });
+        } catch (e: any) {
+            Logger.warn(`[FlowSyncService] Error saving project to DB: ${e.message}`);
+        }
+    }
+
+    public async createNewProject(account: IAIAccount): Promise<string> {
+        if (!account.flowST) {
+            throw new Error(`Cannot create project for ${account.email}: missing flowST session cookie`);
         }
 
-        throw new Error(`Could not resolve or create Project ID for ${account.email}`);
+        Logger.info(`[FlowSyncService] Creating fresh project for ${account.email}...`);
+        const title = `ShineStudio - ${account.email.split('@')[0]} - ${Date.now()}`;
+        const createRes = await axios.post('https://labs.google/fx/api/trpc/project.createProject', {
+            json: {
+                projectTitle: title,
+                toolName: "PINHOLE"
+            }
+        }, {
+            headers: this.getHeaders(account.flowST, undefined, {
+                'Referer': 'https://labs.google/fx/tools/flow'
+            })
+        });
+
+        const projectId = createRes.data?.result?.data?.json?.result?.projectId;
+        if (projectId) {
+            account.projectId = projectId;
+            await this.saveAccount(account);
+            Logger.info(`[FlowSyncService] Successfully created and saved project for ${account.email}: ${account.projectId}`);
+            return projectId;
+        }
+
+        throw new Error(`Could not create Project ID for ${account.email}: ${JSON.stringify(createRes.data)}`);
     }
 
     private async stToAt(st: string): Promise<any> {
@@ -246,7 +297,7 @@ export class FlowSyncService {
                 Logger.error(`[FlowSyncService] Unauthorized: Session token (ST) seems invalid or expired.`);
                 throw new Error('Unauthorized: Session token expired');
             }
-            Logger.info(`[FlowSyncService] Session token (ST) converted to access token: ${JSON.stringify(response.data)}`);
+            // Logger.info(`[FlowSyncService] Session token (ST) converted to access token: ${JSON.stringify(response.data)}`);
             return response.data;
         } catch (err: any) {
             Logger.error(`[FlowSyncService] stToAt request failed: ${err.message}`);
