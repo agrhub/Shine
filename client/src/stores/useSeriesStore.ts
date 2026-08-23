@@ -4,12 +4,22 @@ import http from '@/utils/http';
 
 export interface ScriptScene {
   index: number;
+  sceneNumber?: number;
+  shotNumber?: number;
+  title?: string;
   heading: string;
   location: string;
   timeOfDay: string;
   lightingMood?: string;
+  frameDescription?: string;
   cameraMovement?: string;
   action: string;
+  characterCostumes?: Array<{
+    character: string;
+    wardrobe: string;
+    variantId?: string;
+  }>;
+  props?: string[];
   dialogue: Array<{
     character: string;
     line: string;
@@ -19,6 +29,11 @@ export interface ScriptScene {
   durationSeconds: number;
   bgmMood?: string;
   sfxCues?: string[];
+  referenceAssets?: {
+    characters?: string[];
+    locations?: string[];
+    props?: string[];
+  };
   visualPrompt?: string;
   storyboardFrameUrl?: string;
   videoUrl?: string;
@@ -32,11 +47,15 @@ export interface EpisodeScript {
   episodeNumber: number;
   title: string;
   synopsis?: string;
+  screenplay?: string;
   sceneCore?: string;
   conflictEscalation?: string;
   cliffhangerHook?: string;
   totalDurationSeconds?: number;
   scenes: ScriptScene[];
+  characters?: any[];
+  locations?: any[];
+  props?: any[];
 }
 
 export interface CharacterItem {
@@ -44,16 +63,43 @@ export interface CharacterItem {
   seriesId?: string;
   name: string;
   role: string;
+  age?: number;
   gender?: string;
   nationality?: string;
   voiceId?: string;
   identity?: string;
   traits?: string;
+  visualTraits?: string;
+  physicalCharacteristics?: string;
+  appearance?: string;
+  clothingAndAccessories?: string;
   speechStyle?: string;
   avatar?: string | null;
   avatarUrl?: string | null;
   loraModel?: string;
   description?: string;
+  meshMatchRate?: number;
+  anchors?: Array<{
+    id: string;
+    name: string;
+    landmarkType?: string;
+    matchScore?: number;
+    status?: 'locked' | 'pending';
+    imageUrl?: string;
+  }>;
+  wardrobe?: Array<{
+    id?: string;
+    name: string;
+    category?: string;
+    status?: string;
+    thumbnailUrl?: string;
+  }>;
+  wardrobeVariants?: Array<{
+    variantId: string;
+    name: string;
+    clothingAndAccessories?: string;
+    imageUrl?: string;
+  }>;
 }
 
 export interface CaptionCue {
@@ -78,6 +124,8 @@ export interface EpisodeItem {
   episodeNumber?: number;
   title: string;
   synopsis?: string;
+  screenplay?: string;
+  script?: string;
   sceneCore?: string;
   conflictEscalation?: string;
   cliffhangerHook?: string;
@@ -88,24 +136,31 @@ export interface EpisodeItem {
   statusClass: string;
   thumb: string;
   scenes?: ScriptScene[];
+  characters?: any[];
+  locations?: any[];
+  props?: any[];
   languageTracks?: LanguageTrack[];
   activeLanguageCode?: string;
+  videoUrlsByLang?: Record<string, string>;
+  renderUrl?: string;
 }
 
 export interface Series {
   id: string;
   title: string;
   genre: string;
-  tone?: string;
   synopsis?: string;
   description?: string;
   visual_style?: string;
+  visual_style_prompt?: string;
   target_audience?: string;
   country?: string;
   ratio?: string;
   viral_hook?: string;
   master_plan?: any;
   characters?: CharacterItem[];
+  locations?: any[];
+  props?: any[];
   episode_count: number;
   episodes_count?: number;
   totalEpisodes?: number;
@@ -120,6 +175,7 @@ export const useSeriesStore = defineStore('series', () => {
   const episodesList = ref<EpisodeItem[]>([]);
   const charactersList = ref<CharacterItem[]>([]);
   const activeEpisodeId = ref<string>('');
+  const activeLanguageCode = ref<string>('vi-VN');
   const activeScript = ref<EpisodeScript | null>(null);
   const isLoading = ref(false);
   const isScriptLoading = ref(false);
@@ -127,6 +183,15 @@ export const useSeriesStore = defineStore('series', () => {
   const activeEpisode = computed(() => {
     return episodesList.value.find(ep => ep.id === activeEpisodeId.value) || episodesList.value[0] || null;
   });
+
+  function setActiveLanguage(code: string) {
+    if (!code) return;
+    activeLanguageCode.value = code;
+    const ep = activeEpisode.value;
+    if (ep) {
+      ep.activeLanguageCode = code;
+    }
+  }
 
   function formatTime(seconds: number) {
     const mins = Math.floor(seconds / 60);
@@ -152,7 +217,8 @@ export const useSeriesStore = defineStore('series', () => {
   async function createSeries(data: {
     title: string;
     genre: string;
-    tone?: string;
+    visualStyle?: string;
+    visualStylePrompt?: string;
     episodeCount?: number;
     userId?: string;
     masterPlan?: any;
@@ -161,6 +227,8 @@ export const useSeriesStore = defineStore('series', () => {
     country?: string;
     ratio?: string;
     characters?: any[];
+    locations?: any[];
+    props?: any[];
   }) {
     isLoading.value = true;
     try {
@@ -188,8 +256,9 @@ export const useSeriesStore = defineStore('series', () => {
             id: c.id || `char_${seriesId}_${idx + 1}`,
             seriesId,
             name: c.name,
-            role: c.role || 'Character',
+            role: c.role || 'protagonist',
             gender: c.gender || (idx === 0 ? 'male' : idx === 1 ? 'female' : 'neutral'),
+            age: c.age || 25,
             nationality: c.nationality || res.data.series.country || 'Vietnam',
             voiceId: c.voiceId || (c.gender === 'female' ? 'Kore' : 'Fenrir'),
             identity: c.identity || c.traits || '',
@@ -200,6 +269,9 @@ export const useSeriesStore = defineStore('series', () => {
             avatarUrl: c.avatarUrl || c.avatar_url || c.avatar || null,
             loraModel: c.loraAnchor || c.lora_model || `lora-${(c.name || 'char').toLowerCase().replace(/\s+/g, '-')}-sdxl`,
             description: c.description || '',
+            anchors: c.anchors || [],
+            meshMatchRate: c.meshMatchRate || 0,
+            wardrobe: c.wardrobe || []
           }));
         }
 
@@ -211,6 +283,8 @@ export const useSeriesStore = defineStore('series', () => {
             episodeNumber: Number(ep.episode_number) || idx + 1,
             title: ep.title || `Episode ${idx + 1}`,
             synopsis: ep.synopsis || '',
+            screenplay: ep.screenplay || ep.script || '',
+            script: ep.script || ep.screenplay || '',
             sceneCore: ep.scene_core || '',
             conflictEscalation: ep.conflict_escalation || '',
             cliffhangerHook: ep.cliffhanger_hook || '',
@@ -219,12 +293,22 @@ export const useSeriesStore = defineStore('series', () => {
             scenesCount: `${ep.scenes?.length || 3} scenes`,
             status: ep.status === 'PUBLISHED' ? 'PUBLISHED' : ep.status === 'REVIEW' ? 'REVIEWING' : 'LIVE EDITING',
             statusClass: ep.status === 'PUBLISHED' ? 'text-green-500 bg-green-500/10' : 'text-[var(--el-color-primary)] bg-[var(--el-color-primary-light-9)]',
-            thumb: ep.thumbnail_url || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=200&h=260&fit=crop',
+            thumb: ep.thumbnail_url || ep.cover_image || (Array.isArray(ep.scenes) && (ep.scenes[0]?.storyboardFrameUrl || ep.scenes[0]?.imageUrl || ep.scenes[0]?.videoUrl)) || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=200&h=260&fit=crop',
             scenes: ep.scenes || [],
+            characters: ep.characters || res.data.series?.characters || [],
+            locations: ep.locations || res.data.series?.locations || [],
+            props: ep.props || res.data.series?.props || [],
+            languageTracks: ep.languageTracks || [],
+            activeLanguageCode: ep.activeLanguageCode || 'vi-VN',
           }));
 
-          if (episodesList.value.length > 0 && !activeEpisodeId.value) {
-            activeEpisodeId.value = episodesList.value[0].id;
+          if (episodesList.value.length > 0) {
+            const exists = episodesList.value.some(e => e.id === activeEpisodeId.value);
+            if (!exists) {
+              activeEpisodeId.value = episodesList.value[0].id;
+            }
+          } else {
+            activeEpisodeId.value = '';
           }
         }
 
@@ -246,9 +330,26 @@ export const useSeriesStore = defineStore('series', () => {
       if (res?.data) {
         activeScript.value = res.data;
         const targetEp = episodesList.value.find(e => e.id === epId);
-        if (targetEp && res.data.scenes) {
-          targetEp.scenes = res.data.scenes;
-          targetEp.scenesCount = `${res.data.scenes.length} scenes`;
+        if (targetEp) {
+          if (res.data.screenplay) {
+            targetEp.screenplay = res.data.screenplay;
+          }
+          if (res.data.characters) {
+            targetEp.characters = res.data.characters;
+          }
+          if (res.data.locations) {
+            targetEp.locations = res.data.locations;
+          }
+          if (res.data.props) {
+            targetEp.props = res.data.props;
+          }
+          if (res.data.scenes) {
+            targetEp.scenes = res.data.scenes;
+            targetEp.scenesCount = `${res.data.scenes.length} scenes`;
+          }
+          if (res.data.languageTracks) {
+            targetEp.languageTracks = res.data.languageTracks;
+          }
         }
       }
       return activeScript.value;
@@ -275,12 +376,29 @@ export const useSeriesStore = defineStore('series', () => {
       if (res?.data) {
         activeScript.value = res.data;
         const targetEp = episodesList.value.find(e => e.id === epId);
-        if (targetEp && res.data.scenes) {
-          targetEp.scenes = res.data.scenes;
-          targetEp.scenesCount = `${res.data.scenes.length} scenes`;
+        if (targetEp) {
+          if (res.data.screenplay) {
+            targetEp.screenplay = res.data.screenplay;
+          }
+          if (res.data.characters) {
+            targetEp.characters = res.data.characters;
+          }
+          if (res.data.locations) {
+            targetEp.locations = res.data.locations;
+          }
+          if (res.data.props) {
+            targetEp.props = res.data.props;
+          }
+          if (res.data.scenes) {
+            targetEp.scenes = res.data.scenes;
+            targetEp.scenesCount = `${res.data.scenes.length} scenes`;
+          }
         }
       }
       return activeScript.value;
+    } catch (e) {
+      console.warn('Failed to generate script for episode', e);
+      return null;
     } finally {
       isScriptLoading.value = false;
     }
@@ -304,13 +422,27 @@ export const useSeriesStore = defineStore('series', () => {
     // Update in activeScript
     if (activeScript.value?.scenes) {
       const scene = activeScript.value.scenes.find(s => s.index === sceneIndex);
-      if (scene) scene.storyboardFrameUrl = url;
+      if (scene) {
+        scene.storyboardFrameUrl = url;
+        (scene as any).imageUrl = url;
+      }
     }
     // Update in episodesList scenes
     const ep = episodesList.value.find(e => e.id === epId);
-    if (ep?.scenes) {
-      const scene = ep.scenes.find((s: any) => s.index === sceneIndex);
-      if (scene) (scene as any).storyboardFrameUrl = url;
+    if (ep) {
+      if (ep.scenes) {
+        const scene = ep.scenes.find((s: any) => s.index === sceneIndex);
+        if (scene) {
+          (scene as any).storyboardFrameUrl = url;
+          (scene as any).imageUrl = url;
+        }
+      }
+      // Auto-update episode thumbnail if scene 1 or no custom thumb
+      if (sceneIndex === 1 || !ep.thumb || ep.thumb.includes('unsplash.com')) {
+        ep.thumb = url;
+        (ep as any).thumbnail_url = url;
+        (ep as any).cover_image = url;
+      }
     }
   }
 
@@ -320,19 +452,28 @@ export const useSeriesStore = defineStore('series', () => {
       if (scene) scene.videoUrl = url;
     }
     const ep = episodesList.value.find(e => e.id === epId);
-    if (ep?.scenes) {
-      const scene = ep.scenes.find((s: any) => s.index === sceneIndex) as any;
-      if (scene) scene.videoUrl = url;
+    if (ep) {
+      if (ep.scenes) {
+        const scene = ep.scenes.find((s: any) => s.index === sceneIndex) as any;
+        if (scene) scene.videoUrl = url;
+      }
+      // if (sceneIndex === 1 || !ep.thumb || ep.thumb.includes('unsplash.com')) {
+      //   ep.thumb = url;
+      //   (ep as any).thumbnail_url = url;
+      //   (ep as any).cover_image = url;
+      // }
     }
   }
 
-  function updateSceneAssets(epId: string, sceneIndex: number, assets: { voiceoverUrl?: string; bgmUrl?: string; captionsData?: any[] }) {
+  function updateSceneAssets(epId: string, sceneIndex: number, assets: { voiceoverUrl?: string; bgmUrl?: string; captionsData?: any[]; voiceDurationUs?: number; voiceDurationMs?: number; [key: string]: any }) {
     if (activeScript.value?.scenes) {
       const scene = activeScript.value.scenes.find(s => s.index === sceneIndex) as any;
       if (scene) {
         if (assets.voiceoverUrl) scene.voiceoverUrl = assets.voiceoverUrl;
         if (assets.bgmUrl) scene.bgmUrl = assets.bgmUrl;
         if (assets.captionsData) scene.captionsData = assets.captionsData;
+        if (assets.voiceDurationUs) scene.voiceDurationUs = assets.voiceDurationUs;
+        if (assets.voiceDurationMs) scene.voiceDurationMs = assets.voiceDurationMs;
       }
     }
     const ep = episodesList.value.find(e => e.id === epId);
@@ -342,6 +483,8 @@ export const useSeriesStore = defineStore('series', () => {
         if (assets.voiceoverUrl) scene.voiceoverUrl = assets.voiceoverUrl;
         if (assets.bgmUrl) scene.bgmUrl = assets.bgmUrl;
         if (assets.captionsData) scene.captionsData = assets.captionsData;
+        if (assets.voiceDurationUs) scene.voiceDurationUs = assets.voiceDurationUs;
+        if (assets.voiceDurationMs) scene.voiceDurationMs = assets.voiceDurationMs;
       }
     }
   }
@@ -351,11 +494,14 @@ export const useSeriesStore = defineStore('series', () => {
     const ep = episodesList.value.find(e => e.id === epId);
     const scenes = ep?.scenes || activeScript.value?.scenes || [];
     if (!scenes.length) return;
+    const thumbUrl = ep?.thumb || (ep as any)?.thumbnail_url || (scenes[0]?.storyboardFrameUrl || (scenes[0] as any)?.imageUrl);
     try {
       await http.put(`/series/${seriesId}/episodes/${epId}`, {
         scenes,
         title: ep?.title,
         synopsis: ep?.synopsis,
+        thumbnail_url: thumbUrl,
+        cover_image: thumbUrl,
         languageTracks: ep?.languageTracks || [],
       });
     } catch (err) {
@@ -388,11 +534,13 @@ export const useSeriesStore = defineStore('series', () => {
   function updateLanguageTrackVoiceover(epId: string, langCode: string, sceneIndex: number, url: string) {
     const track = ensureLanguageTrack(epId, langCode);
     track.sceneVoiceovers[sceneIndex] = url;
+    updateSceneAssets(epId, sceneIndex, { voiceoverUrl: url });
   }
 
   function updateLanguageTrackCaptions(epId: string, langCode: string, sceneIndex: number, cues: CaptionCue[]) {
     const track = ensureLanguageTrack(epId, langCode);
     track.sceneCaptions[sceneIndex] = cues;
+    updateSceneAssets(epId, sceneIndex, { captionsData: cues });
   }
 
   function getLanguageTracks(epId: string): LanguageTrack[] {
@@ -414,7 +562,7 @@ export const useSeriesStore = defineStore('series', () => {
     title?: string;
     status?: 'DRAFT' | 'ACTIVE' | 'PUBLISHED' | 'ARCHIVED';
     description?: string;
-    tone?: string;
+    visual_style?: string;
     genre?: string;
   }) {
     isLoading.value = true;
@@ -510,6 +658,8 @@ export const useSeriesStore = defineStore('series', () => {
     updateLanguageTrackVoiceover,
     updateLanguageTrackCaptions,
     getLanguageTracks,
+    activeLanguageCode,
+    setActiveLanguage,
     LANGUAGE_DEFAULTS,
   };
 });

@@ -36,7 +36,7 @@ import { toast } from 'vue-sonner';
 import http from '@/utils/http';
 import ShortcutsModal from './ShortcutsModal.vue';
 import TaskbarPopover from './TaskbarPopover.vue';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 import { useTheme } from '@/composables/useTheme';
 
 const { theme, toggleTheme } = useTheme();
@@ -123,8 +123,9 @@ const handleNew = () => {
 
 const handleExportJSON = () => {
   try {
-    const json = (core as any).exportToJSON?.();
+    const json = core.project.export();
     const clipsArr = Array.isArray(json?.clips) ? json.clips : Object.values(json?.clips || {});
+    console.log("handleExportJSON", json);
     if (clipsArr.length === 0) {
       toast.warning('No clips to export');
       return;
@@ -157,7 +158,8 @@ const handleImportJSON = () => {
     try {
       const text = await file.text();
       const json = JSON.parse(text);
-      await (core as any).loadFromJSON?.(json);
+      core.project.import(json);
+      // await (core as any).loadFromJSON?.(json);
       toast.success('Project loaded successfully');
     } catch (error: any) {
       toast.error('Failed to load from JSON: ' + error.message);

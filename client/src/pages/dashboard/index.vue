@@ -22,6 +22,7 @@ const billingStore = useBillingStore();
 const isWizardOpen = ref(false);
 
 const userName = computed(() => authStore.user?.name || 'Creator');
+const userCredits = computed(() => authStore.user?.credits ?? billingStore.currentTier?.creditBalance ?? 0);
 
 // Search, Filter & Pagination states for Projects section
 const projectSearchQuery = ref('');
@@ -314,11 +315,11 @@ onMounted(async () => {
         </div>
         <div class="text-left md:text-right">
           <div class="text-3xl font-semibold tracking-tight">
-            {{ billingStore.currentTier.creditBalance || 250 }}
+            {{ userCredits.toLocaleString() }}
             <span class="text-[var(--el-color-primary)] text-base font-medium">{{ t('dashboard.shineCredits') }}</span>
           </div>
           <p class="text-[var(--el-text-color-secondary)] text-xs mt-1">
-            {{ t('billing.creditsRemaining', { count: billingStore.currentTier.creditBalance || 250 }) }}
+            {{ t('billing.creditsRemaining', { count: userCredits }) }}
           </p>
         </div>
       </div>

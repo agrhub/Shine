@@ -23,3 +23,5 @@ client/i18n_errors.txt
 client/pnpm-lock.yaml
 client/replace_theme.cjs
 playwright.config.ts
+docs/devpost-submission-content.md
+openvideo-project-1787393848394.json

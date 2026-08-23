@@ -3,7 +3,6 @@ import HomeLayout from '@/layouts/HomeLayout.vue';
 import DefaultLayout from '@/layouts/DefaultLayout.vue';
 import AuthLayout from '@/layouts/AuthLayout.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
-import StudioLayout from '@/layouts/StudioLayout.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -114,36 +113,6 @@ const router = createRouter({
           name: 'settings',
           component: () => import('@/pages/settings/SettingsPage.vue'),
         },
-        {
-          path: 'billing',
-          name: 'billing',
-          component: () => import('@/pages/billing/BillingPage.vue'),
-        },
-        {
-          path: 'admin/users',
-          name: 'admin-users',
-          component: () => import('@/pages/admin/AdminUsersPage.vue'),
-        },
-        {
-          path: 'admin/render-cluster',
-          name: 'admin-render-cluster',
-          component: () => import('@/pages/admin/AdminRenderClusterPage.vue'),
-        },
-        {
-          path: 'admin/observability',
-          name: 'admin-observability',
-          component: () => import('@/pages/admin/AdminObservabilityPage.vue'),
-        },
-        {
-          path: 'marketplace/templates',
-          name: 'marketplace-templates',
-          component: () => import('@/pages/marketplace/TemplateMarketplacePage.vue'),
-        },
-        {
-          path: 'marketplace/actors',
-          name: 'marketplace-actors',
-          component: () => import('@/pages/marketplace/ActorMarketplacePage.vue'),
-        },
       ],
     },
 
@@ -153,32 +122,6 @@ const router = createRouter({
       component: () => import('@/pages/projects/ProjectWorkspacePage.vue'),
       meta: { requiresAuth: true, layout: 'DefaultLayout' },
     },
-
-    // 5. Studio Layout (Dedicated Production Studio)
-    {
-      path: '/',
-      component: StudioLayout,
-      meta: { requiresAuth: true },
-      children: [
-        {
-          path: 'script',
-          name: 'script',
-          component: () => import('@/pages/script/ScriptStudio.vue'),
-        },
-        {
-          path: 'script/:id',
-          name: 'script-detail',
-          component: () => import('@/pages/script/ScriptStudio.vue'),
-        },
-        {
-          path: 'persona',
-          name: 'persona',
-          component: () => import('@/pages/persona/PersonaStudio.vue'),
-        },
-
-      ],
-    },
-
 
     // Fallback catch-all redirect to home
     {

@@ -1,9 +1,20 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useSeriesStore } from '@/stores/useSeriesStore';
 import { usePipelineStore } from '@/stores/usePipelineStore';
 import { toast } from 'vue-sonner';
+import CountryFlag from '@/components/common/CountryFlag.vue';
+import {
+  GEMINI_SPEECH_LANGUAGES,
+  getMainLanguageForCountry,
+  getLanguageByCode,
+  type GeminiSpeechLanguage
+} from '@/constants/geminiLanguages';
+import { TabPaneName } from 'element-plus';
+import { core } from '@/utils/project';
+import { fontManager } from '@openvideo/engine-pixi';
+import { getGroupedFonts, getFontByPostScriptName } from '@/utils/font-utils';
 
 const emit = defineEmits<{
   (e: 'apply-captions'): void;
@@ -13,24 +24,63 @@ const { t } = useI18n();
 const seriesStore = useSeriesStore();
 const pipelineStore = usePipelineStore();
 
-const selectedCaptionStyle = ref<'pop' | 'minimal' | 'comic'>('pop');
+// Font List
+const GROUPED_FONTS = getGroupedFonts();
+
+// Caption Styles & Properties matching OpenVideo Spec
+const selectedCaptionStyle = ref<'pop' | 'minimal' | 'comic' | 'neon' | 'karaoke'>('pop');
+const selectedFontFamily = ref('Bangers-Regular');
 const captionTextColor = ref('#FFFFFF');
-const captionFontSize = ref(42);
+const activeWordHighlightColor = ref('#FFD700');
+const captionOutlineColor = ref('#000000');
+const captionFontSize = ref(44);
 const captionVerticalPos = ref(80);
 const captionOutlineWeight = ref(3);
+const selectedVerticalAlign = ref<'top' | 'center' | 'bottom'>('bottom');
+const selectedTextAlign = ref<'left' | 'center' | 'right'>('center');
+const selectedWordsPerLine = ref<'multiple' | 'single'>('multiple');
+const selectedTextCase = ref<'none' | 'uppercase' | 'lowercase'>('uppercase');
+const enableBackgroundBox = ref(false);
+const captionBgColor = ref('rgba(0, 0, 0, 0.7)');
 const aiHighlightAnimate = ref(true);
-const targetLanguage = ref('English (US)');
+
+const isTranslating = ref(false);
+
+// Main target language for series
+const mainTargetLang = computed<GeminiSpeechLanguage>(() => {
+  return getMainLanguageForCountry(seriesStore.currentSeries?.country);
+});
 
 // Language track state
-const LANG_OPTIONS = [
-  { code: 'vi-VN', label: 'Tiếng Việt', flag: '🇻🇳' },
-  { code: 'en-US', label: 'English', flag: '🇺🇸' },
-  { code: 'zh-CN', label: '中文', flag: '🇨🇳' },
-  { code: 'ja-JP', label: '日本語', flag: '🇯🇵' },
-  { code: 'ko-KR', label: '한국어', flag: '🇰🇷' },
-];
-const activeCapLang = ref('en-US');
-const translateSourceLang = ref('vi-VN'); // source lang for "Translate from X" flow
+const activeCapLang = ref('vi-VN');
+const translateSourceLang = ref('vi-VN');
+const activeTrackCodes = ref<string[]>([]);
+const selectedBatchLangs = ref<string[]>([]);
+const isBatchMode = ref(false);
+const isEnableCaption = ref(true);
+const selectedLangToAdd = ref<string>('');
+
+// Auto-sync main language when active series changes
+watch(mainTargetLang, (newMain) => {
+  if (newMain) {
+    if (!activeTrackCodes.value.includes(newMain.code)) {
+      activeTrackCodes.value.unshift(newMain.code);
+    }
+    if (!activeCapLang.value || (activeCapLang.value === 'en-US' && newMain.code !== 'en-US')) {
+      activeCapLang.value = newMain.code;
+    }
+    translateSourceLang.value = newMain.code;
+  }
+}, { immediate: true });
+
+function handleAddLanguage(code: string) {
+  if (!code) return;
+  if (!activeTrackCodes.value.includes(code)) {
+    activeTrackCodes.value.push(code);
+  }
+  activeCapLang.value = code;
+  selectedLangToAdd.value = '';
+}
 
 const scenes = computed(() => seriesStore.activeScript?.scenes || seriesStore.activeEpisode?.scenes || []);
 const b6Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b6'));
@@ -43,20 +93,259 @@ function getCaptionStatus(sceneIndex: number) {
 }
 
 const styleOptions = [
-  { value: 'pop', label: t('workspace.captionStylePop') },
-  { value: 'minimal', label: t('workspace.captionStyleMinimal') },
-  { value: 'comic', label: t('workspace.captionStyleComic') },
+  { value: 'pop', label: '🔥 Pop' },
+  { value: 'minimal', label: '✨ Minimal' },
+  { value: 'comic', label: '💬 Comic' },
+  { value: 'neon', label: '⚡ Neon' },
+  { value: 'karaoke', label: '🎤 Karaoke' },
 ];
+
+// Presets configuration matching OpenVideo Creative Captions Spec
+function applyPreset(presetKey: 'pop' | 'minimal' | 'comic' | 'neon' | 'karaoke') {
+  selectedCaptionStyle.value = presetKey;
+  if (presetKey === 'pop') {
+    selectedFontFamily.value = 'Bangers-Regular';
+    captionFontSize.value = 46;
+    captionTextColor.value = '#FFFFFF';
+    activeWordHighlightColor.value = '#FFD700';
+    captionOutlineWeight.value = 4;
+    captionOutlineColor.value = '#000000';
+    selectedTextCase.value = 'uppercase';
+    selectedVerticalAlign.value = 'bottom';
+    selectedTextAlign.value = 'center';
+    enableBackgroundBox.value = false;
+    captionVerticalPos.value = 80;
+  } else if (presetKey === 'minimal') {
+    selectedFontFamily.value = 'Inter-Regular';
+    captionFontSize.value = 36;
+    captionTextColor.value = '#FFFFFF';
+    activeWordHighlightColor.value = '#67C23A';
+    captionOutlineWeight.value = 0;
+    captionOutlineColor.value = '#000000';
+    selectedTextCase.value = 'none';
+    selectedVerticalAlign.value = 'bottom';
+    selectedTextAlign.value = 'center';
+    enableBackgroundBox.value = true;
+    captionBgColor.value = 'rgba(0, 0, 0, 0.6)';
+    captionVerticalPos.value = 85;
+  } else if (presetKey === 'comic') {
+    selectedFontFamily.value = 'Bangers-Regular';
+    captionFontSize.value = 48;
+    captionTextColor.value = '#FFFF00';
+    activeWordHighlightColor.value = '#FF3366';
+    captionOutlineWeight.value = 5;
+    captionOutlineColor.value = '#000000';
+    selectedTextCase.value = 'uppercase';
+    selectedVerticalAlign.value = 'bottom';
+    selectedTextAlign.value = 'center';
+    enableBackgroundBox.value = false;
+    captionVerticalPos.value = 78;
+  } else if (presetKey === 'neon') {
+    selectedFontFamily.value = 'Outfit-Bold';
+    captionFontSize.value = 44;
+    captionTextColor.value = '#00FFFF';
+    activeWordHighlightColor.value = '#FF00FF';
+    captionOutlineWeight.value = 3;
+    captionOutlineColor.value = '#001A33';
+    selectedTextCase.value = 'uppercase';
+    selectedVerticalAlign.value = 'bottom';
+    selectedTextAlign.value = 'center';
+    enableBackgroundBox.value = false;
+    captionVerticalPos.value = 80;
+  } else if (presetKey === 'karaoke') {
+    selectedFontFamily.value = 'Outfit-Bold';
+    captionFontSize.value = 44;
+    captionTextColor.value = '#FFFFFF';
+    activeWordHighlightColor.value = '#00FF66';
+    captionOutlineWeight.value = 3;
+    captionOutlineColor.value = '#111111';
+    selectedTextCase.value = 'uppercase';
+    selectedVerticalAlign.value = 'bottom';
+    selectedTextAlign.value = 'center';
+    enableBackgroundBox.value = false;
+    captionVerticalPos.value = 82;
+  }
+  applyStyleToTimeline();
+}
+
+// Real-time Style Sync to OpenVideo Timeline & Pixi Compositor
+async function applyStyleToTimeline() {
+  const state = core.store.getState();
+  const settings = state.settings || { width: 1080, height: 1920 };
+  const videoHeight = settings.height || 1920;
+  const videoWidth = settings.width || 1080;
+  const captionWidth = Math.round(videoWidth * 0.85);
+
+  const font = getFontByPostScriptName(selectedFontFamily.value);
+  if (font && font.url) {
+    try {
+      await fontManager.addFont({ name: font.postScriptName, url: font.url });
+    } catch {
+      // Font load fallback
+    }
+  }
+
+  const styleObj: any = {
+    fontFamily: selectedFontFamily.value,
+    fontSize: captionFontSize.value,
+    color: captionTextColor.value,
+    textAlign: selectedTextAlign.value,
+    textCase: selectedTextCase.value,
+    backgroundColor: enableBackgroundBox.value ? captionBgColor.value : undefined,
+    padding: enableBackgroundBox.value ? 10 : undefined,
+    borderRadius: enableBackgroundBox.value ? 8 : undefined,
+    stroke: captionOutlineWeight.value > 0 ? {
+      color: captionOutlineColor.value,
+      width: captionOutlineWeight.value,
+    } : undefined,
+  };
+
+  const colorsObj: any = {
+    active: {
+      color: activeWordHighlightColor.value,
+    },
+    keyword: {
+      color: activeWordHighlightColor.value,
+    },
+  };
+
+  // Broadcast through core command API
+  core.caption.setStyle(styleObj);
+  core.caption.setColors(colorsObj);
+
+  // Directly update all Caption clips with transform and word animations
+  const clips = { ...(state.clips || {}) };
+  let hasChanges = false;
+
+  Object.keys(clips).forEach((clipId) => {
+    const clip = clips[clipId];
+    if (clip && clip.type === 'Caption') {
+      hasChanges = true;
+      const calculatedTop = Math.round((videoHeight * (captionVerticalPos.value / 100)) - (clip.height || 120) / 2);
+      clip.left = Math.round((videoWidth - captionWidth) / 2);
+      clip.top = calculatedTop;
+      clip.transform = {
+        ...(clip.transform || {}),
+        x: clip.left,
+        y: calculatedTop,
+        width: captionWidth,
+        height: clip.height || 120,
+      };
+      clip.wordsPerLine = selectedWordsPerLine.value;
+      clip.textCase = selectedTextCase.value;
+      clip.style = {
+        ...(clip.style || {}),
+        ...styleObj,
+      };
+      clip.caption = {
+        ...(clip.caption || {}),
+        colors: {
+          ...(clip.caption?.colors || {}),
+          ...colorsObj,
+        },
+        wordAnimation: aiHighlightAnimate.value ? {
+          type: 'scale',
+          application: 'active',
+          value: 1.15,
+        } : undefined,
+      };
+    }
+  });
+
+  if (hasChanges) {
+    core.store.setState({ ...state, clips });
+  }
+}
+
+// Vertical align slot quick-setter
+function setVerticalSlot(slot: 'top' | 'center' | 'bottom') {
+  selectedVerticalAlign.value = slot;
+  if (slot === 'top') captionVerticalPos.value = 15;
+  else if (slot === 'center') captionVerticalPos.value = 50;
+  else captionVerticalPos.value = 80;
+  applyStyleToTimeline();
+}
+
+function handleVerticalSliderChange() {
+  if (captionVerticalPos.value < 30) selectedVerticalAlign.value = 'top';
+  else if (captionVerticalPos.value > 70) selectedVerticalAlign.value = 'bottom';
+  else selectedVerticalAlign.value = 'center';
+  applyStyleToTimeline();
+}
+
+// Format microsecond timestamps to standard SRT format
+function formatSRTTime(micros: number): string {
+  const ms = Math.floor(micros / 1000);
+  const hours = Math.floor(ms / 3600000);
+  const minutes = Math.floor((ms % 3600000) / 60000);
+  const seconds = Math.floor((ms % 60000) / 1000);
+  const millis = ms % 1000;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')},${String(millis).padStart(3, '0')}`;
+}
+
+// Export SRT Subtitle File
+function handleExportSRT() {
+  const state = core.store.getState();
+  const clips = Object.values(state.clips || {}).filter((c: any) => c.type === 'Caption');
+  if (clips.length === 0) {
+    toast.info(t('toast.noCaptionsToExport', 'No caption clips found on timeline to export'));
+    return;
+  }
+  clips.sort((a: any, b: any) => (a.timing?.display?.from || a.display?.from || 0) - (b.timing?.display?.from || b.display?.from || 0));
+  const srtContent = clips.map((clip: any, idx: number) => {
+    const fromUs = clip.timing?.display?.from || clip.display?.from || 0;
+    const toUs = clip.timing?.display?.to || clip.display?.to || fromUs + 2_000_000;
+    return `${idx + 1}\n${formatSRTTime(fromUs)} --> ${formatSRTTime(toUs)}\n${clip.text || ''}\n`;
+  }).join('\n');
+
+  const blob = new Blob([srtContent], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `subtitles_${activeCapLang.value}.srt`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast.success(`Exported subtitles_${activeCapLang.value}.srt successfully!`);
+}
+
+// Shift All Captions Calibration (+/- ms)
+function shiftAllCaptions(offsetMs: number) {
+  const state = core.store.getState();
+  const clips = { ...(state.clips || {}) };
+  let updated = false;
+
+  Object.keys(clips).forEach((key) => {
+    const clip = clips[key];
+    if (clip && clip.type === 'Caption') {
+      updated = true;
+      const curFrom = clip.timing?.display?.from ?? clip.display?.from ?? 0;
+      const curTo = clip.timing?.display?.to ?? clip.display?.to ?? (curFrom + (clip.duration || 2_000_000));
+      const newFrom = Math.max(0, curFrom + offsetMs * 1000);
+      const newTo = Math.max(newFrom + 200_000, curTo + offsetMs * 1000);
+      clip.display = { from: newFrom, to: newTo };
+      clip.timing = {
+        ...(clip.timing || {}),
+        display: { from: newFrom, to: newTo },
+      };
+    }
+  });
+
+  if (updated) {
+    core.store.setState({ ...state, clips });
+    toast.info(`Shifted all captions by ${offsetMs > 0 ? `+${offsetMs}` : offsetMs}ms`);
+  }
+}
 
 function applyAllCaptions() {
   pipelineStore.setStepStatus('b6', 'running');
-  // Mark all scenes as synced
+  applyStyleToTimeline();
   scenes.value.forEach(scene => {
     captionSyncStatus.value.set(scene.index, 'synced');
   });
   setTimeout(() => {
     pipelineStore.setStepStatus('b6', 'done');
-  }, 500);
+    toast.success(t('toast.b6CaptionsSynced', 'Captions applied to timeline'));
+  }, 400);
 }
 
 // Get cues for active language + scene
@@ -71,245 +360,446 @@ function hasCaptions(sceneIndex: number) {
   return getSceneCues(sceneIndex).length > 0;
 }
 
-async function generateCaptions() {
+// AI Auto Translate Subtitles for active language tab
+async function handleTranslateActiveLanguage() {
+  const targetLang = activeCapLang.value;
+  const sourceLang = mainTargetLang.value.code;
+  if (targetLang === sourceLang) {
+    toast.info(t('toast.alreadyMainLang', 'This is the main language track. Use Autofill to generate.'));
+    return;
+  }
+
+  isTranslating.value = true;
   try {
-    toast.info(`Generating captions · ${activeCapLang.value}`);
-    await pipelineStore.generateCaptionsForLanguage(activeCapLang.value);
+    toast.info(t('toast.translatingCaptions', `Translating subtitles from ${getLanguageByCode(sourceLang).nativeName} to ${getLanguageByCode(targetLang).nativeName}...`));
+    await pipelineStore.generateCaptionsForLanguage(targetLang, sourceLang);
     emit('apply-captions');
-    toast.success(t('toast.b6CaptionsSynced'));
-  } catch {
-    toast.error('Caption generation failed');
+    applyStyleToTimeline();
+    toast.success(t('toast.captionsTranslated', `Subtitles translated to ${getLanguageByCode(targetLang).nativeName} successfully!`));
+  } catch (err: any) {
+    toast.error(t('toast.captionTranslationFailed', `Translation failed: ${err?.message || 'Unknown error'}`));
+  } finally {
+    isTranslating.value = false;
   }
 }
 
-async function translateCaptions() {
-  try {
-    toast.info(`Translating from ${translateSourceLang.value} → ${activeCapLang.value}`);
-    await pipelineStore.generateCaptionsForLanguage(activeCapLang.value, translateSourceLang.value);
-    emit('apply-captions');
-    toast.success(`Captions translated to ${activeCapLang.value}`);
-  } catch {
-    toast.error('Caption translation failed');
+// Generate captions for all selected tracks or active track
+async function generateCaptions() {
+  const langs = isBatchMode.value && selectedBatchLangs.value.length > 0
+    ? selectedBatchLangs.value
+    : [activeCapLang.value];
+
+  for (const lang of langs) {
+    try {
+      toast.info(t('toast.generatingCaptionsLang', { lang }));
+      await pipelineStore.generateCaptionsForLanguage(lang);
+      emit('apply-captions');
+      applyStyleToTimeline();
+      toast.success(t('toast.b6CaptionsSynced', 'Captions generated successfully'));
+    } catch {
+      toast.error(t('toast.captionGenerationFailed', 'Caption generation failed'));
+    }
+  }
+}
+
+function handleRemoveLanguage(lang: TabPaneName) {
+  if (activeTrackCodes.value.length === 1) {
+    return;
+  }
+  activeTrackCodes.value.splice(activeTrackCodes.value.indexOf(lang as string), 1);
+  if (activeCapLang.value === lang) {
+    activeCapLang.value = activeTrackCodes.value[0];
   }
 }
 </script>
 
 <template>
   <div class="space-y-6">
-
-    <!-- Language Track Selector + Actions -->
-    <div class="border rounded-2xl p-3 shadow-soft" style="background-color: var(--el-card-bg-color); border-color: var(--el-border-color);">
-      <div class="flex items-center justify-between mb-2">
-        <h3 class="text-xs font-bold uppercase tracking-wider" style="color: var(--el-text-color-secondary);">🌐 Caption Language</h3>
-        <el-tag v-if="b6Step" :type="b6Step.status === 'done' ? 'success' : b6Step.status === 'running' ? 'warning' : 'info'" size="small" effect="plain" round>
-          B6: {{ b6Step.status }}
-        </el-tag>
-      </div>
-      <!-- Language tabs -->
-      <div class="flex flex-wrap gap-1.5 mb-3">
-        <el-tag
-          v-for="lang in LANG_OPTIONS"
-          :key="lang.code"
-          size="small"
-          :effect="activeCapLang === lang.code ? 'dark' : 'plain'"
-          :type="activeCapLang === lang.code ? 'primary' : 'info'"
-          class="cursor-pointer select-none"
-          @click="activeCapLang = lang.code"
-        >
-          {{ lang.flag }} {{ lang.label }}
-        </el-tag>
-      </div>
-      <!-- Actions row -->
-      <div class="flex gap-2">
-        <el-button size="small" type="primary" icon="ChatSquare" class="flex-1" @click="generateCaptions">
-          Generate · {{ LANG_OPTIONS.find(l => l.code === activeCapLang)?.label }}
-        </el-button>
-        <el-popover trigger="hover" placement="top" width="200">
-          <template #reference>
-            <el-button size="small" type="info" plain icon="Sort" @click="translateCaptions">
-              Translate from…
-            </el-button>
-          </template>
-          <div class="flex flex-col gap-1.5 p-1">
-            <p class="text-[10px] font-bold uppercase mb-1" style="color: var(--el-text-color-secondary);">Source language</p>
-            <el-tag
-              v-for="lang in LANG_OPTIONS.filter(l => l.code !== activeCapLang)"
-              :key="lang.code"
-              size="small"
-              :effect="translateSourceLang === lang.code ? 'dark' : 'plain'"
-              :type="translateSourceLang === lang.code ? 'success' : 'info'"
-              class="cursor-pointer"
-              @click="translateSourceLang = lang.code"
-            >
-              {{ lang.flag }} {{ lang.label }}
-            </el-tag>
-          </div>
-        </el-popover>
-      </div>
-    </div>
-
-    <!-- Caption Tracks Per Scene -->
-    <div>
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-xs font-bold uppercase tracking-wider" style="color: var(--el-text-color-secondary);">
-          {{ t('workspace.captionPerVoiceover') }}
-        </h3>
-      </div>
-
-      <div class="space-y-3">
-        <div
-          v-for="scene in scenes"
-          :key="`cap_${scene.index}`"
-          class="rounded-xl border overflow-hidden"
-          style="border-color: var(--el-border-color-light); background-color: var(--el-fill-color-light);"
-        >
-          <!-- Scene Header -->
-          <div class="p-2.5 flex justify-between items-center border-b" style="border-color: var(--el-border-color-lighter);">
-            <span class="text-[10px] font-bold uppercase" style="color: var(--el-color-primary);">
-              {{ t('workspace.sceneAbbr') }} {{ String(scene.index).padStart(2, '0') }} — {{ scene.heading || scene.location }}
-            </span>
-            <el-tag
-              :type="hasCaptions(scene.index) ? 'success' : 'info'"
-              size="small"
-              effect="plain"
-            >
-              {{ hasCaptions(scene.index) ? `✓ ${getSceneCues(scene.index).length} cues` : t('workspace.captionPending') }}
-            </el-tag>
-          </div>
-
-          <!-- Caption cues (if generated) -->
-          <div v-if="hasCaptions(scene.index)" class="p-3 space-y-1">
-            <div
-              v-for="(cue, cIdx) in getSceneCues(scene.index).slice(0, 4)"
-              :key="cIdx"
-              class="p-1.5 rounded-lg border flex items-center gap-2 text-[10px]"
-              style="background-color: var(--el-fill-color); border-color: var(--el-border-color-lighter);"
-            >
-              <span class="shrink-0 font-mono" style="color: var(--el-text-color-secondary);">{{ cue.startMs }}ms</span>
-              <span class="flex-1 truncate" style="color: var(--el-text-color-primary);">{{ cue.text }}</span>
-            </div>
-            <div v-if="getSceneCues(scene.index).length > 4" class="text-[9px] text-center" style="color: var(--el-text-color-placeholder);">
-              + {{ getSceneCues(scene.index).length - 4 }} more cues…
-            </div>
-          </div>
-
-          <!-- Fallback: show dialogue when no cues yet -->
-          <div v-else-if="scene.dialogue && scene.dialogue.length" class="p-3 space-y-2">
-            <div
-              v-for="(dlg, dIdx) in scene.dialogue"
-              :key="dIdx"
-              class="p-2 rounded-lg border flex items-start gap-2"
-              style="background-color: var(--el-fill-color); border-color: var(--el-border-color-lighter);"
-            >
-              <div class="flex-1 min-w-0">
-                <span class="text-[9px] font-bold block" style="color: var(--el-color-primary);">{{ dlg.character }}</span>
-                <p class="text-[11px] leading-snug mt-0.5" style="color: var(--el-text-color-primary);">{{ dlg.line }}</p>
-              </div>
-              <el-tag size="small" effect="plain" type="info" class="!text-[9px] shrink-0">
-                {{ dIdx + 1 }}/{{ scene.dialogue.length }}
-              </el-tag>
-            </div>
-          </div>
-          <div v-else class="p-3 text-xs text-center" style="color: var(--el-text-color-placeholder);">
-            No dialogue in this scene
-          </div>
-        </div>
-
-        <div v-if="scenes.length === 0" class="p-4 text-center text-xs rounded-xl border border-dashed" style="color: var(--el-text-color-placeholder); border-color: var(--el-border-color);">
-          Load a script to manage caption tracks.
-        </div>
-      </div>
-    </div>
-
-    <!-- Style Presets -->
-    <div>
-      <h3 class="text-xs font-bold uppercase tracking-wider mb-3" style="color: var(--el-text-color-secondary);">
-        {{ t('workspace.captionStylePresets') }}
-      </h3>
-      <el-segmented
-        v-model="selectedCaptionStyle"
-        :options="styleOptions"
-        block
-      />
-    </div>
-
-    <!-- Design Customization -->
-    <div class="p-4 rounded-2xl border shadow-soft space-y-4" style="background-color: var(--el-card-bg-color); border-color: var(--el-border-color);">
-      <h3 class="text-xs font-bold uppercase tracking-wider" style="color: var(--el-text-color-secondary);">
-        {{ t('workspace.designCustomization') }}
-      </h3>
-
-      <!-- Font Size -->
-      <div class="space-y-1.5">
-        <div class="flex justify-between text-[10px] font-bold uppercase" style="color: var(--el-text-color-secondary);">
-          <span>{{ t('workspace.captionFontSize') }}</span>
-          <span style="color: var(--el-color-primary);">{{ captionFontSize }}px</span>
-        </div>
-        <el-slider v-model="captionFontSize" :min="24" :max="80" size="small" />
-      </div>
-
-      <!-- Vertical Position -->
-      <div class="space-y-1.5">
-        <div class="flex justify-between text-[10px] font-bold uppercase" style="color: var(--el-text-color-secondary);">
-          <span>{{ t('workspace.captionVerticalPos') }}</span>
-          <span style="color: var(--el-color-primary);">{{ captionVerticalPos }}%</span>
-        </div>
-        <el-slider v-model="captionVerticalPos" :min="20" :max="95" size="small" />
-      </div>
-
-      <!-- Outline Weight -->
-      <div class="space-y-1.5">
-        <div class="flex justify-between text-[10px] font-bold uppercase" style="color: var(--el-text-color-secondary);">
-          <span>{{ t('workspace.captionOutlineWeight') }}</span>
-          <span style="color: var(--el-color-primary);">{{ captionOutlineWeight }}px</span>
-        </div>
-        <el-slider v-model="captionOutlineWeight" :min="0" :max="8" size="small" />
-      </div>
-
-      <!-- Text Color -->
-      <div class="flex items-center justify-between">
-        <span class="text-[10px] font-bold uppercase" style="color: var(--el-text-color-secondary);">{{ t('workspace.captionTextColor') }}</span>
-        <el-color-picker v-model="captionTextColor" size="small" />
-      </div>
-    </div>
-
-    <!-- Smart Features -->
+    <!-- Header Feature Toggle -->
     <div class="space-y-3">
       <h3 class="text-xs font-bold uppercase tracking-wider" style="color: var(--el-text-color-secondary);">
-        {{ t('workspace.smartFeatures') }}
+        {{ t('workspace.captionFeatures', 'Caption Features') }}
       </h3>
 
       <div class="p-3.5 rounded-xl border flex items-center justify-between" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
         <div>
-          <p class="text-xs font-semibold" style="color: var(--el-text-color-primary);">{{ t('workspace.aiHighlightAnimate') }}</p>
-          <p class="text-[10px]" style="color: var(--el-text-color-secondary);">{{ t('workspace.autoHighlightKeywords') }}</p>
+          <p class="text-xs font-semibold" style="color: var(--el-text-color-primary);">{{ t('workspace.aiAutoCaption', 'AI Auto Caption') }}</p>
+          <p class="text-[10px]" style="color: var(--el-text-color-secondary);">{{ t('workspace.autoGenerateEpisodeCaption', 'Auto generate & synchronize episode captions') }}</p>
         </div>
-        <el-switch v-model="aiHighlightAnimate" size="small" />
-      </div>
-
-      <div class="space-y-2">
-        <label class="text-[11px] font-semibold" style="color: var(--el-text-color-secondary);">{{ t('workspace.targetLanguage') }}</label>
-        <el-select v-model="targetLanguage" size="small" class="w-full">
-          <el-option label="English (US)" value="English (US)" />
-          <el-option label="Vietnamese" value="Vietnamese" />
-          <el-option label="Chinese (Simplified)" value="Chinese (Simplified)" />
-          <el-option label="Japanese" value="Japanese" />
-          <el-option label="Spanish" value="Spanish" />
-          <el-option label="French" value="French" />
-        </el-select>
+        <el-switch v-model="isEnableCaption" size="small" />
       </div>
     </div>
 
-    <!-- Apply to Timeline Button -->
-    <el-button
-      type="primary"
-      round
-      class="!w-full !font-bold !py-3.5"
-      icon="ChatSquare"
-      :loading="b6Step?.status === 'running'"
-      @click="applyAllCaptions"
-    >
-      {{ t('workspace.applyToTimeline') }}
-    </el-button>
+    <template v-if="isEnableCaption">
+      <!-- Languages Bar -->
+      <div class="space-y-3">
+        <div class="flex flex-row p-3.5 gap-2 rounded-xl border items-center justify-between" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
+          <div>
+            <p class="text-xs font-semibold" style="color: var(--el-text-color-primary);">{{ t('workspace.captionLanguages', 'Caption Languages') }}</p>
+            <p class="text-[10px]" style="color: var(--el-text-color-secondary);">{{ t('workspace.episodeCaptionsDescription', 'Add languages for episode subtitles') }}</p>
+          </div>
+          <!-- Add Language Dropdown from Gemini 48+ Catalog -->
+          <el-select
+            v-model="selectedLangToAdd"
+            size="small"
+            filterable
+            :placeholder="`+ ${t('workspace.languages', 'Languages')}`"
+            class="!w-28"
+            @change="handleAddLanguage"
+          >
+            <el-option
+              v-for="l in GEMINI_SPEECH_LANGUAGES"
+              :key="l.code"
+              :value="l.code"
+              :label="`${l.flag} ${l.nativeName}`"
+            >
+              <div class="flex items-center justify-between w-full">
+                <span class="flex items-center gap-1.5">
+                  <CountryFlag :code="l.countryCode" :flag="l.flag" size="small" />
+                  <span>{{ l.nativeName }}</span>
+                </span>
+                <span class="text-[10px]" style="color: var(--el-text-color-placeholder);">{{ l.region }}</span>
+              </div>
+            </el-option>
+          </el-select>
+        </div>
+      </div>
+
+      <!-- Language Tabs Container -->
+      <el-tabs
+        v-model="activeCapLang"
+        type="card"
+        size="small"
+        @tab-remove="handleRemoveLanguage"
+      >
+        <el-tab-pane
+          v-for="code in activeTrackCodes"
+          :key="code"
+          :closable="code !== mainTargetLang.code"
+          :name="code"
+        >
+          <template #label>
+            <span class="flex items-center gap-1.5 text-xs font-medium">
+              <CountryFlag :code="getLanguageByCode(code).countryCode" :flag="getLanguageByCode(code).flag" size="small" />
+              <span>{{ getLanguageByCode(code).nativeName }}</span>
+              <span v-if="code === mainTargetLang.code" class="text-[9px] uppercase font-bold text-emerald-500 ml-0.5">({{ t('workspace.mainTag', 'Main') }})</span>
+            </span>
+          </template>
+
+          <div class="flex flex-col gap-4 px-1 pt-2">
+            <!-- Translation Banner for Non-Main Language Tracks -->
+            <div
+              v-if="code !== mainTargetLang.code"
+              class="p-3 rounded-xl border flex items-center justify-between bg-primary/5 border-primary/20"
+            >
+              <div class="flex flex-col gap-0.5">
+                <p class="text-xs font-bold text-primary flex items-center gap-1">
+                  🌐 {{ t('workspace.autoTranslateTo', `Translate to ${getLanguageByCode(code).nativeName}`) }}
+                </p>
+                <p class="text-[10px]" style="color: var(--el-text-color-secondary);">
+                  {{ t('workspace.translateFromMainDesc', `Translate dialogue from ${mainTargetLang.nativeName} into ${getLanguageByCode(code).nativeName} using Gemini AI`) }}
+                </p>
+              </div>
+              <el-button
+                type="primary"
+                size="small"
+                round
+                :loading="isTranslating"
+                icon="MagicStick"
+                @click="handleTranslateActiveLanguage"
+              >
+                {{ isTranslating ? t('workspace.translating', 'Translating...') : t('workspace.translateNow', 'Translate') }}
+              </el-button>
+            </div>
+
+            <!-- Scene Cues List -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-xs font-bold uppercase tracking-wider" style="color: var(--el-text-color-secondary);">
+                  {{ t('workspace.captionPerVoiceover', 'Scene Dialogue & Subtitles') }}
+                </h3>
+                <div class="flex items-center gap-2">
+                  <el-button link type="primary" size="small" icon="MagicStick" @click="code === mainTargetLang.code ? generateCaptions() : handleTranslateActiveLanguage()">
+                    {{ code === mainTargetLang.code ? t('workspace.autofill', 'Autofill') : t('workspace.translate', 'Translate') }}
+                  </el-button>
+                </div>
+              </div>
+
+              <div class="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+                <template v-for="scene in scenes" :key="`cap_${scene.index}`">
+                  <div
+                    v-if="scene.dialogue && scene.dialogue.length > 0"
+                    class="rounded-xl border overflow-hidden"
+                    style="border-color: var(--el-border-color-light); background-color: var(--el-fill-color-light);"
+                  >
+                    <!-- Scene Header -->
+                    <div class="p-2.5 flex justify-between items-center border-b" style="border-color: var(--el-border-color-lighter);">
+                      <span class="text-[10px] font-bold uppercase" style="color: var(--el-color-primary);">
+                        {{ t('workspace.sceneAbbr', 'Scene') }} {{ String(scene.index).padStart(2, '0') }} — {{ scene.heading || scene.location }}
+                      </span>
+                      <el-tag
+                        :type="hasCaptions(scene.index) ? 'success' : 'info'"
+                        size="small"
+                        effect="plain"
+                        round
+                      >
+                        {{ hasCaptions(scene.index) ? `✓ ${getSceneCues(scene.index).length} cues` : t('workspace.captionPending', 'Pending') }}
+                      </el-tag>
+                    </div>
+
+                    <!-- Caption cues list -->
+                    <div class="p-2.5 space-y-1">
+                      <div
+                        v-for="(cue, cIdx) in getSceneCues(scene.index)"
+                        :key="cIdx"
+                        class="p-1.5 rounded-lg border flex items-center justify-between text-[10px]"
+                        style="background-color: var(--el-card-bg-color); border-color: var(--el-border-color-lighter);"
+                      >
+                        <div class="flex items-center gap-2 min-w-0 flex-1">
+                          <span class="shrink-0 font-mono text-[9px]" style="color: var(--el-text-color-secondary);">{{ cue.startMs }}ms</span>
+                          <span class="truncate font-medium" style="color: var(--el-text-color-primary);">{{ cue.text }}</span>
+                        </div>
+                      </div>
+
+                      <div v-if="!hasCaptions(scene.index)" class="text-[10px] italic p-1" style="color: var(--el-text-color-placeholder);">
+                        {{ scene.dialogue?.[0]?.character }}: {{ scene.dialogue?.[0]?.line }}
+                      </div>
+                    </div>
+                  </div>
+                </template>
+
+                <div v-if="scenes.length === 0" class="p-4 text-center text-xs rounded-xl border border-dashed" style="color: var(--el-text-color-placeholder); border-color: var(--el-border-color);">
+                  Load a script to manage caption tracks.
+                </div>
+              </div>
+            </div>
+
+            <!-- Style Presets (1-Click Apply) -->
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <h3 class="text-xs font-bold uppercase tracking-wider" style="color: var(--el-text-color-secondary);">
+                  {{ t('workspace.captionStylePresets', 'Caption Style Presets') }}
+                </h3>
+              </div>
+              <el-segmented
+                v-model="selectedCaptionStyle"
+                :options="styleOptions"
+                block
+                size="small"
+                @change="(val: any) => applyPreset(val)"
+              />
+            </div>
+
+            <!-- Design Customization & Typography -->
+            <div class="p-4 rounded-2xl border shadow-soft space-y-4" style="background-color: var(--el-card-bg-color); border-color: var(--el-border-color);">
+              <h3 class="text-xs font-bold uppercase tracking-wider" style="color: var(--el-text-color-secondary);">
+                {{ t('workspace.designCustomization', 'Design & Typography') }}
+              </h3>
+
+              <!-- Font Family Selector -->
+              <div class="space-y-1.5">
+                <label class="text-[10px] font-bold uppercase" style="color: var(--el-text-color-secondary);">
+                  {{ t('workspace.fontFamily', 'Font Family') }}
+                </label>
+                <el-select
+                  v-model="selectedFontFamily"
+                  size="small"
+                  class="w-full"
+                  filterable
+                  @change="applyStyleToTimeline"
+                >
+                  <el-option
+                    v-for="group in GROUPED_FONTS"
+                    :key="group.family"
+                    :label="group.family"
+                    :value="group.mainFont.postScriptName"
+                  >
+                    <div class="flex items-center justify-between w-full py-0.5">
+                      <span>{{ group.family }}</span>
+                      <span class="text-[10px] opacity-60">{{ group.styles.length }} styles</span>
+                    </div>
+                  </el-option>
+                </el-select>
+              </div>
+
+              <!-- Font Size & Text Case -->
+              <div class="grid grid-cols-2 gap-3 items-center">
+                <div class="space-y-1.5">
+                  <div class="flex justify-between text-[10px] font-bold uppercase" style="color: var(--el-text-color-secondary);">
+                    <span>{{ t('workspace.fontSize', 'Font Size') }}</span>
+                    <span style="color: var(--el-color-primary);">{{ captionFontSize }}px</span>
+                  </div>
+                  <el-slider v-model="captionFontSize" :min="20" :max="90" size="small" @input="applyStyleToTimeline" />
+                </div>
+
+                <div class="space-y-1.5">
+                  <label class="text-[10px] font-bold uppercase block" style="color: var(--el-text-color-secondary);">
+                    {{ t('workspace.textCase', 'Text Case') }}
+                  </label>
+                  <el-radio-group v-model="selectedTextCase" size="small" class="w-full !flex" @change="applyStyleToTimeline">
+                    <el-radio-button label="none" value="none" class="flex-1 text-center">aA</el-radio-button>
+                    <el-radio-button label="uppercase" value="uppercase" class="flex-1 text-center">AA</el-radio-button>
+                    <el-radio-button label="lowercase" value="lowercase" class="flex-1 text-center">aa</el-radio-button>
+                  </el-radio-group>
+                </div>
+              </div>
+
+              <!-- Alignment & Words Per Line -->
+              <div class="grid grid-cols-2 gap-3 items-center">
+                <div class="space-y-1.5">
+                  <label class="text-[10px] font-bold uppercase block" style="color: var(--el-text-color-secondary);">
+                    Text Alignment
+                  </label>
+                  <el-radio-group v-model="selectedTextAlign" size="small" class="w-full !flex" @change="applyStyleToTimeline">
+                    <el-radio-button value="left" class="flex-1 text-center">Left</el-radio-button>
+                    <el-radio-button value="center" class="flex-1 text-center">Center</el-radio-button>
+                    <el-radio-button value="right" class="flex-1 text-center">Right</el-radio-button>
+                  </el-radio-group>
+                </div>
+
+                <div class="space-y-1.5">
+                  <label class="text-[10px] font-bold uppercase block" style="color: var(--el-text-color-secondary);">
+                    Words Per Line
+                  </label>
+                  <el-radio-group v-model="selectedWordsPerLine" size="small" class="w-full !flex" @change="applyStyleToTimeline">
+                    <el-radio-button value="multiple" class="flex-1 text-center">Line</el-radio-button>
+                    <el-radio-button value="single" class="flex-1 text-center">Pop (1-word)</el-radio-button>
+                  </el-radio-group>
+                </div>
+              </div>
+
+              <!-- Vertical Position Slot & Slider -->
+              <div class="space-y-2">
+                <div class="flex justify-between items-center text-[10px] font-bold uppercase" style="color: var(--el-text-color-secondary);">
+                  <span>{{ t('workspace.verticalPosition', 'Vertical Position') }}</span>
+                  <span style="color: var(--el-color-primary);">{{ captionVerticalPos }}%</span>
+                </div>
+                <div class="flex gap-1.5">
+                  <el-button
+                    size="small"
+                    :type="selectedVerticalAlign === 'top' ? 'primary' : 'info'"
+                    :plain="selectedVerticalAlign !== 'top'"
+                    class="flex-1 !px-1"
+                    @click="setVerticalSlot('top')"
+                  >
+                    ⬆ Top (15%)
+                  </el-button>
+                  <el-button
+                    size="small"
+                    :type="selectedVerticalAlign === 'center' ? 'primary' : 'info'"
+                    :plain="selectedVerticalAlign !== 'center'"
+                    class="flex-1 !px-1"
+                    @click="setVerticalSlot('center')"
+                  >
+                    ↔ Center (50%)
+                  </el-button>
+                  <el-button
+                    size="small"
+                    :type="selectedVerticalAlign === 'bottom' ? 'primary' : 'info'"
+                    :plain="selectedVerticalAlign !== 'bottom'"
+                    class="flex-1 !px-1"
+                    @click="setVerticalSlot('bottom')"
+                  >
+                    ⬇ Bottom (80%)
+                  </el-button>
+                </div>
+                <el-slider v-model="captionVerticalPos" :min="10" :max="95" size="small" @input="handleVerticalSliderChange" />
+              </div>
+
+              <!-- Outline / Stroke Weight & Outline Color -->
+              <div class="space-y-1.5">
+                <div class="flex justify-between text-[10px] font-bold uppercase" style="color: var(--el-text-color-secondary);">
+                  <span>{{ t('workspace.outlineWeight', 'Outline Weight') }}</span>
+                  <span style="color: var(--el-color-primary);">{{ captionOutlineWeight }}px</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <el-slider v-model="captionOutlineWeight" :min="0" :max="10" size="small" class="flex-1" @input="applyStyleToTimeline" />
+                  <el-color-picker v-model="captionOutlineColor" size="small" @change="applyStyleToTimeline" />
+                </div>
+              </div>
+
+              <!-- Colors: Text Color & Active Karaoke Highlight -->
+              <div class="grid grid-cols-2 gap-3 pt-1 border-t" style="border-color: var(--el-border-color-lighter);">
+                <div class="flex items-center justify-between p-2 rounded-xl border" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
+                  <div class="flex flex-col">
+                    <span class="text-[10px] font-bold uppercase" style="color: var(--el-text-color-secondary);">Text Color</span>
+                    <span class="text-[9px] font-mono text-muted-foreground">{{ captionTextColor }}</span>
+                  </div>
+                  <el-color-picker v-model="captionTextColor" size="small" @change="applyStyleToTimeline" />
+                </div>
+
+                <div class="flex items-center justify-between p-2 rounded-xl border" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
+                  <div class="flex flex-col">
+                    <span class="text-[10px] font-bold uppercase" style="color: var(--el-text-color-secondary);">Active Word</span>
+                    <span class="text-[9px] font-mono text-muted-foreground">{{ activeWordHighlightColor }}</span>
+                  </div>
+                  <el-color-picker v-model="activeWordHighlightColor" size="small" @change="applyStyleToTimeline" />
+                </div>
+              </div>
+
+              <!-- Background Box Toggle -->
+              <div class="flex items-center justify-between p-2 rounded-xl border" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
+                <div class="flex flex-col">
+                  <span class="text-[10px] font-bold uppercase" style="color: var(--el-text-color-primary);">Background Box</span>
+                  <span class="text-[9px]" style="color: var(--el-text-color-secondary);">High-contrast backdrop for subtitles</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <el-color-picker v-if="enableBackgroundBox" v-model="captionBgColor" size="small" show-alpha @change="applyStyleToTimeline" />
+                  <el-switch v-model="enableBackgroundBox" size="small" @change="applyStyleToTimeline" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Smart Word Animation Feature -->
+            <div class="space-y-3">
+              <h3 class="text-xs font-bold uppercase tracking-wider" style="color: var(--el-text-color-secondary);">
+                {{ t('workspace.smartFeatures', 'Smart AI Features') }}
+              </h3>
+
+              <div class="p-3.5 rounded-xl border flex items-center justify-between" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
+                <div>
+                  <p class="text-xs font-semibold" style="color: var(--el-text-color-primary);">{{ t('workspace.aiHighlightAnimate', 'AI Word Zoom Animation') }}</p>
+                  <p class="text-[10px]" style="color: var(--el-text-color-secondary);">{{ t('workspace.autoHighlightKeywords', 'Dynamically pops & zooms active spoken word in real-time') }}</p>
+                </div>
+                <el-switch v-model="aiHighlightAnimate" size="small" @change="applyStyleToTimeline" />
+              </div>
+            </div>
+
+            <!-- Subtitle Calibration & Export Tools -->
+            <div class="p-3.5 rounded-xl border space-y-3" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold" style="color: var(--el-text-color-primary);">Subtitle Sync Calibration</span>
+                <span class="text-[10px]" style="color: var(--el-text-color-secondary);">Shift timing</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <el-button size="small" plain class="flex-1" @click="shiftAllCaptions(-500)">-500ms</el-button>
+                <el-button size="small" plain class="flex-1" @click="shiftAllCaptions(-100)">-100ms</el-button>
+                <el-button size="small" plain class="flex-1" @click="shiftAllCaptions(100)">+100ms</el-button>
+                <el-button size="small" plain class="flex-1" @click="shiftAllCaptions(500)">+500ms</el-button>
+              </div>
+
+              <div class="pt-2 border-t flex justify-end" style="border-color: var(--el-border-color-lighter);">
+                <el-button size="small" plain icon="Download" @click="handleExportSRT">
+                  Export .SRT ({{ getLanguageByCode(code).nativeName }})
+                </el-button>
+              </div>
+            </div>
+
+            <!-- Apply to Timeline Button -->
+            <el-button
+              type="primary"
+              round
+              size="small"
+              class="!w-full !font-bold !py-3"
+              icon="ChatSquare"
+              :loading="b6Step?.status === 'running'"
+              @click="applyAllCaptions"
+            >
+              {{ t('workspace.applyToTimeline', 'Apply Style & Sync to Timeline') }}
+            </el-button>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+    </template>
   </div>
 </template>

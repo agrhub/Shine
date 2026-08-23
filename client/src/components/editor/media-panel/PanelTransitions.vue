@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { getTransitionOptions } from '@openvideo/engine-pixi';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'vue-sonner';
 

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import http from '@/utils/http';
+import { useSeriesStore } from '@/stores/useSeriesStore';
 import type { ScriptItem, SeriesOutline, SupervisionResult } from '@/types/api';
 
 export interface Episode {
@@ -44,7 +45,7 @@ export const useScriptStore = defineStore('script', {
             return await this.generateFullScript({
               title: s.title,
               genre: s.genre || 'Suspense',
-              tone: s.tone || 'Dramatic & High-Stakes',
+              visualStyle: s.visual_style || s.visualStyle || 'realistic',
               synopsis: s.synopsis || s.description || `${s.title} official series synopsis.`,
               episodeNumber: episodeNumber || 1,
               totalEpisodes: s.episode_count || 20,
@@ -64,7 +65,7 @@ export const useScriptStore = defineStore('script', {
           return await this.generateFullScript({
             title: s.title,
             genre: s.genre || 'Suspense',
-            tone: s.tone || 'Dramatic & High-Stakes',
+            visualStyle: s.visual_style || s.visualStyle || 'realistic',
             synopsis: s.synopsis || s.description || `${s.title} official series synopsis.`,
             episodeNumber: episodeNumber || 1,
             totalEpisodes: s.episode_count || 20,
@@ -77,7 +78,7 @@ export const useScriptStore = defineStore('script', {
       throw new Error('No series found to generate script. Please select or create a series first.');
     },
 
-    async generateFullScript(payload: { title: string; genre: string; tone: string; synopsis: string; episodeNumber?: number; totalEpisodes?: number }) {
+    async generateFullScript(payload: { title: string; genre: string; visualStyle?: string; synopsis: string; episodeNumber?: number; totalEpisodes?: number }) {
       this.isGenerating = true;
       try {
         const res = await http.post('/ai/generate-script', payload) as any;
@@ -121,8 +122,86 @@ export const useScriptStore = defineStore('script', {
 
     updateSceneDialogue(sceneIndex: number, lineIndex: number, newDialogue: string) {
       if (this.activeScript && this.activeScript.scenes[sceneIndex]) {
-        this.activeScript.scenes[sceneIndex].lines[lineIndex].dialogue = newDialogue;
+        if (this.activeScript.scenes[sceneIndex].lines?.[lineIndex]) {
+          this.activeScript.scenes[sceneIndex].lines[lineIndex].dialogue = newDialogue;
+        }
       }
+    },
+
+    // ─── GOOGLE FLOW STORYBOARD STUDIO ACTIONS ───────────────────────────────
+    async extractScreenplayAssets(screenplay: string, seriesId?: string, episodeId?: string) {
+      const seriesStore = useSeriesStore();
+      const sId = seriesId || seriesStore.currentSeries?.id;
+      const epId = episodeId || (seriesStore.activeEpisode as any)?.id;
+      const res: any = await http.post('/assets/screenplay/extract', {
+        screenplay,
+        seriesId: sId,
+        episodeId: epId,
+      });
+      return res.data || { characters: [], locations: [], props: [] };
+    },
+
+    async describeScreenplayAssets(payload: {
+      screenplay: string;
+      characters?: string[];
+      locations?: string[];
+      props?: string[];
+      seriesId?: string;
+      episodeId?: string;
+    }) {
+      const seriesStore = useSeriesStore();
+      const sId = payload.seriesId || seriesStore.currentSeries?.id;
+      const epId = payload.episodeId || (seriesStore.activeEpisode as any)?.id;
+      const res: any = await http.post('/assets/screenplay/describe-assets', {
+        ...payload,
+        seriesId: sId,
+        episodeId: epId,
+      });
+      return res.data || { characters: {}, locations: {}, props: {} };
+    },
+
+    async analyzeScreenplay(payload: {
+      screenplay: string;
+      seriesId?: string;
+      episodeId?: string;
+      existingCharacters?: any[];
+      existingLocations?: any[];
+      existingProps?: any[];
+    }) {
+      const seriesStore = useSeriesStore();
+      const sId = payload.seriesId || seriesStore.currentSeries?.id;
+      const epId = payload.episodeId || (seriesStore.activeEpisode as any)?.id;
+      const res: any = await http.post('/assets/screenplay/analyze', {
+        ...payload,
+        seriesId: sId,
+        episodeId: epId,
+      });
+      return res.data || { characters: [], locations: [], props: [], scenes: [], totalDurationSeconds: 0 };
+    },
+
+    async generateCharacterSheet(payload: { characterName: string; physicalCharacteristics: string; clothingAndAccessories?: string; visualStyle?: string; referenceImageUrl?: string }) {
+      const res: any = await http.post('/assets/character/sheet', payload);
+      return res.data || { imageUrl: '' };
+    },
+
+    async generateLocationSheet(payload: { locationName: string; physicalCharacteristics: string; timeOfDay?: string; visualStyle?: string }) {
+      const res: any = await http.post('/assets/location/sheet', payload);
+      return res.data || { imageUrl: '' };
+    },
+
+    async generatePropSheet(payload: { propName: string; physicalCharacteristics: string; visualStyle?: string }) {
+      const res: any = await http.post('/assets/prop/sheet', payload);
+      return res.data || { imageUrl: '' };
+    },
+
+    async breakdownSceneToShots(payload: { sceneTitle: string; sceneContent: string; availableAssets: any[] }) {
+      const res: any = await http.post('/assets/screenplay/breakdown-shots', payload);
+      return res.data?.shots || [];
+    },
+
+    async generateShotImage(payload: { shot: any; assets: any[]; visualStyle?: string; aspectRatio?: string }) {
+      const res: any = await http.post('/assets/storyboard/shot-image', payload);
+      return res.data || { imageUrl: '' };
     },
   },
 });

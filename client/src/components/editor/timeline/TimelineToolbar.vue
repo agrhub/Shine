@@ -25,6 +25,13 @@ import {
   IconPlayerSkipForward,
 } from '@tabler/icons-vue';
 import { EditableTimecode } from '@/components/ui/editable-timecode';
+import { useSeriesStore } from '@/stores/useSeriesStore';
+import CountryFlag from '@/components/common/CountryFlag.vue';
+import {
+  GEMINI_SPEECH_LANGUAGES,
+  getMainLanguageForCountry,
+  getLanguageByCode,
+} from '@/constants/geminiLanguages';
 
 const props = defineProps<{
   zoomLevel: number;
@@ -36,6 +43,24 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:zoomLevel', value: number): void;
 }>();
+
+const seriesStore = useSeriesStore();
+const mainLang = computed(() => getMainLanguageForCountry(seriesStore.currentSeries?.country));
+const currentLangCode = computed(() => seriesStore.activeLanguageCode || mainLang.value.code);
+
+const availableLanguages = computed(() => {
+  const tracks = seriesStore.getLanguageTracks(seriesStore.activeEpisodeId);
+  const codes = new Set<string>();
+  if (mainLang.value?.code) codes.add(mainLang.value.code);
+  tracks.forEach(t => { if (t.languageCode) codes.add(t.languageCode); });
+  // Add common presets
+  ['vi-VN', 'en-US', 'zh-CN', 'ja-JP', 'ko-KR', 'th-TH'].forEach(c => codes.add(c));
+  return Array.from(codes).map(c => getLanguageByCode(c));
+});
+
+function selectTimelineLanguage(langCode: string) {
+  seriesStore.setActiveLanguage(langCode);
+}
 
 const { state: playbackState, toggle, seek: playbackSeek } = usePlaybackStore();
 
@@ -178,16 +203,55 @@ const DEFAULT_FPS = 30;
       </TooltipProvider>
     </div>
 
-    <div class="flex items-center gap-1.5">
-      <Button variant="ghost" size="icon" class="size-6 text-muted-foreground" @click="handleZoomOut">
-        —
-      </Button>
-      <span class="text-xs font-mono text-muted-foreground w-12 text-center select-none">
-        {{ Math.round(zoomLevel * 100) }}%
-      </span>
-      <Button variant="ghost" size="icon" class="size-6 text-muted-foreground" @click="handleZoomIn">
-        +
-      </Button>
+    <div class="flex items-center gap-3">
+      <!-- Timeline Language Track Preview Switcher -->
+      <div class="flex items-center">
+        <el-dropdown trigger="click" @command="selectTimelineLanguage">
+          <button
+            class="flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs font-semibold hover:bg-muted transition-colors border shadow-xs cursor-pointer"
+            style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light); color: var(--el-text-color-primary);"
+            :title="`Preview Language (${getLanguageByCode(currentLangCode).nativeName})`"
+          >
+            <CountryFlag :code="getLanguageByCode(currentLangCode).countryCode" :flag="getLanguageByCode(currentLangCode).flag" size="small" />
+            <span class="text-[11px] font-bold">{{ getLanguageByCode(currentLangCode).countryCode.toUpperCase() }}</span>
+            <span class="text-[10px] opacity-70 hidden sm:inline">{{ getLanguageByCode(currentLangCode).nativeName }}</span>
+            <el-icon :size="10" class="opacity-60 ml-0.5"><ArrowDown /></el-icon>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu class="max-h-64 overflow-y-auto">
+              <el-dropdown-item
+                v-for="l in availableLanguages"
+                :key="l.code"
+                :command="l.code"
+                :class="{ '!font-bold !bg-primary/10': l.code === currentLangCode }"
+              >
+                <div class="flex items-center justify-between gap-3 w-full">
+                  <div class="flex items-center gap-2">
+                    <CountryFlag :code="l.countryCode" :flag="l.flag" size="small" />
+                    <span>{{ l.nativeName }}</span>
+                  </div>
+                  <el-tag v-if="l.code === mainLang?.code" size="small" type="success" effect="plain" class="!text-[9px]">
+                    Main
+                  </el-tag>
+                </div>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </div>
+
+      <!-- Zoom Controls -->
+      <div class="flex items-center gap-1.5">
+        <Button variant="ghost" size="icon" class="size-6 text-muted-foreground" @click="handleZoomOut">
+          —
+        </Button>
+        <span class="text-xs font-mono text-muted-foreground w-12 text-center select-none">
+          {{ Math.round(zoomLevel * 100) }}%
+        </span>
+        <Button variant="ghost" size="icon" class="size-6 text-muted-foreground" @click="handleZoomIn">
+          +
+        </Button>
+      </div>
     </div>
   </div>
 </template>

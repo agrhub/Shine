@@ -3,7 +3,7 @@ import { ref, onMounted, watch } from 'vue';
 import { useDebounceFn } from '@vueuse/core';
 import { Search, Film, Loader2 } from 'lucide-vue-next';
 import { Log } from '@openvideo/engine-pixi';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { useMediaPanelStore } from '@/composables/useMediaPanelStore';
 

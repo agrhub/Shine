@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
-import { cn } from '@/lib/utils';
+import { cn } from '@/utils/utils';
 import { formatTimeCode, parseTimeCode, type TimeCode, DEFAULT_FPS } from '~/lib/time';
 
 interface Props {

@@ -1,4 +1,4 @@
-import { core } from "@/lib/project";
+import { core } from "@/utils/project";
 
 export const duplicateClip = async (
   clipId: string,

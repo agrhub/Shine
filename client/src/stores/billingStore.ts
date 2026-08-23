@@ -2,20 +2,25 @@ import { defineStore } from 'pinia';
 import http from '@/utils/http';
 import i18n from '@/i18n';
 import { ElMessage } from 'element-plus';
+import { useAuthStore } from './useAuthStore';
 import type { SubscriptionTier } from '@/types/api';
 
 export const useBillingStore = defineStore('billing', {
-  state: () => ({
-    currentTier: {
-      tier: 'creator',
-      creditBalance: 250,
-      creditQuota: 1000,
-      features: ['series.create', 'script.generate', 'voice.tts', 'publish.multi'],
-      monthlyPriceUsd: 29,
-    } as SubscriptionTier,
-    loading: false,
-    checkoutLoading: false,
-  }),
+  state: () => {
+    const authStore = useAuthStore();
+    const isEnterprise = (authStore.user?.role || '').toLowerCase() === 'admin';
+    return {
+      currentTier: {
+        tier: isEnterprise ? 'enterprise' : (authStore.user?.tier?.toLowerCase() || 'free'),
+        creditBalance: authStore.user?.credits ?? 100,
+        creditQuota: isEnterprise ? 10000 : 1000,
+        features: ['series.create', 'script.generate', 'voice.tts', 'publish.multi'],
+        monthlyPriceUsd: isEnterprise ? 299 : 0,
+      } as SubscriptionTier,
+      loading: false,
+      checkoutLoading: false,
+    };
+  },
 
   getters: {
     isCreditsLow(): boolean {
@@ -27,10 +32,15 @@ export const useBillingStore = defineStore('billing', {
   actions: {
     async fetchTierInfo(): Promise<SubscriptionTier | null> {
       this.loading = true;
+      const authStore = useAuthStore();
       try {
         const res = await http.get('/billing/tier');
         if (res.data && res.data.data) {
           this.currentTier = res.data.data;
+          if (authStore.user) {
+            authStore.user.credits = this.currentTier.creditBalance;
+            localStorage.setItem('shine_user', JSON.stringify(authStore.user));
+          }
           if (this.isCreditsLow) {
             ElMessage.warning(
               i18n.global.t('toast.creditsLow', { count: this.currentTier.creditBalance })

@@ -7,7 +7,8 @@ import { toast } from 'vue-sonner';
 
 const emit = defineEmits<{
   (e: 'open-cast'): void;
-  (e: 'run-pipeline'): void;
+  (e: 'run-pipeline', stepId?: string): void;
+  (e: 'view-character', char: any): void;
 }>();
 
 const { t } = useI18n();
@@ -18,21 +19,14 @@ const series = computed(() => seriesStore.currentSeries);
 const castMembers = computed(() => seriesStore.charactersList);
 
 async function runStep(stepId: string) {
-  const step = pipelineStore.pipelineSteps.find(s => s.id === stepId);
-  if (!step) return;
-
-  if (step.id === 'b1') {
-    try {
-      toast.info(t('toast.renderingAllSceneBg'));
-      await pipelineStore.renderAllScenes();
-      toast.success(t('toast.allScenesQueued'));
-    } catch {
-      toast.error(t('toast.sceneRenderFailed'));
-    }
-  } else {
-    // Generic step run for other steps — emit up to parent
-    emit('run-pipeline');
-  }
+  // const step = pipelineStore.pipelineSteps.find(s => s.id === stepId);
+  // if (!step) {
+  //   toast.error(t('toast.unknownPipelineStepError'));
+  //   return;
+  // };
+  // Generic step run for other steps — emit up to parent
+  emit('run-pipeline', stepId);
+  return;
 }
 </script>
 
@@ -80,7 +74,7 @@ async function runStep(stepId: string) {
           :key="char.id"
           class="relative cursor-pointer"
           :title="char.name"
-          @click="emit('open-cast')"
+          @click="emit('view-character', char)"
         >
           <el-avatar
             v-if="char.avatarUrl"
@@ -111,10 +105,10 @@ async function runStep(stepId: string) {
         </div>
       </div>
 
-      <div class="p-3 rounded-xl border flex items-center justify-between text-xs" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
+      <!-- <div class="p-3 rounded-xl border flex items-center justify-between text-xs" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
         <span class="font-semibold" style="color: var(--el-text-color-secondary);">{{ t('workspace.visualModelSync') }}</span>
         <el-tag type="success" size="small" effect="plain" round class="font-bold uppercase">{{ t('workspace.stable') }}</el-tag>
-      </div>
+      </div> -->
     </div>
 
     <!-- 10-Step Pipeline Steps -->
@@ -127,8 +121,26 @@ async function runStep(stepId: string) {
           {{ pipelineStore.doneStepsCount }}/10 {{ t('workspace.stepsDone') }}
         </span>
       </div>
-      <div class="space-y-1.5">
-        <div
+      <div class="space-y-1.5 grid grid-cols-2 gap-2">
+        <template v-for="step in pipelineStore.pipelineSteps"
+          :key="step.id">
+          <el-button :type="step.status === 'done'
+            ? 'success'
+            : step.status === 'running'
+            ? 'warning'
+            : step.status === 'error'
+            ? 'danger'
+            : 'primary'"
+            :loading="step.status === 'running'"
+            plain round bg @click="runStep(step.id)" size="small"
+            class="w-full !ml-0 !mt-0">
+            <div class="flex items-center gap-2">
+              <el-icon><component :is="step.icon" /></el-icon>
+              <span>{{ step.label }}</span>
+            </div>
+          </el-button>
+        </template>
+        <!-- <div v-loading="step.status === 'running'"
           v-for="step in pipelineStore.pipelineSteps"
           :key="step.id"
           class="p-2.5 rounded-xl border flex items-center justify-between cursor-pointer hover:opacity-90 transition-all"
@@ -143,7 +155,7 @@ async function runStep(stepId: string) {
         >
           <div class="flex items-center gap-2">
             <div class="w-6 h-6 rounded flex items-center justify-center text-xs" style="color: var(--el-color-primary); background-color: var(--el-color-primary-dark-8);">
-              <el-icon v-if="step.status === 'running'" class="is-loading" style="color: var(--el-color-warning);"><Loading /></el-icon>
+              <el-icon v-if="step.status === 'running'" style="color: var(--el-color-warning);"><Loading /></el-icon>
               <el-icon v-else-if="step.status === 'done'" style="color: var(--el-color-primary);"><Check /></el-icon>
               <el-icon v-else-if="step.status === 'error'" style="color: var(--el-color-danger);"><Close /></el-icon>
               <el-icon v-else><component :is="step.icon" /></el-icon>
@@ -151,7 +163,7 @@ async function runStep(stepId: string) {
             <span class="text-[11px] font-semibold" style="color: var(--el-text-color-primary);">{{ step.label }}</span>
           </div>
           <el-icon :size="12" style="color: var(--el-text-color-secondary);"><VideoPlay /></el-icon>
-        </div>
+        </div> -->
       </div>
     </div>
 
@@ -160,10 +172,10 @@ async function runStep(stepId: string) {
       type="primary"
       round
       class="!w-full !py-3.5 !font-bold"
-      icon="Right" size="small"
+      icon="Cpu" size="small"
       @click="emit('run-pipeline')"
     >
-      {{ t('workspace.processNextBatch') }}
+      {{ t('workspace.autoPipelineFlow') }}
     </el-button>
   </div>
 </template>

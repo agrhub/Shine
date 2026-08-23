@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { createShapeClip, type ShapeElement } from '@/lib/shape-utils';
-import { core } from '@/lib/project';
+import { createShapeClip, type ShapeElement } from '@/utils/shape-utils';
+import { core } from '@/utils/project';
 import { generateId } from '@openvideo/core';
 
 interface BackdropElement {

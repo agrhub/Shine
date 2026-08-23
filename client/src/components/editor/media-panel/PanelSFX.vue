@@ -3,7 +3,7 @@ import { ref, onMounted, watch } from 'vue';
 import { useDebounceFn } from '@vueuse/core';
 import { Log } from '@openvideo/engine-pixi';
 import { Search, Loader2, Play, Pause, Plus } from 'lucide-vue-next';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 
 interface SoundEffect {
   id: string;

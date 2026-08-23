@@ -17,9 +17,10 @@ export const useVoiceStore = defineStore('voice', {
     async fetchPresets() {
       this.loading = true;
       try {
-        const res = await http.get('/voices/presets');
-        if (res.data && res.data.data) {
-          this.voicePresets = res.data.data;
+        const res: any = await http.get('/voices/presets');
+        const items = Array.isArray(res?.data) ? res.data : (res?.data?.data || []);
+        if (Array.isArray(items) && items.length > 0) {
+          this.voicePresets = items;
           if (!this.selectedVoice && this.voicePresets.length > 0) {
             this.selectedVoice = this.voicePresets[0];
           }
@@ -39,12 +40,9 @@ export const useVoiceStore = defineStore('voice', {
       this.generatingTts = true;
       this.batchProgress = 20;
       try {
-        const res = await http.post('/voices/tts', req);
+        const res: any = await http.post('/voices/tts', req);
         this.batchProgress = 100;
-        if (res.data && res.data.data) {
-          return res.data.data;
-        }
-        return null;
+        return res?.data?.data || res?.data || null;
       } catch (err) {
         console.error('TTS generation failed', err);
         return null;

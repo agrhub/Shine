@@ -5,10 +5,10 @@ import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { useSeriesStore } from '@/stores/useSeriesStore';
-import { usePipelineStore } from '@/stores/usePipelineStore';
+import { usePipelineStore, normalizeTransitionKey, normalizeEffectKey } from '@/stores/usePipelineStore';
 import { useStudioStore } from '@/composables/useStudioStore';
 import { usePlaybackStore } from '@/composables/usePlaybackStore';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 import { toast } from 'vue-sonner';
 import http from '@/utils/http';
 
@@ -24,7 +24,10 @@ import ScriptTab from './workspace/ScriptTab.vue';
 import AudioTab from './workspace/AudioTab.vue';
 import CaptionsTab from './workspace/CaptionsTab.vue';
 import ExportModal from '@/components/editor/ExportModal.vue';
+import CountryFlag from '@/components/common/CountryFlag.vue';
+import { getLanguageByCode } from '@/constants/geminiLanguages';
 import { nextTick } from 'vue';
+import { data, sanitizeTimelineData } from '@/components/editor/data';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -54,6 +57,38 @@ const renderProgress = ref(0);
 const isExportModalOpen = ref(false);    // local browser render via ExportModal
 const isRenderReviewOpen = ref(false);   // post-render review dialog
 const renderReviewUrl = ref('');         // URL of the rendered video for review
+const renderReviewOutputs = ref<Record<string, string>>({});
+const renderReviewSelectedLang = ref<string>('en-US');
+const renderReviewThumbnail = ref('');
+
+// Watch active language to switch voiceover and caption tracks on OpenVideo Core
+watch(() => seriesStore.activeLanguageCode, (activeLang) => {
+  if (!activeLang) return;
+  try {
+    const state = core.store.getState();
+    const tracks = (state.tracks as any[]) || [];
+    const safeLang = activeLang.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const targetVoiceTrackId = `track_voiceover_${safeLang}`;
+    const targetCaptionTrackId = `track_caption_${safeLang}`;
+
+    tracks.forEach((track: any) => {
+      if (track.id?.startsWith('track_voiceover_')) {
+        const shouldMute = track.id !== targetVoiceTrackId;
+        if (track.muted !== shouldMute) {
+          track.muted = shouldMute;
+        }
+      }
+      if (track.id?.startsWith('track_caption_')) {
+        const shouldShow = track.id === targetCaptionTrackId;
+        if (track.visible !== shouldShow) {
+          track.visible = shouldShow;
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('[watch activeLanguageCode] Failed to sync timeline tracks:', err);
+  }
+});
 
 // Right sidebar tab state
 const rightTab = ref<'pipeline' | 'script' | 'audio' | 'captions'>('pipeline');
@@ -174,7 +209,7 @@ const captionFontSize = ref(42);
 const captionVerticalPos = ref(80);
 const captionOutlineWeight = ref(3);
 const aiHighlightAnimate = ref(true);
-const targetLanguage = ref('English (US)');
+const language = ref('English (US)');
 
 // AI Chat messages
 const chatMessages = ref<Array<{ role: 'user' | 'assistant'; text: string; time: string }>>([
@@ -211,29 +246,34 @@ async function runPipelineStep(stepId: string) {
   pipelineStore.setStepStatus(stepId, 'running');
   try {
     if (stepId === 'b1') {
-      // Smart batch: only render scenes without a background image
-      await pipelineStore.renderAllScenes();
-      toast.success(t('toast.b1BgRendered'));
-    } else if (stepId === 'b2') {
       // Smart batch: only render characters without avatars; auto-saves avatar immediately
       await pipelineStore.renderAllCharacters();
       toast.success(t('toast.b2CharRendered'));
+    } else if (stepId === 'b2') {
+      // Smart batch: only render scenes without a background image
+      await pipelineStore.renderAllScenes();
+      if (activeEpisodeId.value) await loadEpisodeTimeline(activeEpisodeId.value);
+      toast.success(t('toast.b1BgRendered'));
     } else if (stepId === 'b3') {
       // Smart batch: only render scenes with BG but no video yet
       await pipelineStore.renderAllVideos();
+      if (activeEpisodeId.value) await loadEpisodeTimeline(activeEpisodeId.value);
       toast.success(t('toast.b3VideoRendered'));
     } else if (stepId === 'b4') {
       // Smart batch: only render scenes with dialogue and no voiceover
       await pipelineStore.renderAllVoiceovers('Puck', 85, 1.1);
+      if (activeEpisodeId.value) await loadEpisodeTimeline(activeEpisodeId.value);
       toast.success(t('toast.b4TtsSynced'));
     } else if (stepId === 'b5') {
       // Smart batch: only render scenes without BGM
       await pipelineStore.renderAllBgm();
+      if (activeEpisodeId.value) await loadEpisodeTimeline(activeEpisodeId.value);
       toast.success(t('toast.b5BgmGenerated'));
     } else if (stepId === 'b6') {
       // Generate captions for default language; saves per-scene immediately
       const defaultLang = seriesStore.activeEpisode?.activeLanguageCode || 'en-US';
       await pipelineStore.generateCaptionsForLanguage(defaultLang);
+      if (activeEpisodeId.value) await loadEpisodeTimeline(activeEpisodeId.value);
       toast.success(t('toast.b6CaptionsSynced'));
     } else if (stepId === 'b7') {
       await loadEpisodeTimeline(activeEpisodeId.value);
@@ -262,9 +302,10 @@ async function runPipelineStep(stepId: string) {
 }
 
 // Called by ExportModal when local render completes — opens review dialog
-function onLocalExportDone(blobUrl: string) {
+function onLocalExportDone(blobUrl: string, thumbnail: string) {
   isExportModalOpen.value = false;
   renderReviewUrl.value = blobUrl;
+  renderReviewThumbnail.value = thumbnail;
   isRenderReviewOpen.value = true;
   pipelineStore.setStepStatus('b8', 'done');
 }
@@ -273,29 +314,40 @@ function onLocalExportDone(blobUrl: string) {
 async function queueServerRender() {
   pipelineStore.setStepStatus('b8', 'running');
   try {
-    const res: any = await http.post('/render/jobs', {
-      seriesId: seriesId.value, episodeId: activeEpisodeId.value,
-      resolution: '1080x1920', fps: 30, format: 'mp4',
+    const langs = (seriesStore.getLanguageTracks(activeEpisodeId.value) || []).map(t => t.languageCode).filter(Boolean);
+    const targetRatio = seriesStore.currentSeries?.ratio || '9:16';
+    const dim = getCanvasDimensionsForRatio(targetRatio);
+    const res: any = await http.post('/export/render-job', {
+      seriesId: seriesId.value,
+      episodeId: activeEpisodeId.value,
+      resolution: `${dim.width}x${dim.height}`,
+      fps: 30,
+      format: 'mp4',
+      languages: langs.length > 0 ? langs : [seriesStore.activeLanguageCode || 'vi-VN'],
+      tracks: [],
     });
     const jobId = res?.data?.jobId;
     toast.success(t('toast.b8JobQueued'));
     pipelineStore.setStepStatus('b8', 'done');
-    // Poll for completion (simple interval, 10s)
+    // Poll for completion (simple interval, 2s)
     if (jobId) {
       const pollInterval = setInterval(async () => {
         try {
-          const status: any = await http.get(`/render/jobs/${jobId}`);
+          const status: any = await http.get(`/export/render-job/${jobId}/status`);
           const state = status?.data?.status;
           if (state === 'completed') {
             clearInterval(pollInterval);
-            renderReviewUrl.value = status?.data?.outputUrl || '';
+            const outputs = status?.data?.outputsByLang || {};
+            renderReviewOutputs.value = outputs;
+            renderReviewSelectedLang.value = seriesStore.activeLanguageCode || Object.keys(outputs)[0] || 'vi-VN';
+            renderReviewUrl.value = outputs[renderReviewSelectedLang.value] || status?.data?.outputUrl || '';
             if (renderReviewUrl.value) isRenderReviewOpen.value = true;
           } else if (state === 'failed') {
             clearInterval(pollInterval);
-            toast.error('Server render failed');
+            toast.error(t('toast.serverRenderFailed'));
           }
         } catch { clearInterval(pollInterval); }
-      }, 10000);
+      }, 2000);
     }
   } catch (err: any) {
     pipelineStore.setStepStatus('b8', 'error');
@@ -303,16 +355,21 @@ async function queueServerRender() {
   }
 }
 
-async function runFullPipeline() {
+async function runPipeline(stepId: string | undefined) {
   isRendering.value = true;
-  renderProgress.value = 0;
-  for (let i = 0; i < pipelineStore.pipelineSteps.length; i++) {
-    const s = pipelineStore.pipelineSteps[i];
-    await runPipelineStep(s.id);
-    renderProgress.value = Math.round(((i + 1) / pipelineStore.pipelineSteps.length) * 100);
+  if(stepId != undefined){
+    await runPipelineStep(stepId);
+  }
+  else{
+    renderProgress.value = 0;
+    for (let i = 0; i < pipelineStore.pipelineSteps.length; i++) {
+      const s = pipelineStore.pipelineSteps[i];
+      await runPipelineStep(s.id);
+      renderProgress.value = Math.round(((i + 1) / pipelineStore.pipelineSteps.length) * 100);
+    }
+    toast.success(t('toast.pipelineCompleted'));
   }
   isRendering.value = false;
-  toast.success(t('toast.pipelineCompleted'));
 }
 
 async function sendDrawerChat() {
@@ -361,9 +418,6 @@ const isPublishing = ref(false);
 async function loadSeriesData() {
   try {
     await seriesStore.loadWorkspaceData(seriesId.value);
-    if (activeEpisodeId.value) {
-      await loadEpisodeTimeline(activeEpisodeId.value);
-    }
   } catch (err) {
     console.error('Failed to load series details', err);
   }
@@ -393,86 +447,71 @@ async function loadTeamMembers() {
   }
 }
 
-const SILENT_AUDIO_SAMPLE = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-const SAMPLE_IMAGE_BG = 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1080&h=1920&fit=crop';
-
-function sanitizeTimelineData(timelineData: any) {
-  if (!timelineData) return timelineData;
-  const clips = { ...(timelineData.clips || {}) };
-  for (const key of Object.keys(clips)) {
-    const clip = { ...clips[key] };
-    const src = clip.src || '';
-    const isVideoSrc = src.endsWith('.mp4') || src.endsWith('.webm') || src.startsWith('blob:') || src.includes('video');
-    const isImageSrc = src.endsWith('.jpg') || src.endsWith('.jpeg') || src.endsWith('.png') || src.endsWith('.webp') || src.includes('images.unsplash.com') || src.startsWith('data:image/');
-
-    if (clip.type === 'Video') {
-      if (!src || (isImageSrc && !isVideoSrc)) {
-        clip.type = 'Image';
-        clip.src = src || SAMPLE_IMAGE_BG;
-      }
-    } else if (clip.type === 'Image') {
-      if (!src) {
-        clip.src = SAMPLE_IMAGE_BG;
-      }
-    } else if (clip.type === 'Audio') {
-      if (!src) {
-        clip.src = SILENT_AUDIO_SAMPLE;
-      }
-    }
-
-    // Force full 9:16 vertical canvas fitting for all Image/Video clips
-    if (clip.type === 'Image' || clip.type === 'Video') {
-      if (!clip.width || clip.width < 1080) clip.width = 1080;
-      if (!clip.height || clip.height < 1920) clip.height = 1920;
-      clip.left = clip.left ?? 0;
-      clip.top = clip.top ?? 0;
-      if (!clip.transform) {
-        clip.transform = {
-          x: 0,
-          y: 0,
-          width: 1080,
-          height: 1920,
-        };
-      }
-    }
-
-    clips[key] = clip;
+function getCanvasDimensionsForRatio(ratio?: string): { width: number; height: number; ratio: string } {
+  const clean = (ratio || '9:16').trim();
+  switch (clean) {
+    case '16:9':
+      return { width: 1920, height: 1080, ratio: '16:9' };
+    case '4:3':
+      return { width: 1440, height: 1080, ratio: '4:3' };
+    case '1:1':
+      return { width: 1080, height: 1080, ratio: '1:1' };
+    case '9:16':
+    default:
+      return { width: 1080, height: 1920, ratio: '9:16' };
   }
-  return { ...timelineData, clips };
 }
 
-// 4. Load Episode Timeline into OpenVideo Core
-async function loadEpisodeTimeline(epId: string) {
-  if (!epId) return;
-  try {
-    const res: any = await http.get(`/episodes/${epId}/timeline`);
-    if (res?.data) {
-      const sanitized = sanitizeTimelineData(res.data);
-      const projectData = {
-        ...sanitized,
-        settings: {
-          ...(sanitized.settings || {}),
-          width: 1080,
-          height: 1920,
-          fps: sanitized.settings?.fps || 30,
-          duration: sanitized.settings?.duration || 30_000_000,
-        },
-      };
+// 4. Load Episode Timeline into OpenVideo Core with Concurrency Guard
+let loadingTimelinePromise: Promise<void> | null = null;
+let lastLoadedEpisodeId = '';
 
-      core.reset(projectData);
-      projectStore.setCanvasSize({ width: 1080, height: 1920 }, '9:16');
-      projectStore.setProjectName(currentEpisodeTitle.value);
-      projectStore.setFps(projectData.settings.fps || 30);
-      updateCanvasFit();
-      if (projectData.settings.duration) {
-        await setDuration(projectData.settings.duration / 1_000_000);
-      }
-      toast.success(t('toast.projectLoaded'));
-      pipelineStore.syncStepStatusesWithEpisode(seriesStore.activeEpisode, seriesStore.charactersList);
-    }
-  } catch (err) {
-    console.error('Failed to load episode timeline', err);
+async function loadEpisodeTimeline(epId: string, silent = false) {
+  if (!epId) return;
+  if (loadingTimelinePromise && lastLoadedEpisodeId === epId) {
+    return loadingTimelinePromise;
   }
+  lastLoadedEpisodeId = epId;
+  loadingTimelinePromise = (async () => {
+    try {
+      const res: any = await http.get(`/episodes/${epId}/timeline`);
+      if (res?.data) {
+        const targetRatio = seriesStore.currentSeries?.ratio || '9:16';
+        const dim = getCanvasDimensionsForRatio(targetRatio);
+        const rawTimeline = res.data?.data || res.data;
+        const rawProject = {
+          ...rawTimeline,
+          settings: {
+            ...(rawTimeline.settings || {}),
+            width: rawTimeline.settings?.width || dim.width,
+            height: rawTimeline.settings?.height || dim.height,
+            fps: rawTimeline.settings?.fps || 30,
+            duration: rawTimeline.settings?.duration || 30_000_000,
+          },
+        };
+        const projectData = sanitizeTimelineData(rawProject);
+        console.log("projectData", projectData);
+
+        core.reset(projectData);
+        projectStore.setCanvasSize({ width: projectData.settings.width, height: projectData.settings.height }, targetRatio);
+        projectStore.setProjectName(currentEpisodeTitle.value);
+        projectStore.setFps(projectData.settings.fps || 30);
+        updateCanvasFit();
+        if (projectData.settings.duration) {
+          await setDuration(projectData.settings.duration / 1_000_000);
+        }
+        if (!silent) {
+          toast.success(t('toast.projectLoaded'));
+        }
+        pipelineStore.syncStepStatusesWithEpisode(seriesStore.activeEpisode, seriesStore.charactersList);
+      }
+    } catch (err) {
+      console.error('Failed to load episode timeline', err);
+    } finally {
+      loadingTimelinePromise = null;
+    }
+  })();
+  return loadingTimelinePromise;
 }
 
 // 5. Save Episode Timeline & Workspace Snapshot to DB
@@ -659,11 +698,7 @@ async function applyCaptionsToTimeline() {
     }
 
     const captionClipIds: string[] = [];
-    const cues = [
-      { text: 'I never wanted the crown, Kael.', fromUs: 0, toUs: 3_500_000 },
-      { text: 'I wanted the truth.', fromUs: 3_500_000, toUs: 6_000_000 },
-      { text: 'And now, you will face the consequences.', fromUs: 6_000_000, toUs: 9_500_000 },
-    ];
+    const cues = [];
 
     if (cues.length > 0) {
       cues.forEach((cue: any, idx: number) => {
@@ -725,7 +760,7 @@ function openMasterScript() {
 }
 
 function triggerAutoPipeline() {
-  runFullPipeline();
+  runPipeline(undefined);
 }
 
 
@@ -737,8 +772,24 @@ function goBack() {
   router.push('/dashboard');
 }
 
+function handleAssetUpdated() {
+  if (activeEpisodeId.value) {
+    loadEpisodeTimeline(activeEpisodeId.value, true);
+  }
+}
+
+watch(activeEpisodeId, async (newEpId) => {
+  if (newEpId) {
+    await loadEpisodeTimeline(newEpId);
+  }
+});
+
 onMounted(async () => {
-  projectStore.setCanvasSize({ width: 1080, height: 1920 }, '9:16');
+  window.addEventListener('pipeline-asset-updated', handleAssetUpdated);
+  await loadSeriesData();
+  const targetRatio = seriesStore.currentSeries?.ratio || '9:16';
+  const initialDim = getCanvasDimensionsForRatio(targetRatio);
+  projectStore.setCanvasSize({ width: initialDim.width, height: initialDim.height }, initialDim.ratio);
   if (previewContainerRef.value) {
     previewResizeObserver = new ResizeObserver(() => {
       updateCanvasFit();
@@ -746,12 +797,12 @@ onMounted(async () => {
     previewResizeObserver.observe(previewContainerRef.value);
     updateCanvasFit();
   }
-  await loadSeriesData();
   loadVoicePresets();
   loadTeamMembers();
 });
 
 onUnmounted(() => {
+  window.removeEventListener('pipeline-asset-updated', handleAssetUpdated);
   if (previewResizeObserver) {
     previewResizeObserver.disconnect();
     previewResizeObserver = null;
@@ -765,14 +816,19 @@ onUnmounted(() => {
     <!-- ═══════════════════════════════════════════════════════════════════════ -->
     <!-- TOP BAR NAVIGATION                                                     -->
     <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    <header class="h-16 border-b flex items-center justify-between px-4 lg:px-6 shrink-0 z-20 relative" style="border-color: var(--el-border-color); background-color: var(--el-bg-color-overlay);">
+    <header class="h-16 border-b flex items-center justify-between px-4 lg:px-6 shrink-0 z-10 relative" style="border-color: var(--el-border-color); background-color: var(--el-bg-color-overlay);">
       <div class="flex items-center gap-4">
         <el-button link circle @click="goBack" class="!p-1" icon="Back" />
 
         <div class="flex flex-col">
-          <h1 class="font-bold text-sm sm:text-base leading-tight" style="color: var(--el-text-color-primary);">
-            {{ seriesTitle }}
-          </h1>
+          <div class="flex items-center gap-2">
+            <h1 class="font-bold text-sm sm:text-base leading-tight" style="color: var(--el-text-color-primary);">
+              {{ seriesTitle }}
+            </h1>
+            <el-tag size="small" type="primary" effect="plain" round class="font-bold font-mono text-[10px]">
+              {{ seriesStore.currentSeries?.ratio || '9:16' }}
+            </el-tag>
+          </div>
           <div class="text-[11px] flex items-center gap-2" style="color: var(--el-text-color-secondary);">
             <span>{{ currentEpisodeTitle }}</span>
             <el-divider direction="vertical"></el-divider>
@@ -785,9 +841,9 @@ onUnmounted(() => {
       </div>
 
       <div class="flex items-center gap-3">
-        <div v-if="isRendering" class="hidden md:flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-semibold" style="background-color: var(--el-color-primary-light-9); color: var(--el-color-primary); border: 1px solid var(--el-color-primary-light-7);">
+        <div v-if="pipelineStore.isRendering" class="hidden md:flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-semibold" style="background-color: var(--el-color-primary-light-9); color: var(--el-color-primary); border: 1px solid var(--el-color-primary-light-7);">
           <el-icon class="is-loading" :size="12"><Loading /></el-icon>
-          <span>{{ t('workspace.renderingScene', { scene: 4, percent: renderProgress }) }}</span>
+          <span>{{ pipelineStore.currentRenderingMessage || (pipelineStore.currentRenderingScene ? t('workspace.renderingScene', { scene: pipelineStore.currentRenderingScene, percent: pipelineStore.currentRenderingPercent }) : `${t('common.processing')} (${pipelineStore.currentRenderingPercent}%)`) }}</span>
         </div>
 
         <el-button round icon="Upload" size="small" @click="saveAllWorkspaceData">
@@ -841,7 +897,7 @@ onUnmounted(() => {
                 : 'border-color: var(--el-border-color-light); background-color: var(--el-fill-color-light);'"
             >
               <div class="w-16 h-20 rounded-xl overflow-hidden relative shrink-0 bg-neutral-900">
-                <img :src="ep.thumb" :alt="ep.title" class="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                <img :src="ep.thumb || (ep as any).thumbnail_url || (ep as any).cover_image || (ep.scenes && ep.scenes[0] && ((ep.scenes[0] as any).storyboardFrameUrl || (ep.scenes[0] as any).imageUrl || (ep.scenes[0] as any).videoUrl)) || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=200&h=260&fit=crop'" :alt="ep.title" class="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                 <div class="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/70 text-white rounded text-[9px] font-mono">
                   #{{ ep.number }}
                 </div>
@@ -930,21 +986,6 @@ onUnmounted(() => {
             <el-icon class="mr-1"><component :is="tab.icon" /></el-icon>
             <span class="hidden sm:inline">{{ tab.label }}</span>
           </el-button>
-          <!-- <el-segmented v-model="rightTab" :options="[
-              { value: 'pipeline', label: t('workspace.tabPipeline'), icon: 'Files' },
-              { value: 'script', label: t('workspace.tabScript'), icon: 'Document' },
-              { value: 'audio', label: t('workspace.tabAudio'), icon: 'Microphone' },
-              { value: 'captions', label: t('workspace.tabCaptions'), icon: 'ChatSquare' }
-            ]">
-            <template #default="scope">
-              <div class="flex items-center gap-2 p-2">
-                <el-icon size="20">
-                  <component :is="scope.item.icon" />
-                </el-icon>
-                <div>{{ scope.item.label }}</div>
-              </div>
-            </template>
-          </el-segmented> -->
         </div>
 
         <!-- Sidebar Tab Panels Content -->
@@ -952,7 +993,8 @@ onUnmounted(() => {
           <PipelineTab
             v-if="rightTab === 'pipeline'"
             @open-cast="openManageCast"
-            @run-pipeline="runFullPipeline"
+            @run-pipeline="runPipeline"
+            @view-character="openCharacterDetail"
           />
           <ScriptTab
             v-else-if="rightTab === 'script'"
@@ -990,7 +1032,7 @@ onUnmounted(() => {
     <div class="fixed right-6 bottom-8 z-50 flex flex-col items-end gap-3">
       <!-- Render progress indicator -->
       <div v-if="isRendering" class="flex items-center gap-2 px-3 py-2 border rounded-full text-xs font-bold shadow-lg" style="background-color: var(--el-bg-color-overlay); border-color: var(--el-border-color);">
-        <el-icon class="is-loading" style="color: var(--el-color-primary);"><Loading /></el-icon>
+        <el-icon style="color: var(--el-color-primary);"><Loading /></el-icon>
         <span>{{ t('workspace.pipeline', 'Pipeline') }} {{ renderProgress }}%</span>
       </div>
 
@@ -1032,16 +1074,15 @@ onUnmounted(() => {
       </template>
 
       <!-- Quick Command Pills -->
-      <div class="px-4 py-2 flex flex-wrap gap-1.5 border-b" style="border-color: var(--el-border-color);">
+      <!-- <div class="px-4 py-2 flex flex-wrap gap-1.5 border-b" style="border-color: var(--el-border-color);">
         <el-button
-          v-for="cmd in ['Generate B1 background', 'Render B3 video', 'B4 voiceover', 'B6 captions', 'Full pipeline', 'B10 publish']"
-          :key="cmd"
+          v-for="step in pipelineStore.pipelineSteps"
+          :key="step.id"
           size="small"
-          round
-          plain
-          @click="drawerChatInput = cmd; sendDrawerChat()"
-        >{{ cmd }}</el-button>
-      </div>
+          round plain class="!ml-0"
+          @click="drawerChatInput = step.label; sendDrawerChat()"
+        >{{ step.label }}</el-button>
+      </div> -->
 
       <!-- Pipeline Steps Progress -->
       <div class="px-4 py-3 border-b" style="border-color: var(--el-border-color);">
@@ -1286,7 +1327,6 @@ onUnmounted(() => {
 
     <!-- ── B8: Local Browser Export Modal ─────────────────────────────────── -->
     <ExportModal
-      v-if="isExportModalOpen"
       :open="isExportModalOpen"
       @update:open="(v) => { if (!v) { isExportModalOpen = false; pipelineStore.setStepStatus('b8', 'idle'); } }"
       @exported="onLocalExportDone"
@@ -1295,40 +1335,57 @@ onUnmounted(() => {
     <!-- ── B8: Post-render Video Review Dialog ────────────────────────────── -->
     <el-dialog
       v-model="isRenderReviewOpen"
-      title="🎬 Review Rendered Video"
+      :title="t('workspace.reviewRenderedVideo')"
       width="560px"
       class="rounded-2xl"
       :close-on-click-modal="true"
       @closed="renderReviewUrl = ''"
     >
       <div class="flex flex-col gap-4">
+        <!-- Multi-language version selector tabs -->
+        <div v-if="Object.keys(renderReviewOutputs).length > 1" class="flex items-center gap-1.5 p-1 rounded-xl border" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
+          <button
+            v-for="(url, lang) in renderReviewOutputs"
+            :key="lang"
+            class="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer border"
+            :style="renderReviewSelectedLang === String(lang)
+              ? 'background-color: var(--el-color-primary); color: white; border-color: var(--el-color-primary);'
+              : 'background-color: transparent; border-color: transparent; color: var(--el-text-color-primary);'"
+            @click="renderReviewSelectedLang = String(lang); renderReviewUrl = url"
+          >
+            <CountryFlag :code="getLanguageByCode(String(lang)).countryCode" :flag="getLanguageByCode(String(lang)).flag" size="small" />
+            <span>{{ getLanguageByCode(String(lang)).nativeName }}</span>
+          </button>
+        </div>
+
         <div v-if="renderReviewUrl" class="rounded-xl overflow-hidden border" style="border-color: var(--el-border-color);">
           <video
+            :key="renderReviewUrl"
             :src="renderReviewUrl"
             controls
-            autoplay
-            class="w-full max-h-[420px] bg-black"
-            style="aspect-ratio: 9/16; object-fit: contain;"
+            autoplay :poster="renderReviewThumbnail"
+            class="w-full max-h-[360px] bg-black"
+            style="aspect-ratio: 4/3; object-fit: contain;"
           />
         </div>
         <div v-else class="text-center py-8 text-sm" style="color: var(--el-text-color-secondary);">
           <el-icon class="is-loading text-2xl mb-2"><Loading /></el-icon>
-          <p>Waiting for render to complete…</p>
+          <p>{{ t('workspace.waitingForRender') }}</p>
         </div>
         <div class="flex gap-2 justify-end">
-          <el-button @click="isRenderReviewOpen = false">Close</el-button>
+          <el-button @click="isRenderReviewOpen = false">{{ t('common.close') }}</el-button>
           <el-button
             v-if="renderReviewUrl"
             type="success"
             icon="Download"
             tag="a"
             :href="renderReviewUrl"
-            :download="`episode-${activeEpisodeId}-render.mp4`"
+            :download="`episode-${activeEpisodeId}-${renderReviewSelectedLang}.mp4`"
           >
-            Download
+            {{ t('workspace.download') }} ({{ getLanguageByCode(renderReviewSelectedLang).countryCode.toUpperCase() }})
           </el-button>
           <el-button type="primary" icon="Cpu" @click="queueServerRender">
-            Queue Server Render
+            {{ t('workspace.queueServerRender') }}
           </el-button>
         </div>
       </div>

@@ -48,7 +48,7 @@ export const groupWordsByWidth = (
     const testText = currentText ? `${currentText} ${wordText}` : wordText;
     const testWidth = ctx.measureText(testText).width;
 
-    if (testWidth > maxWidth && currentWords.length > 0) {
+    if ((testWidth > maxWidth || currentWords.length >= 5) && currentWords.length > 0) {
       // Width exceeded, create caption with current words
       const firstWord = currentWords[0];
       const lastWord = currentWords[currentWords.length - 1];

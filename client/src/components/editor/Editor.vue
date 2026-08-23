@@ -5,23 +5,25 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from '@/components/ui/resizable';
-import Header from '@/components/editor/Header.vue';
+import EditorHeader from '@/components/editor/EditorHeader.vue';
 import CanvasPanel from '@/components/editor/CanvasPanel.vue';
 import MediaPanel from '@/components/editor/media-panel/MediaPanel.vue';
 import Timeline from '@/components/editor/timeline/Timeline.vue';
 import RightPanel from '@/components/editor/RightPanel.vue';
-import Loading from './Loading.vue';
+import EditorLoading from './EditorLoading.vue';
 import WebcodecsUnsupportedModal from './WebcodecsUnsupportedModal.vue';
 import FloatingControl from '@/components/editor/floating-controls/FloatingControl.vue';
 import { usePanelStore } from '@/stores/usePanelStore';
 import { useProjectStore } from '@/stores/useProjectStore';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 import { Compositor } from '@openvideo/engine-pixi';
-import { data } from './data';
+import { data, sanitizeTimelineData } from './data';
 import 'vue-color/style.css';
 
 import { useRoute } from 'vue-router';
 import http from '@/utils/http';
+
+import { normalizeTransitionKey, normalizeEffectKey } from '@/stores/usePipelineStore';
 
 const route = useRoute();
 const panelStore = usePanelStore();
@@ -29,37 +31,6 @@ const projectStore = useProjectStore();
 
 const isReady = ref(false);
 const isWebCodecsSupported = ref(true);
-
-const SILENT_AUDIO_SAMPLE = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-const SAMPLE_IMAGE_BG = 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1080&h=1920&fit=crop';
-
-function sanitizeTimelineData(timelineData: any) {
-  if (!timelineData) return timelineData;
-  const clips = { ...(timelineData.clips || {}) };
-  for (const key of Object.keys(clips)) {
-    const clip = { ...clips[key] };
-    const src = clip.src || '';
-    const isVideoSrc = src.endsWith('.mp4') || src.endsWith('.webm') || src.startsWith('blob:') || src.includes('video');
-    const isImageSrc = src.endsWith('.jpg') || src.endsWith('.jpeg') || src.endsWith('.png') || src.endsWith('.webp') || src.includes('images.unsplash.com') || src.startsWith('data:image/');
-
-    if (clip.type === 'Video') {
-      if (!src || (isImageSrc && !isVideoSrc)) {
-        clip.type = 'Image';
-        clip.src = src || SAMPLE_IMAGE_BG;
-      }
-    } else if (clip.type === 'Image') {
-      if (!src) {
-        clip.src = SAMPLE_IMAGE_BG;
-      }
-    } else if (clip.type === 'Audio') {
-      if (!src) {
-        clip.src = SILENT_AUDIO_SAMPLE;
-      }
-    }
-    clips[key] = clip;
-  }
-  return { ...timelineData, clips };
-}
 
 onMounted(async () => {
   projectStore.resetProject();
@@ -75,7 +46,9 @@ onMounted(async () => {
       const timelineData = res.data?.data || res.data || res;
       if (timelineData && (timelineData.tracks || timelineData.clips)) {
         setTimeout(() => {
-          core.project.import(sanitizeTimelineData(timelineData));
+          const projectData = sanitizeTimelineData(timelineData);
+          core.project.import(projectData);
+          console.log('Imported timeline data:', projectData);
         }, 300);
       } else {
         setTimeout(() => {
@@ -117,11 +90,11 @@ function handleCanvasReady() {
 </script>
 
 <template>
-  <div class="h-screen w-screen flex flex-col bg-background overflow-hidden relative">
-    <Loading v-if="!isReady" class="absolute inset-0 z-50" />
+  <div class="w-full h-full flex flex-col bg-background overflow-hidden relative">
+    <EditorLoading v-if="!isReady" class="absolute inset-0 z-50" />
 
     <!-- Header Bar -->
-    <Header />
+    <EditorHeader />
 
     <!-- Editor Main Layout -->
     <div class="flex-1 min-h-0 min-w-0 px-2 pb-2">

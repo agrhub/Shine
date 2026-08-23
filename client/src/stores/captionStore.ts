@@ -13,7 +13,7 @@ export const useCaptionStore = defineStore('caption', {
       verticalPosPct: 80,
       outlineWeightPx: 3,
       autoHighlight: true,
-      targetLanguage: 'en-US',
+      language: 'en-US',
     } as KaraokeStyle,
 
     spatialConfig: {

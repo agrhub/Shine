@@ -1,0 +1,172 @@
+import { findCountry } from './countries';
+
+export interface GeminiSpeechLanguage {
+  code: string; // e.g. "en-US"
+  language: string; // e.g. "English"
+  nativeName: string; // e.g. "English (US)"
+  region: string; // e.g. "United States"
+  countryCode: string; // ISO 3166-1 alpha-2, e.g. "us"
+  flag: string; // Emoji flag, e.g. "🇺🇸"
+}
+
+export const GEMINI_SPEECH_LANGUAGES: GeminiSpeechLanguage[] = [
+  { code: 'vi-VN', language: 'Vietnamese', nativeName: 'Tiếng Việt', region: 'Vietnam', countryCode: 'vn', flag: '🇻🇳' },
+  { code: 'en-US', language: 'English', nativeName: 'English (US)', region: 'United States', countryCode: 'us', flag: '🇺🇸' },
+  { code: 'en-GB', language: 'English', nativeName: 'English (UK)', region: 'United Kingdom', countryCode: 'gb', flag: '🇬🇧' },
+  { code: 'en-AU', language: 'English', nativeName: 'English (Australia)', region: 'Australia', countryCode: 'au', flag: '🇦🇺' },
+  { code: 'en-IN', language: 'English', nativeName: 'English (India)', region: 'India', countryCode: 'in', flag: '🇮🇳' },
+  { code: 'zh-CN', language: 'Chinese', nativeName: '中文 (简体)', region: 'China', countryCode: 'cn', flag: '🇨🇳' },
+  { code: 'zh-TW', language: 'Chinese', nativeName: '中文 (繁體)', region: 'Taiwan', countryCode: 'tw', flag: '🇹🇼' },
+  { code: 'yue-HK', language: 'Cantonese', nativeName: '粵語 (香港)', region: 'Hong Kong', countryCode: 'hk', flag: '🇭🇰' },
+  { code: 'ja-JP', language: 'Japanese', nativeName: '日本語', region: 'Japan', countryCode: 'jp', flag: '🇯🇵' },
+  { code: 'ko-KR', language: 'Korean', nativeName: '한국어', region: 'South Korea', countryCode: 'kr', flag: '🇰🇷' },
+  { code: 'th-TH', language: 'Thai', nativeName: 'ไทย', region: 'Thailand', countryCode: 'th', flag: '🇹🇭' },
+  { code: 'id-ID', language: 'Indonesian', nativeName: 'Bahasa Indonesia', region: 'Indonesia', countryCode: 'id', flag: '🇮🇩' },
+  { code: 'fil-PH', language: 'Filipino', nativeName: 'Filipino', region: 'Philippines', countryCode: 'ph', flag: '🇵🇭' },
+  { code: 'es-ES', language: 'Spanish', nativeName: 'Español (España)', region: 'Spain', countryCode: 'es', flag: '🇪🇸' },
+  { code: 'es-MX', language: 'Spanish', nativeName: 'Español (México)', region: 'Mexico', countryCode: 'mx', flag: '🇲🇽' },
+  { code: 'es-US', language: 'Spanish', nativeName: 'Español (US)', region: 'United States', countryCode: 'us', flag: '🇺🇸' },
+  { code: 'fr-FR', language: 'French', nativeName: 'Français (France)', region: 'France', countryCode: 'fr', flag: '🇫🇷' },
+  { code: 'fr-CA', language: 'French', nativeName: 'Français (Canada)', region: 'Canada', countryCode: 'ca', flag: '🇨🇦' },
+  { code: 'de-DE', language: 'German', nativeName: 'Deutsch', region: 'Germany', countryCode: 'de', flag: '🇩🇪' },
+  { code: 'it-IT', language: 'Italian', nativeName: 'Italiano', region: 'Italy', countryCode: 'it', flag: '🇮🇹' },
+  { code: 'pt-BR', language: 'Portuguese', nativeName: 'Português (Brasil)', region: 'Brazil', countryCode: 'br', flag: '🇧🇷' },
+  { code: 'pt-PT', language: 'Portuguese', nativeName: 'Português (Portugal)', region: 'Portugal', countryCode: 'pt', flag: '🇵🇹' },
+  { code: 'ru-RU', language: 'Russian', nativeName: 'Русский', region: 'Russia', countryCode: 'ru', flag: '🇷🇺' },
+  { code: 'uk-UA', language: 'Ukrainian', nativeName: 'Українська', region: 'Ukraine', countryCode: 'ua', flag: '🇺🇦' },
+  { code: 'ar-SA', language: 'Arabic', nativeName: 'العربية', region: 'Saudi Arabia', countryCode: 'sa', flag: '🇸🇦' },
+  { code: 'hi-IN', language: 'Hindi', nativeName: 'हिन्दी', region: 'India', countryCode: 'in', flag: '🇮🇳' },
+  { code: 'bn-IN', language: 'Bengali', nativeName: 'বাংলা', region: 'India', countryCode: 'in', flag: '🇮🇳' },
+  { code: 'ta-IN', language: 'Tamil', nativeName: 'தமிழ்', region: 'India', countryCode: 'in', flag: '🇮🇳' },
+  { code: 'te-IN', language: 'Telugu', nativeName: 'తెలుగు', region: 'India', countryCode: 'in', flag: '🇮🇳' },
+  { code: 'mr-IN', language: 'Marathi', nativeName: 'मराठी', region: 'India', countryCode: 'in', flag: '🇮🇳' },
+  { code: 'gu-IN', language: 'Gujarati', nativeName: 'ગુજરાતી', region: 'India', countryCode: 'in', flag: '🇮🇳' },
+  { code: 'kn-IN', language: 'Kannada', nativeName: 'ಕನ್ನಡ', region: 'India', countryCode: 'in', flag: '🇮🇳' },
+  { code: 'ml-IN', language: 'Malayalam', nativeName: 'മലയാളം', region: 'India', countryCode: 'in', flag: '🇮🇳' },
+  { code: 'ur-PK', language: 'Urdu', nativeName: 'اردو', region: 'Pakistan', countryCode: 'pk', flag: '🇵🇰' },
+  { code: 'tr-TR', language: 'Turkish', nativeName: 'Türkçe', region: 'Turkey', countryCode: 'tr', flag: '🇹🇷' },
+  { code: 'pl-PL', language: 'Polish', nativeName: 'Polski', region: 'Poland', countryCode: 'pl', flag: '🇵🇱' },
+  { code: 'nl-NL', language: 'Dutch', nativeName: 'Nederlands', region: 'Netherlands', countryCode: 'nl', flag: '🇳🇱' },
+  { code: 'sv-SE', language: 'Swedish', nativeName: 'Svenska', region: 'Sweden', countryCode: 'se', flag: '🇸🇪' },
+  { code: 'no-NO', language: 'Norwegian', nativeName: 'Norsk', region: 'Norway', countryCode: 'no', flag: '🇳🇴' },
+  { code: 'da-DK', language: 'Danish', nativeName: 'Dansk', region: 'Denmark', countryCode: 'dk', flag: '🇩🇰' },
+  { code: 'fi-FI', language: 'Finnish', nativeName: 'Suomi', region: 'Finland', countryCode: 'fi', flag: '🇫🇮' },
+  { code: 'cs-CZ', language: 'Czech', nativeName: 'Čeština', region: 'Czech Republic', countryCode: 'cz', flag: '🇨🇿' },
+  { code: 'hu-HU', language: 'Hungarian', nativeName: 'Magyar', region: 'Hungary', countryCode: 'hu', flag: '🇭🇺' },
+  { code: 'ro-RO', language: 'Romanian', nativeName: 'Română', region: 'Romania', countryCode: 'ro', flag: '🇷🇴' },
+  { code: 'sk-SK', language: 'Slovak', nativeName: 'Slovenčina', region: 'Slovakia', countryCode: 'sk', flag: '🇸🇰' },
+  { code: 'el-GR', language: 'Greek', nativeName: 'Ελληνικά', region: 'Greece', countryCode: 'gr', flag: '🇬🇷' },
+  { code: 'he-IL', language: 'Hebrew', nativeName: 'עברית', region: 'Israel', countryCode: 'il', flag: '🇮🇱' },
+];
+
+/**
+ * Returns the primary Gemini speech language matching a series country/target market
+ */
+export function getMainLanguageForCountry(countryInput?: string): GeminiSpeechLanguage {
+  if (!countryInput) return GEMINI_SPEECH_LANGUAGES[0]; // Default to Vietnamese if empty or configured
+  const clean = countryInput.toLowerCase().trim();
+
+  // Vietnam
+  if (['vn', 'vietnam', 'viet nam', 'vi'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'vi-VN')!;
+  }
+  // United States / North America
+  if (['us', 'usa', 'united states', 'america', 'en'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'en-US')!;
+  }
+  // United Kingdom
+  if (['gb', 'uk', 'united kingdom', 'great britain', 'england'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'en-GB')!;
+  }
+  // Japan
+  if (['jp', 'japan', 'ja', 'nihon', 'nippon'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'ja-JP')!;
+  }
+  // China
+  if (['cn', 'china', 'prc', 'zh'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'zh-CN')!;
+  }
+  // Taiwan
+  if (['tw', 'taiwan'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'zh-TW')!;
+  }
+  // Hong Kong
+  if (['hk', 'hong kong', 'hongkong'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'yue-HK')!;
+  }
+  // South Korea
+  if (['kr', 'korea', 'south korea', 'ko'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'ko-KR')!;
+  }
+  // Thailand
+  if (['th', 'thailand', 'thai'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'th-TH')!;
+  }
+  // Indonesia
+  if (['id', 'indonesia', 'in'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'id-ID')!;
+  }
+  // Philippines
+  if (['ph', 'philippines', 'filipino'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'fil-PH')!;
+  }
+  // Spain
+  if (['es', 'spain', 'espana'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'es-ES')!;
+  }
+  // Mexico / Latin America
+  if (['mx', 'mexico', 'latam', 'latin america'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'es-MX')!;
+  }
+  // France
+  if (['fr', 'france'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'fr-FR')!;
+  }
+  // Germany
+  if (['de', 'germany', 'deutschland'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'de-DE')!;
+  }
+  // Italy
+  if (['it', 'italy', 'italia'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'it-IT')!;
+  }
+  // Brazil
+  if (['br', 'brazil', 'brasil'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'pt-BR')!;
+  }
+  // India
+  if (['in', 'india', 'hi'].includes(clean)) {
+    return GEMINI_SPEECH_LANGUAGES.find(l => l.code === 'hi-IN')!;
+  }
+
+  // Exact code match
+  const directMatch = GEMINI_SPEECH_LANGUAGES.find(
+    l => l.code.toLowerCase() === clean || l.countryCode === clean || l.region.toLowerCase() === clean
+  );
+  if (directMatch) return directMatch;
+
+  const matchedCountry = findCountry(countryInput);
+  if (matchedCountry?.primaryLang) {
+    const byLang = GEMINI_SPEECH_LANGUAGES.find(l => l.code === matchedCountry.primaryLang);
+    if (byLang) return byLang;
+  }
+
+  return GEMINI_SPEECH_LANGUAGES[0]; // fallback
+}
+
+export function getLanguageByCode(code: string): GeminiSpeechLanguage {
+  return (
+    GEMINI_SPEECH_LANGUAGES.find(l => l.code.toLowerCase() === (code || '').toLowerCase()) ||
+    GEMINI_SPEECH_LANGUAGES[0]
+  );
+}
+
+export function getVoiceoverTrackId(langCode: string): string {
+  const safeLang = (langCode || 'default').replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `track_voiceover_${safeLang}`;
+}
+
+export function getCaptionTrackId(langCode: string): string {
+  const safeLang = (langCode || 'default').replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `track_caption_${safeLang}`;
+}

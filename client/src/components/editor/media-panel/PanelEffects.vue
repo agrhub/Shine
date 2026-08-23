@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { GL_EFFECT_OPTIONS, getEffectOptions, VALUES_FILTER_SPECIAL } from '@openvideo/engine-pixi';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 const EFFECT_DURATION_DEFAULT = 5_000_000;

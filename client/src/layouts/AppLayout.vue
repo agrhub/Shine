@@ -112,13 +112,13 @@ function handleWizardCreated(id: string) {
       <!-- Top Header -->
       <header class="h-20 px-8 lg:px-10 flex items-center justify-between shrink-0 border-b border-[var(--el-border-color)]/40 bg-[var(--el-bg-color-page)]/80 backdrop-blur-sm z-10">
         <div class="relative w-full max-w-[360px]">
-          <i class="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-[var(--el-text-color-secondary)] text-sm"></i>
+          <!-- <i class="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-[var(--el-text-color-secondary)] text-sm"></i>
           <input
             v-model="searchQuery"
             type="text"
             :placeholder="t('dashboard.searchPlaceholder')"
             class="w-full bg-transparent pl-11 pr-4 py-2.5 text-sm outline-none text-[var(--el-text-color-primary)] placeholder:text-[var(--el-text-color-secondary)] border-b border-[var(--el-border-color)] focus:border-[var(--el-color-primary)] transition-colors font-sans"
-          />
+          /> -->
         </div>
 
         <div class="flex items-center gap-3">

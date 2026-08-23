@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useMediaPanelStore, tabs, type Tab } from '@/composables/useMediaPanelStore';
-import { cn } from '@/lib/utils';
+import { cn } from '@/utils/utils';
 import {
   Tooltip,
   TooltipContent,

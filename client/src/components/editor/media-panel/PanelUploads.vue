@@ -15,9 +15,9 @@ import {
   Video as VideoIcon,
   Trash2,
 } from 'lucide-vue-next';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 import { Log } from '@openvideo/engine-pixi';
-import { uploadFilesToBackend, deleteUploadedFile, fetchUploadedAssets, type UploadedAsset } from '@/lib/upload-utils';
+import { uploadFilesToBackend, deleteUploadedFile, fetchUploadedAssets, type UploadedAsset } from '@/utils/upload-utils';
 
 import UploadModal from './UploadModal.vue';
 

@@ -113,7 +113,7 @@ interface ExportModalProps {
 }
 
 const props = defineProps<ExportModalProps>();
-const emit = defineEmits(['update:open']);
+const emit = defineEmits(['update:open', 'exported']);
 
 const { state: studioState } = useStudioStore();
 const studio = computed(() => studioState.value.studio);
@@ -252,14 +252,18 @@ const startExport = async (targetPreset?: ResolutionPreset) => {
       audioSampleRate: audioSampleRate.value,
     };
 
-    await runExport(settings, activePreset, (v: number) => {
+    const result = await runExport(settings, activePreset, (v: number) => {
       exportProgress.value = v;
     });
 
     isExporting.value = false;
-    setTimeout(() => {
-      handleClose();
-    }, 1500);
+    if(result?.video){
+      setTimeout(() => {
+        handleClose();
+      }, 1500);
+
+      emit('exported', result?.video, result?.thumbnail);
+    }
   } catch (error: any) {
     toast.error('Failed to export: ' + error.message);
     isExporting.value = false;
@@ -297,22 +301,22 @@ const summaryPills = computed(() => [
 <template>
   <Dialog :open="props.open" @update:open="(v) => !v && handleClose()">
     <DialogContent
-      class="max-w-[400px] border border-border p-0 text-foreground shadow-2xl overflow-hidden rounded-2xl bg-background/80 backdrop-blur-2xl"
+      class="max-w-[420px] border border-border p-0 text-foreground shadow-2xl overflow-hidden rounded-2xl bg-background/95 backdrop-blur-2xl max-h-[85vh] flex flex-col"
       :show-close-button="false"
     >
       <!-- ── STEP 1: Preset Picker ─────────────────────────────── -->
-      <div v-if="step === 'preset'" class="flex flex-col">
-        <div class="flex items-center justify-between px-5 pt-5 pb-3">
+      <div v-if="step === 'preset'" class="flex flex-col max-h-[85vh] overflow-hidden">
+        <div class="flex items-center justify-between px-5 pt-5 pb-3 shrink-0 border-b border-border/50">
           <div>
             <DialogTitle class="text-sm font-semibold tracking-tight">Export</DialogTitle>
             <p class="text-xs text-muted-foreground mt-0.5">
               {{ (maxDuration / 1e6).toFixed(1) }}s · {{ studioOpts.width }}×{{ studioOpts.height }}
             </p>
           </div>
-          <Button variant="ghost" class="h-7 w-7 p-0 rounded-lg text-muted-foreground" @click="handleClose">✕</Button>
+          <Button variant="ghost" class="h-7 w-7 p-0 rounded-lg text-muted-foreground hover:bg-muted" @click="handleClose">✕</Button>
         </div>
 
-        <div class="px-5 pb-5 flex flex-col gap-4">
+        <div class="px-5 py-4 flex flex-col gap-4 overflow-y-auto flex-1 overscroll-contain">
           <div v-for="group in RESOLUTION_GROUPS" :key="group.group">
             <p class="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
               {{ group.group }}
@@ -352,20 +356,20 @@ const summaryPills = computed(() => [
       </div>
 
       <!-- ── STEP 2: Advanced Settings ─────────────────────────── -->
-      <div v-else-if="step === 'advanced'" class="flex flex-col">
-        <div class="flex items-center justify-between px-5 pt-5 pb-3">
+      <div v-else-if="step === 'advanced'" class="flex flex-col max-h-[85vh] overflow-hidden">
+        <div class="flex items-center justify-between px-5 pt-5 pb-3 shrink-0 border-b border-border/50">
           <div>
             <DialogTitle class="text-sm font-semibold tracking-tight">Custom Export</DialogTitle>
             <p class="text-xs text-muted-foreground mt-0.5">
               {{ studioOpts.width }}×{{ studioOpts.height }} · {{ (maxDuration / 1e6).toFixed(1) }}s
             </p>
           </div>
-          <Button variant="ghost" class="h-7 px-2 text-xs rounded-lg text-muted-foreground" @click="step = 'preset'">
+          <Button variant="ghost" class="h-7 px-2 text-xs rounded-lg text-muted-foreground hover:bg-muted" @click="step = 'preset'">
             ← Back
           </Button>
         </div>
 
-        <div class="px-5 pb-5 flex flex-col gap-3">
+        <div class="px-5 py-4 flex flex-col gap-3 overflow-y-auto flex-1 overscroll-contain">
           <!-- Video Section -->
           <div class="rounded-xl border border-border bg-card overflow-hidden">
             <div class="flex items-center justify-between px-4 py-3 border-b border-border">

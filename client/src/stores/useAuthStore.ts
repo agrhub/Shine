@@ -14,6 +14,8 @@ export interface User {
   credits?: number;
   theme?: 'dark' | 'light' | string;
   language?: string;
+  two_factor_enabled?: boolean;
+  connected_channels?: any;
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -33,6 +35,10 @@ export const useAuthStore = defineStore('auth', () => {
   const toggleDark = useToggle(isDark);
 
   const isAuthenticated = computed(() => !!token.value);
+  const isAdmin = computed(() => {
+    const r = (user.value?.role || '').toLowerCase();
+    return r === 'admin' || r === 'owner' || r === 'superadmin';
+  });
 
   function applyUserPreferences(usr: User | null) {
     const theme = usr?.theme || localStorage.getItem('shine_theme') || 'dark';
@@ -61,7 +67,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function fetchCurrentUser() {
     if (!token.value) return null;
     try {
-      const res: any = await http.get('/auth/me');
+      const res: any = await http.get('/auth/profile');
       const data = res?.data || res;
       if (data?.user) {
         user.value = data.user;
@@ -79,6 +85,9 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const res: any = await http.post('/auth/login', credentials);
       const data = res?.data || res;
+      if (data?.require_2fa) {
+        return data;
+      }
       token.value = data.token;
       user.value = data.user;
       localStorage.setItem('shine_token', data.token);
@@ -88,6 +97,27 @@ export const useAuthStore = defineStore('auth', () => {
     } finally {
       isLoading.value = false;
     }
+  }
+
+  async function verifyLogin2FA(payload: { temp_token: string; otp: string }) {
+    isLoading.value = true;
+    try {
+      const res: any = await http.post('/auth/login/verify-2fa', payload);
+      const data = res?.data || res;
+      token.value = data.token;
+      user.value = data.user;
+      localStorage.setItem('shine_token', data.token);
+      localStorage.setItem('shine_user', JSON.stringify(data.user));
+      applyUserPreferences(data.user);
+      return data;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  async function resendLogin2FA(temp_token: string) {
+    const res: any = await http.post('/auth/login/resend-2fa-otp', { temp_token });
+    return res?.data || res;
   }
 
   async function signup(payload: { email: string; password: string; name: string }) {
@@ -157,8 +187,11 @@ export const useAuthStore = defineStore('auth', () => {
     toggleDark,
     isLoading,
     isAuthenticated,
+    isAdmin,
     fetchCurrentUser,
     login,
+    verifyLogin2FA,
+    resendLogin2FA,
     signup,
     updatePreferences,
     forgotPassword,

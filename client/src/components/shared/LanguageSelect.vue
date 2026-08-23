@@ -3,13 +3,13 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { SUPPORTED_LOCALES } from '@/i18n';
 import { useAuthStore } from '@/stores/useAuthStore';
+import CountryFlag from '@/components/common/CountryFlag.vue';
 
 const { locale } = useI18n();
 const authStore = useAuthStore();
 
-const currentFlag = computed(() => {
-  const current = SUPPORTED_LOCALES.find(l => l.code === locale.value);
-  return current ? current.flag : '🇺🇸';
+const currentLocaleItem = computed(() => {
+  return SUPPORTED_LOCALES.find(l => l.code === locale.value) || SUPPORTED_LOCALES[0];
 });
 
 function switchLocale(code: string) {
@@ -25,7 +25,7 @@ function switchLocale(code: string) {
         class="flex h-8 w-8 items-center justify-center rounded-md text-base hover:bg-muted transition-colors border border-border bg-background cursor-pointer"
         :title="`Language (${locale})`"
       >
-        <span>{{ currentFlag }}</span>
+        <CountryFlag :code="currentLocaleItem.code" :flag="currentLocaleItem.flag" size="medium" />
       </button>
       <template #dropdown>
         <el-dropdown-menu>
@@ -35,7 +35,7 @@ function switchLocale(code: string) {
             :command="(l as any).code"
             :class="{ 'font-bold bg-muted': locale === (l as any).code }"
           >
-            <span class="mr-2">{{ l.flag }}</span>
+            <CountryFlag :code="l.code" :flag="l.flag" size="small" class="mr-2" />
             <span>{{ l.label }}</span>
           </el-dropdown-item>
         </el-dropdown-menu>

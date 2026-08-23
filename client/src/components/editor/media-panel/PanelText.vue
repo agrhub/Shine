@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 import { Log } from '@openvideo/engine-pixi';
 import { TEXT_PRESETS } from '@/constants/text-presets';
 

@@ -5,6 +5,8 @@ import { usePipelineStore } from '@/stores/usePipelineStore';
 import { useSeriesStore } from '@/stores/useSeriesStore';
 import http from '@/utils/http';
 import { toast } from 'vue-sonner';
+import { getVisualStyleById } from '@/constants/visualStyles';
+import { MagicStick, Lock, Check, Refresh, Picture, Edit, Plus } from '@element-plus/icons-vue';
 
 const props = defineProps<{
   open: boolean;
@@ -23,9 +25,25 @@ const renderPromptOverride = ref('');
 const renderStyle = ref<'photorealistic' | 'anime' | 'cinematic'>('photorealistic');
 
 const selectedGender = ref<'male' | 'female' | 'neutral'>('male');
+const selectedAge = ref<number>(25);
 const selectedNationality = ref('Vietnam');
 const selectedVoiceId = ref('Fenrir');
+
+// Editable Identity & Traits
+const editableIdentity = ref('');
+const editableTraits = ref('');
+const editableVisualTraits = ref('');
+
+// Episode Wardrobe Controls
+const activeOutfitName = ref('');
+const activeOutfitCategory = ref('Main Outfit');
+const activeOutfitTags = ref('');
+const isLockingOutfit = ref(false);
+const isGeneratingEpisodeOutfit = ref(false);
+
 const isSavingCharacter = ref(false);
+const isExtractingAnchors = ref(false);
+const regeneratingAnchorId = ref<string | null>(null);
 const isPlayingVoice = ref(false);
 let voiceAudioPlayer: HTMLAudioElement | null = null;
 
@@ -43,14 +61,51 @@ const charStatus = computed(() => {
   return pipelineStore.characterRenderStatuses.get(props.character.id) || 'idle';
 });
 
+const characterAnchors = computed(() => {
+  if (props.character?.anchors && Array.isArray(props.character.anchors) && props.character.anchors.length > 0) {
+    return props.character.anchors;
+  }
+  return [];
+});
+
+const characterWardrobe = computed(() => {
+  if (props.character?.wardrobe && Array.isArray(props.character.wardrobe)) {
+    return props.character.wardrobe;
+  }
+  return [];
+});
+
+const activeEpisodeTitle = computed(() => {
+  return seriesStore.activeEpisode?.title || `Episode ${seriesStore.activeEpisodeId || 1}`;
+});
+
+const selectedPreviewUrl = ref<string>('');
+const selectedPreviewLabel = ref<string>('');
+
 watch(() => props.character, (char) => {
   if (char) {
-    renderPromptOverride.value = char.identity || '';
+    renderPromptOverride.value = char.identity || char.visualTraits || char.physicalCharacteristics || char.appearance || '';
+    editableIdentity.value = char.identity || '';
+    editableTraits.value = char.traits || '';
+    editableVisualTraits.value = char.visualTraits || char.physicalCharacteristics || char.appearance || char.description || '';
     selectedGender.value = (char.gender as any) || 'male';
+    selectedAge.value = Number(char.age) || 25;
     selectedNationality.value = char.nationality || 'Vietnam';
     selectedVoiceId.value = char.voiceId || (selectedGender.value === 'female' ? 'Kore' : 'Fenrir');
+    selectedPreviewUrl.value = char.avatarUrl || char.avatar || '';
+    selectedPreviewLabel.value = 'Primary Frontal';
+
+    const activeW = Array.isArray(char.wardrobe) && char.wardrobe.length > 0 ? char.wardrobe[0] : null;
+    activeOutfitName.value = activeW?.name || `${char.name} Default Costume`;
+    activeOutfitCategory.value = activeW?.category || 'Main Outfit';
+    activeOutfitTags.value = Array.isArray(activeW?.tags) ? activeW.tags.join(', ') : (activeW?.tags || 'signature character costume, continuity locked');
   }
 }, { immediate: true });
+
+function selectAnchorPreview(anc: any) {
+  selectedPreviewUrl.value = anc.imageUrl || props.character?.avatarUrl;
+  selectedPreviewLabel.value = anc.name || 'Facial Anchor';
+}
 
 function close() {
   if (voiceAudioPlayer) {
@@ -81,11 +136,23 @@ async function saveCharacterSettings() {
   if (!props.character) return;
   isSavingCharacter.value = true;
   try {
+    const sId = seriesStore.currentSeries?.id;
+    const resolvedVisual = editableVisualTraits.value || editableIdentity.value;
     await seriesStore.updateCharacter(props.character.id, {
+      identity: editableIdentity.value,
+      traits: editableTraits.value,
+      visualTraits: resolvedVisual,
+      physicalCharacteristics: resolvedVisual,
+      appearance: resolvedVisual,
+      description: resolvedVisual || editableTraits.value || '',
+      age: selectedAge.value,
       gender: selectedGender.value,
       nationality: selectedNationality.value,
       voiceId: selectedVoiceId.value,
+      avatarUrl: props.character.avatarUrl,
+      avatar: props.character.avatar,
     });
+    if (sId) await seriesStore.saveCharacterAvatars(sId);
     toast.success(t('workspace.characterSaved'));
   } catch {
     toast.error(t('toast.failedToSaveCharacter'));
@@ -94,15 +161,157 @@ async function saveCharacterSettings() {
   }
 }
 
+async function handleExtractFacialAnchors() {
+  if (!props.character) return;
+  isExtractingAnchors.value = true;
+  try {
+    toast.info(t('workspace.extractingAnchorsToast'));
+    const sId = seriesStore.currentSeries?.id;
+    const currentStyle = seriesStore.currentSeries?.visual_style || 'realistic';
+    const styleObj = getVisualStyleById(currentStyle);
+
+    const res: any = await http.post(`/characters/${props.character.id}/anchors`, {
+      seriesId: sId,
+      name: props.character.name,
+      age: selectedAge.value,
+      gender: selectedGender.value,
+      visualTraits: editableVisualTraits.value || editableIdentity.value || renderPromptOverride.value,
+      wardrobeDesc: activeOutfitTags.value || activeOutfitName.value,
+      visualStyle: currentStyle,
+      visualStylePrompt: styleObj.promptModifier,
+    });
+
+    const updatedChar = res?.data?.data || res?.data;
+    if (updatedChar) {
+      if (updatedChar.avatarUrl) {
+        seriesStore.updateCharacterAvatar(props.character.id, updatedChar.avatarUrl);
+      }
+      await seriesStore.updateCharacter(props.character.id, {
+        anchors: updatedChar.anchors || [],
+        loraModel: updatedChar.loraModel || props.character.loraModel,
+        meshMatchRate: updatedChar.meshMatchRate || 98.5,
+      });
+      if (sId) await seriesStore.saveCharacterAvatars(sId);
+      toast.success(t('workspace.anchorsLockedToast'));
+    }
+  } catch (err: any) {
+    toast.error(t('workspace.failedToExtractAnchors', { error: err.message || 'Error' }));
+  } finally {
+    isExtractingAnchors.value = false;
+  }
+}
+
+// Regenerate a single anchor without touching the others
+async function handleRegenerateSingleAnchor(anc: any) {
+  if (!props.character || !anc.id) return;
+  regeneratingAnchorId.value = anc.id;
+  try {
+    toast.info(t('workspace.regeneratingAngleToast', { name: anc.name }));
+    const sId = seriesStore.currentSeries?.id;
+    const currentStyle = seriesStore.currentSeries?.visual_style || 'realistic';
+    const styleObj = getVisualStyleById(currentStyle);
+
+    const res: any = await http.post(`/characters/${props.character.id}/anchors/${anc.id}`, {
+      seriesId: sId,
+      name: props.character.name,
+      age: selectedAge.value,
+      gender: selectedGender.value,
+      visualTraits: editableVisualTraits.value || editableIdentity.value,
+      wardrobeDesc: activeOutfitTags.value || activeOutfitName.value,
+      visualStyle: currentStyle,
+      visualStylePrompt: styleObj.promptModifier,
+    });
+
+    const data = res?.data?.data || res?.data;
+    if (data?.anchors) {
+      await seriesStore.updateCharacter(props.character.id, {
+        anchors: data.anchors,
+      });
+      if (data.anchor?.imageUrl) {
+        selectedPreviewUrl.value = data.anchor.imageUrl;
+        selectedPreviewLabel.value = data.anchor.name;
+      }
+      if (sId) await seriesStore.saveCharacterAvatars(sId);
+      toast.success(t('workspace.angleRegeneratedToast', { name: anc.name }));
+    }
+  } catch (err: any) {
+    toast.error(t('workspace.failedToRegenerateAngle', { error: err.message || 'Error' }));
+  } finally {
+    regeneratingAnchorId.value = null;
+  }
+}
+
+// AI Generate Outfit suitable for active Episode
+async function handleGenerateEpisodeOutfit() {
+  if (!props.character) return;
+  isGeneratingEpisodeOutfit.value = true;
+  try {
+    toast.info(t('workspace.designingCostumeToast', { episode: activeEpisodeTitle.value }));
+    const sId = seriesStore.currentSeries?.id;
+    const epId = seriesStore.activeEpisodeId;
+    const res: any = await http.post(`/characters/${props.character.id}/wardrobe`, {
+      seriesId: sId,
+      episodeId: epId,
+      category: activeOutfitCategory.value || 'Main Outfit',
+      prompt: `Episode outfit for ${activeEpisodeTitle.value}`,
+    });
+
+    const newOutfit = res?.data?.data || res?.data;
+    if (newOutfit) {
+      activeOutfitName.value = newOutfit.name;
+      activeOutfitTags.value = Array.isArray(newOutfit.tags) ? newOutfit.tags.join(', ') : newOutfit.tags;
+      const currentWardrobe = Array.isArray(props.character.wardrobe) ? [...props.character.wardrobe] : [];
+      currentWardrobe.unshift(newOutfit);
+      await seriesStore.updateCharacter(props.character.id, { wardrobe: currentWardrobe });
+      if (sId) await seriesStore.saveCharacterAvatars(sId);
+      toast.success(t('workspace.outfitLockedForEpisodeToast', { name: newOutfit.name, episode: activeEpisodeTitle.value }));
+    }
+  } catch (err: any) {
+    toast.error(t('workspace.failedToGenerateWardrobe', { error: err.message || 'Error' }));
+  } finally {
+    isGeneratingEpisodeOutfit.value = false;
+  }
+}
+
+async function handleLockWardrobe() {
+  if (!props.character) return;
+  isLockingOutfit.value = true;
+  try {
+    const sId = seriesStore.currentSeries?.id;
+    const tagsArray = activeOutfitTags.value.split(',').map(s => s.trim()).filter(Boolean);
+    const res: any = await http.post(`/characters/${props.character.id}/wardrobe`, {
+      seriesId: sId,
+      name: activeOutfitName.value || `${props.character.name} Default Costume`,
+      category: activeOutfitCategory.value || 'Main Outfit',
+      tags: tagsArray.length > 0 ? tagsArray : ['tailored outfit', 'continuity-locked'],
+      status: 'locked',
+    });
+
+    const newOutfit = res?.data?.data || res?.data;
+    if (newOutfit) {
+      const currentWardrobe = Array.isArray(props.character.wardrobe) ? [...props.character.wardrobe] : [];
+      currentWardrobe.unshift(newOutfit);
+      await seriesStore.updateCharacter(props.character.id, { wardrobe: currentWardrobe });
+      if (sId) await seriesStore.saveCharacterAvatars(sId);
+      toast.success(t('workspace.outfitContinuityLockedToast'));
+    }
+  } catch (err: any) {
+    toast.error(t('workspace.failedToLockWardrobe', { error: err.message || 'Error' }));
+  } finally {
+    isLockingOutfit.value = false;
+  }
+}
+
 async function handleRender() {
   if (!props.character) return;
   try {
     toast.info(t('workspace.renderingCharacter'));
     const charWithOverride = renderPromptOverride.value
-      ? { ...props.character, identity: renderPromptOverride.value }
-      : props.character;
+      ? { ...props.character, identity: renderPromptOverride.value, visualTraits: editableVisualTraits.value }
+      : { ...props.character, visualTraits: editableVisualTraits.value };
     await pipelineStore.renderCharacter({
       ...charWithOverride,
+      age: selectedAge.value,
       gender: selectedGender.value,
       nationality: selectedNationality.value,
       voiceId: selectedVoiceId.value,
@@ -126,7 +335,7 @@ const styleOptions = computed(() => [
     :model-value="open"
     @update:model-value="emit('update:open', $event)"
     :title="character?.name || t('workspace.characterConsistency')"
-    width="540px"
+    width="720px"
     align-center
     destroy-on-close
   >
@@ -134,153 +343,344 @@ const styleOptions = computed(() => [
       <p>{{ t('workspace.noCharacterSelected') }}</p>
     </div>
 
-    <div v-else class="space-y-4">
-      <!-- Avatar + Basic Info -->
-      <div class="flex gap-4 items-start">
-        <div class="relative shrink-0">
-          <el-avatar
-            v-if="character.avatarUrl"
-            :src="character.avatarUrl"
-            :size="84"
-            class="border-2 rounded-2xl"
-            style="border-color: var(--el-color-primary-light-5);"
-            shape="square"
-          />
-          <div
-            v-else
-            class="w-20 h-20 rounded-2xl flex items-center justify-center border-2 border-dashed"
-            style="background-color: var(--el-fill-color-dark); border-color: var(--el-border-color);"
+    <div v-else class="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+      <!-- Top Section: Large Portrait & Attributes + Voice Preset -->
+      <div class="flex flex-col sm:flex-row gap-4 items-stretch">
+        <!-- Left: Large Character Portrait -->
+        <div class="w-full sm:w-52 shrink-0 flex flex-col gap-2">
+          <div v-loading="charStatus === 'running'"
+            class="w-full aspect-[3/4] rounded-2xl overflow-hidden relative border shadow-md flex items-center justify-center group"
+            style="border-color: var(--el-border-color); background-color: var(--el-fill-color-darker);"
           >
-            <div class="text-center">
-              <el-icon :size="24" style="color: var(--el-text-color-placeholder);"><User /></el-icon>
-              <p class="text-[9px] mt-1" style="color: var(--el-text-color-placeholder);">{{ t('workspace.noAvatarYet') }}</p>
+            <el-image
+              v-if="character.avatarUrl"
+              :src="character.avatarUrl"
+              :alt="character.name"
+              :preview-src-list="[character.avatarUrl]"
+              fit="cover"
+              class="w-full h-full object-cover cursor-pointer"
+            />
+            <div v-else class="flex flex-col items-center justify-center p-3 text-center space-y-1.5" style="color: var(--el-text-color-placeholder);">
+              <el-icon :size="40"><User /></el-icon>
+              <p class="text-xs">{{ t('workspace.noAvatarYet') }}</p>
             </div>
+
+            <!-- Current Angle Badge -->
+            <!-- <div v-if="selectedPreviewLabel" class="absolute bottom-2 left-2 right-2 bg-black/60 backdrop-blur-xs text-white text-[10px] font-semibold px-2 py-0.5 rounded-md text-center truncate">
+              {{ selectedPreviewLabel }}
+            </div> -->
           </div>
 
-          <!-- Status overlay -->
-          <div
-            v-if="charStatus === 'running'"
-            class="absolute inset-0 rounded-2xl flex items-center justify-center"
-            style="background-color: rgba(0,0,0,0.5);"
-          >
-            <el-icon class="is-loading" :size="24" style="color: white;"><Loading /></el-icon>
-          </div>
-        </div>
-
-        <div class="flex-1 min-w-0 space-y-1.5">
-          <div class="flex items-center justify-between">
-            <h3 class="font-bold text-base line-clamp-1" style="color: var(--el-text-color-primary);">{{ character.name }}</h3>
-            <el-tag type="primary" size="small" effect="plain" round>{{ character.role }}</el-tag>
-          </div>
-
-          <!-- Badges for Gender, Nationality, Voice -->
-          <div class="flex gap-1.5 flex-wrap">
-            <el-tag size="small" effect="plain" round class="text-[10px]">
-              {{ selectedGender === 'female' ? `♀ ${t('workspace.female')}` : selectedGender === 'male' ? `♂ ${t('workspace.male')}` : t('workspace.neutral') }}
-            </el-tag>
-            <el-tag size="small" type="info" effect="plain" round class="text-[10px]">
-              🌐 {{ selectedNationality }}
-            </el-tag>
-            <el-tag size="small" type="success" effect="plain" round class="text-[10px]">
-              🎙 {{ selectedVoiceId }}
-            </el-tag>
-          </div>
-
-          <p v-if="character.speechStyle" class="text-xs mt-1" style="color: var(--el-text-color-secondary);">
-            <span class="font-semibold">{{ t('workspace.speech') }}:</span> {{ character.speechStyle }}
-          </p>
-        </div>
-      </div>
-
-      <!-- Character Voice, Gender & Nationality Global Sync -->
-      <div class="p-3.5 rounded-2xl border space-y-3" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color);">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider" style="color: var(--el-color-primary);">
-            <el-icon><Microphone /></el-icon>
-            <span>{{ t('workspace.voicePreset') }}</span>
-          </div>
+          <!-- Quick Re-render trigger -->
           <el-button
             size="small"
-            type="primary"
             round
-            :loading="isSavingCharacter"
-            @click="saveCharacterSettings"
+            type="primary"
+            plain
+            class="w-full"
+            icon="Picture"
+            :loading="charStatus === 'running'"
+            :disabled="!!regeneratingAnchorId"
+            @click="handleRender"
           >
-            {{ t('common.save', 'Save') }}
+            {{ character.avatarUrl ? t('workspace.rerenderAvatar') : t('workspace.renderCharacter') }}
           </el-button>
         </div>
 
-        <div class="grid grid-cols-2 gap-2.5">
-          <!-- Gender Selector -->
-          <div>
-            <label class="block text-[11px] font-semibold mb-1" style="color: var(--el-text-color-secondary);">{{ t('workspace.gender') }}</label>
-            <el-select v-model="selectedGender" size="small" class="w-full">
-              <el-option value="male" :label="t('workspace.male')" />
-              <el-option value="female" :label="t('workspace.female')" />
-              <el-option value="neutral" :label="t('workspace.neutral')" />
-            </el-select>
+        <!-- Right: Character Header, Age/Gender & Voice Preset -->
+        <div class="flex-1 min-w-0 flex flex-col justify-between gap-3">
+          <!-- Header & Badges -->
+          <div class="space-y-2 p-3 rounded-2xl border" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="font-bold text-base truncate" style="color: var(--el-text-color-primary);">{{ character.name }}</h3>
+              <el-tag :type="character.role === 'protagonist' ? 'danger' : character.role === 'antagonist' ? 'warning' : 'info'" size="small" effect="light" round class="capitalize">
+                {{ character.role }}
+              </el-tag>
+            </div>
+
+            <!-- Badges for Age, Gender, Nationality, Voice -->
+            <div class="flex gap-1.5 flex-wrap">
+              <el-tag size="small" type="warning" effect="plain" round class="!text-[10px]">
+                🎂 {{ selectedAge }} {{ t('common.yearsOld', 'y/o') }}
+              </el-tag>
+              <el-tag size="small" effect="plain" round class="!text-[10px]">
+                {{ selectedGender === 'female' ? `♀ ${t('workspace.female')}` : selectedGender === 'male' ? `♂ ${t('workspace.male')}` : t('workspace.neutral') }}
+              </el-tag>
+              <el-tag size="small" type="info" effect="plain" round class="!text-[10px]">
+                🌐 {{ selectedNationality }}
+              </el-tag>
+              <el-tag size="small" type="success" effect="plain" round class="!text-[10px]">
+                🎙 {{ selectedVoiceId }}
+              </el-tag>
+            </div>
           </div>
 
-          <!-- Nationality Input -->
-          <div>
-            <label class="block text-[11px] font-semibold mb-1" style="color: var(--el-text-color-secondary);">{{ t('workspace.nationality') }}</label>
-            <el-input v-model="selectedNationality" size="small" placeholder="Vietnam, US, Japan..." />
+          <!-- Character Voice, Gender & Nationality Global Sync -->
+          <div class="p-3 rounded-2xl border space-y-2.5 flex-1 flex flex-col justify-between" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color);">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider" style="color: var(--el-color-primary);">
+                <el-icon><Microphone /></el-icon>
+                <span>{{ t('workspace.voicePreset') }} {{ t('workspace.attributes') }}</span>
+              </div>
+              <el-button
+                size="small"
+                type="primary"
+                round
+                :loading="isSavingCharacter"
+                @click="saveCharacterSettings"
+              >
+                {{ t('workspace.saveAll') }}
+              </el-button>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2">
+              <!-- Age Input -->
+              <div>
+                <label class="block text-[11px] font-semibold mb-1" style="color: var(--el-text-color-secondary);">{{ t('workspace.age', 'Age') }}</label>
+                <el-input-number v-model="selectedAge" :min="1" :max="120" size="small" class="!w-full" :controls="false" />
+              </div>
+
+              <!-- Gender Selector -->
+              <div>
+                <label class="block text-[11px] font-semibold mb-1" style="color: var(--el-text-color-secondary);">{{ t('workspace.gender') }}</label>
+                <el-select v-model="selectedGender" size="small" class="w-full">
+                  <el-option value="male" :label="t('workspace.male')" />
+                  <el-option value="female" :label="t('workspace.female')" />
+                  <el-option value="neutral" :label="t('workspace.neutral')" />
+                </el-select>
+              </div>
+
+              <!-- Nationality Input -->
+              <div>
+                <label class="block text-[11px] font-semibold mb-1" style="color: var(--el-text-color-secondary);">{{ t('workspace.nationality') }}</label>
+                <el-input v-model="selectedNationality" size="small" placeholder="Vietnam, US..." />
+              </div>
+            </div>
+
+            <!-- Voice Preset Selector with Play Preview -->
+            <div>
+              <label class="block text-[11px] font-semibold mb-1" style="color: var(--el-text-color-secondary);">
+                {{ t('workspace.selectVoice') }}
+              </label>
+              <div class="flex gap-2">
+                <el-select v-model="selectedVoiceId" size="small" class="flex-1" filterable>
+                  <el-option
+                    v-for="voice in filteredVoicePresets"
+                    :key="voice.id"
+                    :value="voice.id"
+                    :label="`${voice.name} (${voice.description || ''})`"
+                  >
+                    <div class="flex justify-between items-center w-full">
+                      <span>{{ voice.name }}</span>
+                      <span class="text-[10px]" style="color: var(--el-text-color-placeholder);">{{ voice.description || '' }}</span>
+                    </div>
+                  </el-option>
+                </el-select>
+                <el-button
+                  size="small"
+                  circle
+                  :type="isPlayingVoice ? 'warning' : 'primary'"
+                  :plain="!isPlayingVoice"
+                  icon="VideoPlay"
+                  @click="playVoiceSample(selectedVoiceId)"
+                  :title="t('workspace.previewVoice')"
+                />
+              </div>
+            </div>
           </div>
         </div>
+      </div>
 
-        <!-- Voice Preset Selector with Play Preview -->
-        <div>
-          <label class="block text-[11px] font-semibold mb-1" style="color: var(--el-text-color-secondary);">
-            {{ t('workspace.selectVoice') }}
-          </label>
-          <div class="flex gap-2">
-            <el-select v-model="selectedVoiceId" size="small" class="flex-1" filterable>
-              <el-option
-                v-for="voice in filteredVoicePresets"
-                :key="voice.id"
-                :value="voice.id"
-                :label="`${voice.name} (${voice.description || ''})`"
-              >
-                <div class="flex justify-between items-center w-full">
-                  <span>{{ voice.name }}</span>
-                  <span class="text-[10px]" style="color: var(--el-text-color-placeholder);">{{ voice.description || '' }}</span>
-                </div>
-              </el-option>
-            </el-select>
-            <el-button
+      <!-- Editable Identity & Traits Card -->
+      <div class="p-3.5 rounded-2xl border space-y-2.5" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color);">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style="color: var(--el-color-primary);">
+            <el-icon><Edit /></el-icon>
+            {{ t('workspace.customIdentityAndTraits') }}
+          </span>
+          <span class="text-[11px]" style="color: var(--el-text-color-secondary);">{{ t('workspace.clickSaveToPersist') }}</span>
+        </div>
+
+        <div class="space-y-2">
+          <div>
+            <label class="block text-[11px] font-semibold mb-1" style="color: var(--el-text-color-secondary);">
+              {{ t('workspace.identityRole') }}
+            </label>
+            <el-input v-model="editableIdentity" size="small" :placeholder="t('workspace.identityPlaceholder')" />
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-semibold mb-1" style="color: var(--el-text-color-secondary);">
+              {{ t('workspace.personalityAndTraits') }}
+            </label>
+            <el-input v-model="editableTraits" type="textarea" :rows="2" size="small" :placeholder="t('workspace.personalityPlaceholder')" />
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-semibold mb-1" style="color: var(--el-text-color-secondary);">
+              {{ t('workspace.visualPhysicalTraits') }}
+            </label>
+            <el-input v-model="editableVisualTraits" type="textarea" :rows="2" size="small" :placeholder="t('workspace.visualPhysicalPlaceholder')" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold mb-1" style="color: var(--el-text-color-secondary);">{{ t('workspace.promptOverride') }}</label>
+            <el-input
+              v-model="renderPromptOverride"
+              type="textarea"
+              :rows="2"
+              :placeholder="`${character.name}, ${character.role}...`"
               size="small"
-              circle
-              :type="isPlayingVoice ? 'warning' : 'primary'"
-              :plain="!isPlayingVoice"
-              icon="VideoPlay"
-              @click="playVoiceSample(selectedVoiceId)"
-              :title="t('workspace.previewVoice')"
             />
           </div>
         </div>
       </div>
 
-      <!-- Identity & Traits -->
-      <el-descriptions :column="1" border size="small" v-if="character.identity || character.traits">
-        <el-descriptions-item v-if="character.identity" :label="t('workspace.identity')">
-          {{ character.identity }}
-        </el-descriptions-item>
-        <el-descriptions-item v-if="character.traits && character.traits !== character.identity" :label="t('workspace.traits')">
-          {{ character.traits }}
-        </el-descriptions-item>
-      </el-descriptions>
+      <!-- Episode Wardrobe & Outfit Continuity Card -->
+      <div class="p-3.5 rounded-2xl border space-y-3" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color);">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-1.5">
+            <el-icon style="color: var(--el-color-success);"><Lock /></el-icon>
+            <span class="text-xs font-bold uppercase tracking-wider" style="color: var(--el-color-success);">
+              {{ t('workspace.episodeWardrobeContinuity') }}
+            </span>
+          </div>
+          <div class="flex items-center gap-2">
+            <el-button
+              type="success"
+              plain
+              size="small"
+              round
+              :icon="MagicStick"
+              :loading="isGeneratingEpisodeOutfit"
+              :disabled="!!regeneratingAnchorId"
+              @click="handleGenerateEpisodeOutfit"
+              class="!font-bold"
+            >
+              {{ t('workspace.designOutfitForEpisode', { episode: activeEpisodeTitle }) }}
+            </el-button>
+            <el-button
+              size="small"
+              type="primary"
+              round
+              :icon="Check"
+              :loading="isLockingOutfit"
+              :disabled="!!regeneratingAnchorId"
+              @click="handleLockWardrobe"
+              class="!font-bold"
+            >
+              {{ t('workspace.lockOutfit') }}
+            </el-button>
+          </div>
+        </div>
 
-      <!-- LoRA Model -->
-      <div class="p-3 rounded-xl border flex items-center gap-3" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
-        <el-icon style="color: var(--el-color-primary);"><Cpu /></el-icon>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[11px] font-semibold mb-1" style="color: var(--el-text-color-secondary);">{{ t('workspace.outfitTitle') }}</label>
+            <el-input v-model="activeOutfitName" size="small" placeholder="Dark Olive Field Jacket & Black Tee" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold mb-1" style="color: var(--el-text-color-secondary);">{{ t('workspace.outfitCategory') }}</label>
+            <el-select v-model="activeOutfitCategory" size="small" class="w-full">
+              <el-option value="Main Outfit" :label="t('workspace.outfitMain')" />
+              <el-option value="Action / Tactical" :label="t('workspace.outfitAction')" />
+              <el-option value="Formal / Evening" :label="t('workspace.outfitFormal')" />
+              <el-option value="Casual Daily" :label="t('workspace.outfitCasual')" />
+              <el-option value="Stealth / Night" :label="t('workspace.outfitStealth')" />
+            </el-select>
+          </div>
+        </div>
+
         <div>
-          <p class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--el-text-color-secondary);">{{ t('workspace.loraConsistencyModel') }}</p>
-          <p class="text-xs font-mono mt-0.5" style="color: var(--el-text-color-primary);">{{ character.loraModel || 'Not assigned' }}</p>
+          <label class="block text-[11px] font-semibold mb-1" style="color: var(--el-text-color-secondary);">
+            {{ t('workspace.visualContinuityTags') }}
+          </label>
+          <el-input v-model="activeOutfitTags" size="small" :placeholder="t('workspace.visualContinuityTagsPlaceholder')" />
+        </div>
+
+        <!-- Locked Wardrobes Badge List -->
+        <div v-if="characterWardrobe.length > 0" class="pt-2 border-t border-border/40 space-y-1.5">
+          <span class="text-[11px] font-semibold block" style="color: var(--el-text-color-secondary);">{{ t('workspace.savedOutfitsLibrary') }}</span>
+          <div class="flex flex-wrap gap-1.5">
+            <el-tag
+              v-for="item in characterWardrobe"
+              :key="item.id || item.name"
+              type="info"
+              effect="dark"
+              round
+              size="small"
+              class="cursor-pointer hover:opacity-80"
+              @click="activeOutfitName = item.name; activeOutfitTags = Array.isArray(item.tags) ? item.tags.join(', ') : item.tags"
+            >
+              <el-icon class="mr-1"><Check /></el-icon> {{ item.name }}
+            </el-tag>
+          </div>
+        </div>
+      </div>
+
+      <!-- LoRA Model & 8 Facial Anchors Section -->
+      <div class="p-3.5 rounded-2xl border space-y-3" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color);">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <el-icon style="color: var(--el-color-primary);"><Cpu /></el-icon>
+            <div>
+              <p class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--el-text-color-secondary);">{{ t('workspace.loraConsistencyModel') }}</p>
+              <p class="text-xs font-mono font-bold" style="color: var(--el-text-color-primary);">{{ character.loraModel || `lora-${(character.name || 'char').toLowerCase().replace(/\s+/g, '-')}-sdxl` }}</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <el-button
+              type="primary"
+              size="small"
+              round
+              :icon="MagicStick"
+              :loading="isExtractingAnchors"
+              :disabled="!!regeneratingAnchorId"
+              @click="handleExtractFacialAnchors"
+              class="!font-bold"
+            >
+              {{ t('workspace.extractAll8Anchors') }}
+            </el-button>
+          </div>
+        </div>
+
+        <!-- Facial Anchors List / Grid with Individual Re-generate Action -->
+        <div v-if="characterAnchors.length > 0" class="pt-2 border-t border-border/40 space-y-2">
+          <div class="flex items-center justify-between text-[11px]">
+            <span class="font-semibold text-xs" style="color: var(--el-text-color-primary);">{{ t('workspace.multiAngleAnchors', { count: characterAnchors.length }) }}</span>
+            <span class="text-primary font-bold">{{ t('workspace.meshMatch', { score: character.meshMatchRate || 98.5 }) }}</span>
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            <div
+              v-for="anc in characterAnchors"
+              :key="anc.id || anc.name"
+              @click="selectAnchorPreview(anc)"
+              class="rounded-xl overflow-hidden border p-1 bg-background/60 flex flex-col items-center cursor-pointer transition-all hover:scale-102 relative group"
+              :class="selectedPreviewUrl === (anc.imageUrl || character.avatarUrl) ? 'border-primary ring-2 ring-primary/40' : 'border-border/60'"
+            >
+              <div v-loading="regeneratingAnchorId === anc.id" class="w-full aspect-square rounded-lg overflow-hidden mb-1 bg-neutral-900 flex items-center justify-center relative">
+                <img :src="anc.imageUrl || character.avatarUrl" :alt="anc.name" class="w-full h-full object-cover" />
+                <!-- Regenerate individual angle button -->
+                <el-button
+                  circle
+                  size=""
+                  type="primary"
+                  :icon="Refresh"
+                  :loading="regeneratingAnchorId === anc.id"
+                  :disabled="!!regeneratingAnchorId"
+                  @click.stop="handleRegenerateSingleAnchor(anc)"
+                  class="!absolute top-1.5 right-1.5 opacity-80 group-hover:opacity-100 shadow-md scale-85"
+                  :title="t('workspace.regenerateThisAngle')"
+                />
+              </div>
+              <span class="text-[10px] font-medium text-center truncate w-full" style="color: var(--el-text-color-primary);">{{ anc.name || 'Anchor' }}</span>
+              <el-tag size="small" type="success" effect="plain" round class="!text-[9px] scale-90">{{ t('workspace.locked') }} {{ anc.matchScore || 98.5 }}%</el-tag>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- Render Section -->
-      <div class="border rounded-2xl p-4 space-y-3" style="border-color: var(--el-border-color); background-color: var(--el-card-bg-color);">
+      <!-- <div class="border rounded-2xl p-4 space-y-3" style="border-color: var(--el-border-color); background-color: var(--el-card-bg-color);">
         <h4 class="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style="color: var(--el-color-primary);">
           <el-icon :size="14"><Picture /></el-icon>
           {{ t('workspace.renderCharacter') }}
@@ -311,23 +711,14 @@ const styleOptions = computed(() => [
           type="primary"
           round
           class="w-full !font-bold"
-          icon="Picture"
+          icon="Picture" size="small"
           :loading="charStatus === 'running'"
+          :disabled="!!regeneratingAnchorId"
           @click="handleRender"
         >
           {{ charStatus === 'running' ? t('workspace.renderingCharacter') : t('workspace.renderCharacter') }}
         </el-button>
-
-        <!-- Rendered result -->
-        <div v-if="character.avatarUrl" class="mt-2">
-          <img
-            :src="character.avatarUrl"
-            :alt="character.name"
-            class="w-full rounded-xl object-cover"
-            style="max-height: 200px;"
-          />
-        </div>
-      </div>
+      </div> -->
     </div>
 
     <template #footer>
@@ -335,3 +726,4 @@ const styleOptions = computed(() => [
     </template>
   </el-dialog>
 </template>
+

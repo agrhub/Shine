@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import { core, projectStore } from '@/lib/project';
+import { core, projectStore } from '@/utils/project';
 
 interface PlaybackState {
   isPlaying: boolean;

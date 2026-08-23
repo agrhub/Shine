@@ -11,6 +11,7 @@ import i18n from './i18n';
 import router from './router';
 import 'uno.css';
 import './style.css';
+import 'flag-icons/css/flag-icons.min.css';
 import { Toaster } from 'vue-sonner';
 import 'vue-color/style.css'
 import 'vue-sonner/style.css'

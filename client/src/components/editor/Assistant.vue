@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, computed } from 'vue';
 import { Sparkles, ArrowUpIcon, Wand2, Loader2 } from 'lucide-vue-next';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 import * as ToolHandlers from './assistant/tools';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';

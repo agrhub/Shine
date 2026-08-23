@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed, shallowRef } from 'vue';
 import { fontManager, Log } from '@openvideo/engine-pixi';
-import { generateCaptionClips } from '@/lib/caption-generator';
+import { generateCaptionClips } from '@/utils/caption-generator';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, Play, Trash2 } from 'lucide-vue-next';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 import http from '@/utils/http';
 
 // Reactive snapshot of core store clips
@@ -86,16 +86,25 @@ const handleGenerateCaptions = async () => {
     for (const mediaClip of mediaItems.value) {
       try {
         const audioUrl = mediaClip.src;
-        const transcribeRes = await http.post('/captions/auto-generate', {
-          audioUrl,
-          language: 'en-US',
-        }) as any;
+        if (!audioUrl) continue;
 
-        const transcriptionData = transcribeRes.data?.data || transcribeRes.data || transcribeRes;
+        const transcribeResponse = await fetch('/api/transcribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: audioUrl, model: 'nova-3' }),
+        });
+
+        if (!transcribeResponse.ok) {
+          Log.error(`Transcription failed for media ${mediaClip.id}`);
+          continue;
+        }
+
+        const transcriptionData = await transcribeResponse.json();
         if (!transcriptionData) continue;
 
+        const words = transcriptionData.results?.channels?.[0]?.alternatives?.[0]?.words || transcriptionData.results?.main?.words || transcriptionData.words || [];
 
-        const words = transcriptionData.results?.main?.words || transcriptionData.words || [];
+        console.log("words", words);
 
         const settings = core.store.getState().settings;
         const captionClipsJSON = await generateCaptionClips({
@@ -103,6 +112,8 @@ const handleGenerateCaptions = async () => {
           videoHeight: settings.height,
           words,
         });
+
+        console.log("captionClipsJSON", captionClipsJSON);
 
         for (const json of captionClipsJSON) {
           const enrichedJson = {
@@ -114,12 +125,13 @@ const handleGenerateCaptions = async () => {
             },
             timing: {
               display: {
-                from: json.timing.display.from + mediaClip.display.from,
-                to: json.timing.display.to + mediaClip.display.from,
+                from: json.timing.display.from + (mediaClip.display?.from || mediaClip.timing?.display?.from || 0),
+                to: json.timing.display.to + (mediaClip.display?.from || mediaClip.timing?.display?.from || 0),
               },
             },
           };
           clipsToAdd.push(enrichedJson);
+          console.log("enrichedJson", enrichedJson);
         }
       } catch (error) {
         Log.error(`Failed to process media ${mediaClip.id}:`, error);
@@ -154,14 +166,18 @@ const handleGenerateCaptions = async () => {
       },
     };
 
+    console.log("captionTrackConfig", captionTrackConfig);
+
     const trackCommand = {
       id: crypto.randomUUID(),
       type: 'track.add',
-      payload: { id: trackId, name: 'Captions', type: 'caption', config: captionTrackConfig },
+      payload: { id: trackId, name: 'Captions', type: 'caption', index: 0, config: captionTrackConfig },
     };
 
     if (clipsToAdd.length > 0) {
       const fullClips = await Promise.all(clipsToAdd.map((c) => core.clip.prepare(c as any)));
+      console.log("fullClips", fullClips);
+
       const addCommands = fullClips.map((clip) => ({
         id: crypto.randomUUID(),
         type: 'clip.add',
@@ -172,6 +188,10 @@ const handleGenerateCaptions = async () => {
     } else {
       core.execute(trackCommand as any);
     }
+
+    const projectData = core.project.export();
+    const jsonString = JSON.stringify(projectData, null, 2);
+    console.log("handleGenerateCaptions", jsonString);
   } catch (error) {
     Log.error('Failed to generate captions:', error);
   } finally {

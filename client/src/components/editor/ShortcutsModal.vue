@@ -6,7 +6,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Kbd } from '@/components/ui/kbd';
-import { cn } from '@/lib/utils';
+import { cn } from '@/utils/utils';
 import { Separator } from '@/components/ui/separator';
 
 interface ShortcutsModalProps {

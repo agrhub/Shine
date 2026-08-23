@@ -1,4 +1,4 @@
-import { core } from "@/lib/project";
+import { core } from "@/utils/project";
 import { duplicateClip, splitClip, trimClip } from "./action-handlers";
 
 async function fetchPexelsVideo(query: string) {
@@ -426,7 +426,7 @@ export const handleSeekToTime = async (input: any) => {
   }
 };
 
-export const handleGenerateCaptions = async (input: any) => {
+export const handleGenerateCaptions = async (input?: any) => {
   useMediaPanelStore().setActiveTab("captions");
   console.log("Generate captions:", input);
 };

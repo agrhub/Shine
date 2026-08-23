@@ -37,13 +37,60 @@ export interface WardrobeItem {
 export interface Character {
   id: string;
   name: string;
-  role: 'protagonist' | 'antagonist' | 'supporting';
+  role: 'protagonist' | 'antagonist' | 'supporting' | 'supporter';
+  age?: number;
+  gender?: string;
+  personality?: string;
+  visualTraits?: string;
+  physicalCharacteristics?: string;
+  appearance?: string;
+  clothingAndAccessories?: string;
   avatarUrl: string;
+  avatar?: string;
   loraModel: string;
   description: string;
   anchors: Anchor[];
   wardrobe: WardrobeItem[];
   meshMatchRate: number;
+}
+
+export interface LocationAsset {
+  id: string;
+  name: string;
+  physicalCharacteristics?: string;
+  timeOfDay?: string;
+  imageUrl?: string;
+  status?: 'draft' | 'ready';
+  created_at?: string;
+}
+
+export interface PropAsset {
+  id: string;
+  name: string;
+  physicalCharacteristics?: string;
+  imageUrl?: string;
+  status?: 'draft' | 'ready';
+  created_at?: string;
+}
+
+export interface ShotFrame {
+  id: string;
+  index: number;
+  title: string;
+  frameVisual: string;
+  frameAudio?: string;
+  frameMotion?: string;
+  dialogue?: {
+    speaker: string;
+    text: string;
+    tone?: string;
+  };
+  durationSeconds: number;
+  linkedAssetIds: string[];
+  imageUrl?: string;
+  videoUrl?: string;
+  status?: 'draft' | 'image_ready' | 'video_ready';
+  videoEffect?: string;
 }
 
 export interface SceneLine {
@@ -57,21 +104,42 @@ export interface SceneLine {
 
 export interface Scene {
   id: string;
-  sceneNumber: number;
-  title: string;
-  location: string;
-  timeOfDay: string;
-  atmosphere: string;
-  lines: SceneLine[];
+  sceneNumber?: number;
+  index?: number;
+  heading?: string;
+  title?: string;
+  location?: string;
+  timeOfDay?: string;
+  atmosphere?: string;
+  description?: string;
+  action?: string;
+  lines?: SceneLine[];
+  storyboardFrameUrl?: string;
+  storyboardEndFrameUrl?: string;
+  videoUrl?: string;
+  audioVoiceoverUrl?: string;
+  sfxAudioUrl?: string;
+  bgmAudioUrl?: string;
+  dialogue?: any;
+  characters?: string[];
+  props?: string[];
+  endFramePrompt?: string;
+  sceneContext?: string;
+  propDetails?: string;
+  transitionEffect?: string;
+  videoEffect?: string;
 }
 
 export interface ScriptItem {
   seriesId: string;
   episodeNumber: number;
   title: string;
-  hook: string;
-  cliffhanger: string;
+  hook?: string;
+  cliffhanger?: string;
+  screenplay?: string;
   scenes: Scene[];
+  locations?: LocationAsset[];
+  props?: PropAsset[];
   status: 'draft' | 'in_progress' | 'done';
 }
 
@@ -96,7 +164,8 @@ export interface SeriesOutline {
   seriesId: string;
   title: string;
   genre: string;
-  tone: string;
+  visualStyle?: string;
+  visualStylePrompt?: string;
   totalEpisodes: number;
   synopsis: string;
   episodes: Array<{
@@ -192,7 +261,7 @@ export interface KaraokeStyle {
   verticalPosPct?: number;
   outlineWeightPx?: number;
   autoHighlight?: boolean;
-  targetLanguage?: string;
+  language?: string;
 }
 
 export interface SpatialAudioConfig {

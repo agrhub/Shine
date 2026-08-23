@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useGeneratedStore } from '@/stores/useGeneratedStore';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 import { Log } from '@openvideo/engine-pixi';
 import AudioItem from './AudioItem.vue';
 import VoiceoverChatPanel from './VoiceoverChatPanel.vue';

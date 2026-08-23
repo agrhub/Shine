@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 import { useTimelineStore as useComposableTimelineStore } from '~/composables/useTimelineStore';
 import { usePlaybackStore } from '~/composables/usePlaybackStore';
 import type { Clip, Track } from '@/types/timeline';

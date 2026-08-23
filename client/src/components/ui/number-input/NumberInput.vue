@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { InputGroupInput } from '@/components/ui/input-group'
-import { cn } from '@/lib/utils'
+import { cn } from '@/utils/utils'
 import type { HTMLAttributes } from 'vue'
 
 interface NumberInputProps {

@@ -21,7 +21,7 @@ import {
   IconCircle,
 } from '@tabler/icons-vue'
 import { ChromePicker } from 'vue-color'
-import { cn } from '@/lib/utils'
+import { cn } from '@/utils/utils'
 import { fontManager } from '@openvideo/engine-pixi'
 import { getGroupedFonts, getFontByPostScriptName } from '@/utils/font-utils'
 import type { IClip } from '@openvideo/engine-pixi'

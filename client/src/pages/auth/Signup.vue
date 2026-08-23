@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { ElMessage } from 'element-plus';
+import http from '@/utils/http';
 
 const { t } = useI18n();
 const router = useRouter();
@@ -15,6 +16,51 @@ const form = ref({
   email: '',
   password: '',
   agree: true,
+});
+
+// SSO Providers State
+const ssoProviders = ref({
+  google: true,
+  facebook: false,
+  github: true,
+});
+const hasAnySSO = computed(() => Object.values(ssoProviders.value).some(Boolean));
+
+async function loadSSOProviders() {
+  try {
+    const res: any = await http.get('/auth/sso-providers');
+    if (res?.data) {
+      ssoProviders.value = res.data;
+    }
+  } catch {}
+}
+
+function handleSSOSignup(provider: string) {
+  window.open(
+    `/api/auth/sso/${provider}`,
+    'SSOAuthPopup',
+    'width=500,height=620,status=no,toolbar=no,menubar=no,location=no'
+  );
+}
+
+function handleSSOMessage(event: MessageEvent) {
+  if (event.data?.type === 'SSO_AUTH_SUCCESS' && event.data.token) {
+    authStore.token = event.data.token;
+    authStore.user = event.data.user;
+    localStorage.setItem('shine_token', event.data.token);
+    localStorage.setItem('shine_user', JSON.stringify(event.data.user));
+    ElMessage.success(t('toast.signupSuccess') || 'Welcome to Shine Studio!');
+    router.push('/dashboard');
+  }
+}
+
+onMounted(() => {
+  loadSSOProviders();
+  window.addEventListener('message', handleSSOMessage);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('message', handleSSOMessage);
 });
 
 const handleSignup = async () => {
@@ -154,7 +200,7 @@ const handleSignup = async () => {
     </form>
 
     <!-- Social Divider -->
-    <div class="my-6 flex items-center justify-center relative">
+    <div v-if="hasAnySSO" class="my-6 flex items-center justify-center relative">
       <div class="absolute inset-0 flex items-center">
         <div class="w-full border-t border-gray-200 dark:border-gray-700"></div>
       </div>
@@ -164,11 +210,13 @@ const handleSignup = async () => {
     </div>
 
     <!-- Social Signup Buttons -->
-    <div class="grid grid-cols-2 gap-3">
+    <div v-if="hasAnySSO" class="flex flex-wrap items-center justify-center gap-3">
+      <!-- Google SSO -->
       <button
+        v-if="ssoProviders.google"
         type="button"
-        class="flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 dark:border-gray-700 rounded-full bg-white dark:bg-surface-container hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-xs font-semibold text-[#1c1b1b] dark:text-white"
-        @click="handleSignup"
+        class="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 dark:border-gray-700 rounded-full bg-white dark:bg-surface-container hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-xs font-semibold text-[#1c1b1b] dark:text-white shadow-sm"
+        @click="handleSSOSignup('google')"
       >
         <svg class="w-4 h-4" viewBox="0 0 24 24">
           <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -179,15 +227,28 @@ const handleSignup = async () => {
         Google
       </button>
 
+      <!-- GitHub SSO -->
       <button
+        v-if="ssoProviders.github"
         type="button"
-        class="flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 dark:border-gray-700 rounded-full bg-white dark:bg-surface-container hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-xs font-semibold text-[#1c1b1b] dark:text-white"
-        @click="handleSignup"
+        class="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 dark:border-gray-700 rounded-full bg-white dark:bg-surface-container hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-xs font-semibold text-[#1c1b1b] dark:text-white shadow-sm"
+        @click="handleSSOSignup('github')"
       >
         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
           <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.161 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
         </svg>
         GitHub
+      </button>
+
+      <!-- Facebook SSO -->
+      <button
+        v-if="ssoProviders.facebook"
+        type="button"
+        class="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 dark:border-gray-700 rounded-full bg-white dark:bg-surface-container hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-xs font-semibold text-[#1c1b1b] dark:text-white shadow-sm"
+        @click="handleSSOSignup('facebook')"
+      >
+        <i class="fa-brands fa-facebook text-blue-500 text-sm"></i>
+        Facebook
       </button>
     </div>
 

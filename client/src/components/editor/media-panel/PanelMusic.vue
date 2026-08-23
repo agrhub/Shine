@@ -5,7 +5,7 @@ import { Log } from '@openvideo/engine-pixi';
 import { Search, Loader2 } from 'lucide-vue-next';
 import { IconMusic } from '@tabler/icons-vue';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 import AudioItem from './AudioItem.vue';
 import { useMediaPanelStore } from '@/composables/useMediaPanelStore.ts';
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
-import Header from './Header.vue';
+import TimelineHeader from './TimelineHeader.vue';
 import TimelineRuler from './TimelineRuler.vue';
 import TimelinePlayhead from './TimelinePlayhead.vue';
 import CanvasTimeline from './items/timeline';
@@ -28,7 +28,7 @@ import {
 } from '@openvideo/timeline';
 import { useStudioStore } from '@/stores/useStudioStore';
 import { usePlaybackStore } from '@/composables/usePlaybackStore';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 import { useTheme } from '@/composables/useTheme';
 import { addStudioSync } from "./studio-to-store-sync";
 
@@ -272,7 +272,7 @@ onUnmounted(() => {
     @wheel="handleWheel"
   >
     <!-- Header Controls -->
-    <Header :zoomLevel="scale.zoom" @update:zoomLevel="(z) => setScale({ zoom: z })" />
+    <TimelineHeader :zoomLevel="scale.zoom" @update:zoomLevel="(z) => setScale({ zoom: z })" />
 
     <!-- Timeline Canvas Ruler -->
     <TimelineRuler

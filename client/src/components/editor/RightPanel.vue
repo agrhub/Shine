@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 import { generateUUID } from '@/utils/id';
 
 const panelStore = usePanelStore();

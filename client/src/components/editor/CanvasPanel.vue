@@ -4,7 +4,7 @@ import { Studio, fontManager, registerCustomTransition, registerCustomEffect } f
 import { useStudioStore } from '@/composables/useStudioStore';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { useTheme } from '@/composables/useTheme';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 import { generateUUID } from '@/utils/id';
 import { editorFont } from '@/components/editor/constants';
 import { CUSTOM_TRANSITIONS } from './transition-custom';

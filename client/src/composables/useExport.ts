@@ -1,8 +1,8 @@
 import { useStudioStore } from './useStudioStore';
 import { useDownloadStore } from '@/stores/useDownloadStore';
-import { generateThumbnail } from '@/lib/thumbnail-generator';
+import { generateThumbnail } from '@/utils/thumbnail-generator';
 import { Compositor, Log } from '@openvideo/engine-pixi';
-import { core } from '@/lib/project';
+import { core } from '@/utils/project';
 import { toast } from 'vue-sonner';
 
 export interface ExportSettings {
@@ -15,6 +15,7 @@ export interface ExportSettings {
   includeAudio: boolean;
   audioCodec: string;
   audioSampleRate: string;
+  autoCommit?: boolean;
 }
 
 export function formatBytes(bytes?: number) {
@@ -76,8 +77,10 @@ export function useExport() {
 
   const startExport = async (settings: ExportSettings, targetPreset?: any, onProgress?: (p: number) => void) => {
     const studio = studioStore.state.value.studio;
-    if (!studio) return;
+    if (!studio) return null;
 
+    let exportVideo: any = null;
+    let thumbnail: any = null;
     const activeFormat = targetPreset ? targetPreset.format : settings.format;
     const downloadId = downloadStore.addDownload({
       type: 'export',
@@ -173,61 +176,54 @@ export function useExport() {
       });
 
       let finalDownloadUrl = blobUrl;
-      try {
-        const fileName = exportFileName(activeFormat);
-        const formData = new FormData();
-        const videoFile = new File([blob], fileName, { type: blob.type || `video/${activeFormat}` });
-        formData.append('files', videoFile);
+      if(settings.autoCommit){
+        try {
+          const fileName = exportFileName(activeFormat);
+          const formData = new FormData();
+          const videoFile = new File([blob], fileName, { type: blob.type || `video/${activeFormat}` });
+          formData.append('files', videoFile);
 
-        const uploadRes = await fetch('/api/uploads', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (uploadRes.ok) {
-          const data = await uploadRes.json();
-          if (data.success && data.uploads?.[0]?.url) {
-            finalDownloadUrl = data.uploads[0].url; // Relative URL e.g. /api/media/...
-          }
-        }
-      } catch (uploadErr) {
-        console.warn('Backend video upload failed, using local download URL:', uploadErr);
-      }
-
-      // Save rendered video URL & preview URL to current project in SQLite database
-      try {
-        const projectId = (useStudioStore().state.value as any)?.projectId || (window as any).currentProjectId;
-        const currentUrlId = new URLSearchParams(window.location.search).get('id');
-        const targetId = projectId || currentUrlId;
-
-        if (targetId) {
-          await fetch(`/api/projects/${targetId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              video: finalDownloadUrl,
-              preview: finalDownloadUrl,
-            }),
+          const uploadRes = await fetch('/api/assets/upload', {
+            method: 'POST',
+            body: formData,
           });
+
+          if (uploadRes.ok) {
+            const data = await uploadRes.json();
+            if (data.success && data.uploads?.[0]?.url) {
+              finalDownloadUrl = data.uploads[0].url; // Relative URL e.g. /api/media/...
+              // Save rendered video URL & preview URL to current project in SQLite database
+              try {
+                const projectId = (useStudioStore().state.value as any)?.projectId || (window as any).currentProjectId;
+                const currentUrlId = new URLSearchParams(window.location.search).get('id');
+                const targetId = projectId || currentUrlId;
+
+                if (targetId) {
+                  await fetch(`/api/projects/${targetId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      video: finalDownloadUrl,
+                      preview: finalDownloadUrl,
+                    }),
+                  });
+                }
+              } catch (dbErr) {
+                console.warn('Failed to update project video URL in database:', dbErr);
+              }
+            }
+          }
+        } catch (uploadErr) {
+          console.warn('Backend video upload failed, using local download URL:', uploadErr);
         }
-      } catch (dbErr) {
-        console.warn('Failed to update project video URL in database:', dbErr);
       }
 
       handleDownload(finalDownloadUrl, activeFormat);
       downloadStore.markDownloaded(downloadId);
       toast.success('Rendering complete! Your video has been saved.');
-
+      exportVideo = finalDownloadUrl;
       const exportFile = new File([blob], exportFileName(activeFormat), { type: blob.type });
-      generateThumbnail(exportFile)
-        .then((thumbnailBlob) => {
-          if (thumbnailBlob) {
-            downloadStore.updateDownload(downloadId, {
-              thumbnailUrl: URL.createObjectURL(thumbnailBlob),
-            });
-          }
-        })
-        .catch(() => undefined);
+      thumbnail = await generateThumbnail(exportFile);
     } catch (error: any) {
       Log.error('Export error:', error);
       const message = error.message || 'Unknown error';
@@ -241,6 +237,14 @@ export function useExport() {
         compositor.destroy();
       }
     }
+    if (!exportVideo) {
+      return null;
+    }
+
+    return {
+      video: exportVideo,
+      thumbnail: thumbnail,
+    };
   };
 
   return { startExport };
