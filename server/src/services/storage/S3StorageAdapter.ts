@@ -23,6 +23,10 @@ export class S3StorageAdapter implements IStorageAdapter {
     return this.instance;
   }
 
+  public static resetInstance(): void {
+    S3StorageAdapter.instance = null;
+  }
+
   public destroy(): void {
     this.client = null;
     S3StorageAdapter.instance = null;

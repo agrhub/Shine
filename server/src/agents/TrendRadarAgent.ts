@@ -1,6 +1,7 @@
 import { geminiClient } from '../integrations/ai/gemini/GeminiClient.js';
 import { mcpClient } from '../integrations/mcp/ParallelMCPClient.js';
 import { loadSkill } from '../utils/SkillLoader.js';
+import { PromptLoader } from '../utils/PromptLoader.js';
 import { Logger } from '../utils/logger.js';
 
 export interface TrendTopicOutput {
@@ -71,32 +72,11 @@ export class TrendRadarAgent {
     const languageName = LANGUAGE_NAMES[lang] || LANGUAGE_NAMES[lang.split('-')[0]] || 'English';
     Logger.info(`[TrendRadarAgent] Running Gemini AI trend scan with trend_radar skill for region: ${region}, language: ${languageName}`);
 
-    const prompt = `
-Execute a real-time viral micro-drama trend scan for target region: "${region}".
-
-TARGET OUTPUT LANGUAGE: ${languageName} (Locale code: ${lang}).
-IMPORTANT: All text fields ("topic", "description", "trope", "competitorHook") MUST be written fluently in ${languageName} so the end-user can read the viral trends in their app's configured interface language.
-
-TASK:
-1. Extract top 10 viral drama trends in ${cleanRegion}.
-2. Translate local context into clear English concepts.
-3. Structure each into a 60-second Micro Drama script formula.
-4. Output strictly valid JSON with format:
-
-Respond strictly in JSON matching the TrendTopicOutput array schema:
-[
-  {
-    "id": "${cleanRegion.toLowerCase()}_1",
-    "topic": "Catchy Drama Title in ${languageName}",
-    "description": "2-sentence dramatic synopsis in ${languageName}",
-    "trope": "Core Trope in ${languageName}",
-    "hashtagVelocity": "+520% (TikTok/Reels/Shorts)",
-    "competitorHook": "3-second opening hook in ${languageName}",
-    "region": "${cleanRegion}",
-    "engagementScore": 98
-  }
-]
-`;
+    const prompt = PromptLoader.render('trend/trend_radar_scan', {
+      region: cleanRegion,
+      languageName,
+      lang,
+    });
 
     const rawText = await geminiClient.generateText({
       prompt,

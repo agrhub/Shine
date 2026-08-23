@@ -186,7 +186,7 @@ export class FlowAdapter {
             return { imageModelName, aspectRatio: ratio, upsample } as any;
         } else {
             // Video mapping
-            let videoType: 't2v' | 'i2v' | 'r2v' | 'extend' | 'upsample' = 't2v';
+            let videoType: 't2v' | 'i2v' | 'r2v' | 'extend' | 'upsample' = config.model || 't2v';
             
             // Collect all potential images
             const images = config.imageInputs || config.referenceImages || [];
@@ -211,7 +211,10 @@ export class FlowAdapter {
                 videoType = 'extend';
             } else if (config.mode === 'upsample' || config.videoType === 'upsample' || modelId.includes('upsample') || modelId.includes('upsampler')) {
                 videoType = 'upsample';
-            } else if (hasCharacters || (images.length > 0)) {
+            } else if(hasStartEnd && images.length > 1){
+                videoType = "i2v";
+            }
+            else if (hasCharacters || (images.length > 0)) {
                 videoType = 'r2v';
             } else if (hasStartEnd || images.length >= 1) {
                 videoType = (config.mode === 'r2v') ? 'r2v' : 'i2v';
@@ -603,7 +606,8 @@ export class FlowAdapter {
                     requests: [requests],
                     useV2ModelConfig: true,
                     mediaGenerationContext: {
-                        batchId: uuidv4()
+                        batchId: uuidv4(),
+                        // audioFailurePreference: "ALLOW_SILENT_VIDEOS"
                     }
                 };
 
@@ -683,23 +687,48 @@ export class FlowAdapter {
             try {
                 if (type === AIModelType.VIDEO) {
                     const payload = {
-                        operations: [{ operation: { name: mediaName } }] // FIXED PAYLOAD FORMAT
+                        media: [{ name: mediaName, projectId: projectId }]
                     };
                     const response = await axios.post(url, payload, { headers });
-                    Logger.info(`[FlowAdapter] [pollMedia] [${pollCount + 1}/${maxPolls}] response: ${JSON.stringify(response.data)}`);
+                    Logger.info(`[FlowAdapter] [pollMedia] [${pollCount + 1}/${maxPolls}]`);
+                    // Logger.info(`[FlowAdapter] [pollMedia] response: ${JSON.stringify(response.data)}`);
                     const opResult = response.data.operations?.[0]?.operation || {};
-                    const status = response.data.operations?.[0]?.status || "";
+                    const mediaItem = response.data.media?.[0] || {};
+                    const status = response.data.operations?.[0]?.status || mediaItem.status || mediaItem.mediaMetadata?.state || mediaItem.mediaMetadata?.mediaStatus?.mediaGenerationStatus || "";
 
-                    if(status === 'MEDIA_GENERATION_STATUS_ACTIVE'){
-                        //continue polling
-                    }
-                    else if(status === 'MEDIA_GENERATION_STATUS_FAILED'){
-                        throw new Error(opResult.error?.message || 'Video generation failed');
-                    }
-                    else if(status === 'MEDIA_GENERATION_STATUS_SUCCESSFUL'){
-                        const videoUri = opResult.metadata?.video?.fifeUrl;// || opResult.response?.media?.[0]?.video?.uri;
+                    if (status === 'MEDIA_GENERATION_STATUS_ACTIVE' || status === 'MEDIA_GENERATION_STATUS_PENDING' || status === 'PENDING') {
+                        // continue polling
+                    } else if (status === 'MEDIA_GENERATION_STATUS_FAILED') {
+                        throw new Error(opResult.error?.message || mediaItem.error?.message || 'Video generation failed');
+                    } else if (status === 'MEDIA_GENERATION_STATUS_SUCCESSFUL' || status === 'SUCCEEDED' || status === 'MEDIA_GENERATION_STATUS_COMPLETE') {
+                        // 1. First priority: Get real video download redirect URL via trpc media.getMediaUrlRedirect
+                        let videoUri = await this.getMediaUrlRedirect(account, mediaName);
+
+                        // 2. Fallback to fifeUrl or uri if present in status response
+                        if (!videoUri) {
+                            videoUri = opResult.metadata?.video?.fifeUrl
+                                || mediaItem.video?.generatedVideo?.fifeUrl
+                                || mediaItem.video?.fifeUrl
+                                || mediaItem.video?.uri;
+                        }
+
+                        // 3. Fallback: query /media/{name}
+                        if (!videoUri) {
+                            try {
+                                const mediaRes = await axios.get(`${this.apiBaseUrl}/media/${mediaName}`, { headers });
+                                videoUri = mediaRes.data.video?.fifeUrl || mediaRes.data.video?.uri;
+                                if (!videoUri && mediaRes.data.video?.encodedVideo) {
+                                    const buffer = Buffer.from(mediaRes.data.video.encodedVideo, 'base64');
+                                    results = { buffer, mimeType: 'video/mp4' };
+                                    break;
+                                }
+                            } catch (mErr) {
+                                Logger.warn(`[FlowAdapter] Failed to fetch media detail for ${mediaName}: ${mErr}`);
+                            }
+                        }
+
                         if (videoUri) {
-                            Logger.info(`[FlowAdapter] Video completed: ${mediaName}`);
+                            Logger.info(`[FlowAdapter] Video completed: ${mediaName} -> ${videoUri.slice(0, 80)}...`);
                             results = { url: videoUri, mimeType: 'video/mp4' };
                         }
                         break;
@@ -735,6 +764,67 @@ export class FlowAdapter {
             return results;
         }
         throw new Error(`${type} generation failed.`);
+    }
+
+    /**
+     * Resolve actual video access URL via Google Labs trpc getMediaUrlRedirect
+     */
+    public async getMediaUrlRedirect(account: IAIAccount, mediaName: string): Promise<string | null> {
+        const st = account.flowST || (account as any).session_token || (account as any).st || '';
+        const normalizedMediaName = (mediaName || '').trim();
+        if (!normalizedMediaName) return null;
+
+        const url = `https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=${encodeURIComponent(normalizedMediaName)}&mediaUrlType=MEDIA_URL_TYPE_FULL_MEDIA`;
+        const userAgent = account.lastFingerprint?.get('user_agent') || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
+
+        const headers: any = {
+            'Cookie': `__Secure-next-auth.session-token=${st}`,
+            'User-Agent': userAgent,
+            'Referer': 'https://labs.google/fx/tools/flow',
+            'Origin': 'https://labs.google',
+            'Accept': '*/*',
+        };
+
+        if (account.lastFingerprint) {
+            const fp = account.lastFingerprint;
+            if (fp.get('sec_ch_ua')) headers['sec-ch-ua'] = fp.get('sec_ch_ua');
+            if (fp.get('sec_ch_ua_mobile')) headers['sec-ch-ua-mobile'] = fp.get('sec_ch_ua_mobile');
+            if (fp.get('sec_ch_ua_platform')) headers['sec-ch-ua-platform'] = fp.get('sec_ch_ua_platform');
+            if (fp.get('accept_language')) headers['Accept-Language'] = fp.get('accept_language');
+        }
+
+        try {
+            const response = await axios.get(url, {
+                headers,
+                maxRedirects: 0,
+                validateStatus: (status) => status >= 200 && status < 400
+            });
+
+            if (response.status >= 300 && response.status < 400) {
+                const location = response.headers['location'] || response.headers['Location'];
+                if (location) {
+                    Logger.info(`[FlowAdapter] Resolved video redirect URL for ${mediaName}: ${location.slice(0, 100)}...`);
+                    return location;
+                }
+            }
+
+            if (response.data?.result?.data?.json?.url) {
+                return response.data.result.data.json.url;
+            }
+
+            if (response.status === 200 && response.data && typeof response.data === 'string' && response.data.startsWith('http')) {
+                return response.data;
+            }
+        } catch (err: any) {
+            if (err.response?.headers?.location || err.response?.headers?.Location) {
+                const loc = err.response.headers.location || err.response.headers.Location;
+                Logger.info(`[FlowAdapter] Resolved video redirect (from catch) for ${mediaName}: ${loc.slice(0, 100)}...`);
+                return loc;
+            }
+            Logger.warn(`[FlowAdapter] getMediaUrlRedirect failed for ${mediaName}: ${err.message}`);
+        }
+
+        return null;
     }
 }
 

@@ -138,8 +138,8 @@ export class CompositorWorker extends EventEmitter {
                 backgroundColor: timeline.settings?.backgroundColor || '#000000',
               },
               tracks: timeline.tracks.map((t: any) => {
-                // Main visual video tracks & BGM are always active
-                if (t.id === 'track_video_main' || t.id === 'track_bgm_main' || t.type === 'Video') {
+                // Main visual video tracks, Effects & BGM are always active
+                if (t.id === 'track_video' || t.id === 'track_video_main' || t.id === 'track_bgm' || t.id === 'track_bgm_main' || t.id === 'track_effects' || t.type === 'Video' || t.type === 'video' || t.type === 'effect') {
                   return { ...t, muted: false, visible: true };
                 }
                 // Voiceover track matching current language
@@ -179,7 +179,7 @@ export class CompositorWorker extends EventEmitter {
               const vClipId = `clip_v_${payload.episodeId}_s${idx + 1}`;
               clipsRecord[vClipId] = {
                 id: vClipId,
-                trackId: 'track_video_main',
+                trackId: 'track_video',
                 type: scene.videoUrl ? 'Video' : 'Image',
                 name: scene.heading || `Scene ${idx + 1}`,
                 src: scene.videoUrl || scene.storyboardFrameUrl || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1080&h=1920&fit=crop',
@@ -195,7 +195,7 @@ export class CompositorWorker extends EventEmitter {
                 const bgmClipId = `clip_bgm_${payload.episodeId}_s${idx + 1}`;
                 clipsRecord[bgmClipId] = {
                   id: bgmClipId,
-                  trackId: 'track_bgm_main',
+                  trackId: 'track_bgm',
                   type: 'Audio',
                   src: scene.bgmUrl,
                   display: { from: fromUs, to: toUs },
@@ -250,8 +250,8 @@ export class CompositorWorker extends EventEmitter {
                 backgroundColor: '#000000',
               },
               tracks: [
-                { id: 'track_video_main', name: 'Scene Video (9:16)', type: 'Video', clipIds: videoClipIds },
-                { id: 'track_bgm_main', name: 'Background Music (BGM)', type: 'Audio', clipIds: bgmClipIds },
+                { id: 'track_video', name: 'Scene Video (9:16)', type: 'Video', clipIds: videoClipIds },
+                { id: 'track_bgm', name: 'Background Music (BGM)', type: 'Audio', clipIds: bgmClipIds },
                 { id: voiceTrackId, name: `Voiceover (${lang})`, type: 'Audio', clipIds: voiceClipIds },
                 { id: capTrackId, name: `Subtitles (${lang})`, type: 'Caption', clipIds: capClipIds },
               ],

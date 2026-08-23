@@ -1,9 +1,10 @@
 import { Router, Request, Response } from 'express';
-import { getDatabaseProvider } from '../database/index.js';
+import { getDatabaseProvider, UserEntity } from '../database/index.js';
 import { scriptAgent } from '../agents/ScriptAgent.js';
 import { StorageFactory } from '../services/storage/StorageFactory.js';
 import { Logger } from '../utils/logger.js';
 import { nanoid } from 'nanoid';
+import { getAuthUser, getUserId } from '~/utils/auth.js';
 
 const router = Router();
 
@@ -103,8 +104,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     const {
       title,
       genre,
-      tone,
       visualStyle,
+      visualStylePrompt,
       targetAudience,
       episodeCount,
       userId,
@@ -112,6 +113,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       description,
       synopsis,
       country,
+      language,
       ratio,
       characters,
     } = req.body;
@@ -120,7 +122,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       fail(res, 400, 'Title and genre are required'); return;
     }
 
-    const seriesId = masterPlan?.seriesId || `srs_${nanoid(10)}`;
+    const seriesId = req.body.id || `srs_${nanoid(10)}`;
+    if (masterPlan) {
+      masterPlan.seriesId = seriesId;
+    }
     const uId = userId || 'usr_default';
     const rawEpCount = Number(episodeCount) || Number(masterPlan?.totalEpisodes) || 20;
 
@@ -130,16 +135,19 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       user_id: uId,
       title,
       genre,
-      tone: tone || masterPlan?.tone || 'Dramatic',
       synopsis: synopsis || masterPlan?.storyCore?.coreAttraction || description || '',
       description: description || masterPlan?.storyCore?.coreAttraction || '',
-      visual_style: visualStyle || (ratio ? `Cinematic ${ratio}` : 'Cinematic 9:16'),
+      visual_style: visualStyle || masterPlan?.visualStyle || 'realistic',
+      visual_style_prompt: visualStylePrompt || masterPlan?.visualStylePrompt || '',
       target_audience: targetAudience || masterPlan?.targetAudience || 'General',
-      country: country || masterPlan?.country || 'US',
+      country: country || masterPlan?.country || 'Vietnam',
+      language: language || masterPlan?.language || 'vi-VN',
       ratio: ratio || masterPlan?.ratio || '9:16',
       viral_hook: masterPlan?.viralHook || '',
       master_plan: masterPlan || null,
       characters: characters || masterPlan?.characters || [],
+      locations: req.body.locations || masterPlan?.locations || [],
+      props: req.body.props || masterPlan?.props || [],
       episode_count: rawEpCount,
       status: 'DRAFT',
     });
@@ -149,8 +157,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       ? masterPlan.episodes
       : [];
 
-        // Pre-generate full scene screenplay for Episode 1 so it is ready immediately
+    // Pre-generate full scene screenplay for Episode 1 so it is ready immediately
     let ep1Scenes: any[] = [];
+    let ep1Screenplay: string = '';
+    let ep1Characters: any[] = [];
+    let ep1Locations: any[] = [];
+    let ep1Props: any[] = [];
+    let ep1Duration: number = 90;
+
     if (planEpisodes.length > 0) {
       try {
         const ep1 = planEpisodes[0];
@@ -159,7 +173,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           episodeNumber: Number(ep1.episodeNumber) || 1,
           title: ep1.title,
           genre: newSeries.genre,
-          tone: newSeries.tone,
+          visualStyle: newSeries.visual_style,
           synopsis: ep1.synopsis,
           sceneCore: ep1.sceneCore,
           conflictEscalation: ep1.conflictEscalation,
@@ -171,6 +185,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         });
         if (scriptRes?.scenes) {
           ep1Scenes = scriptRes.scenes;
+          ep1Screenplay = scriptRes.screenplay || '';
+          ep1Characters = scriptRes.characters || [];
+          ep1Locations = scriptRes.locations || [];
+          ep1Props = scriptRes.props || [];
+          ep1Duration = scriptRes.totalDurationSeconds || 90;
         }
       } catch (e: any) {
         console.warn('[SeriesRoute] Ep 1 script pre-generation error:', e.message);
@@ -181,18 +200,23 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       for (let i = 0; i < planEpisodes.length; i++) {
         const ep = planEpisodes[i];
         const epId = ep.id || `ep_${nanoid(10)}`;
+        const isEp1 = i === 0 && ep1Scenes.length > 0;
         await db.createEpisode({
           id: epId,
           series_id: seriesId,
           episode_number: Number(ep.episodeNumber) || (i + 1),
           title: ep.title || `Episode ${i + 1}`,
           synopsis: ep.synopsis || ep.sceneCore || 'Plot beat and conflict escalation.',
+          screenplay: isEp1 ? ep1Screenplay : (ep.screenplay || ''),
           scene_core: ep.sceneCore || '',
           conflict_escalation: ep.conflictEscalation || '',
           cliffhanger_hook: ep.cliffhangerHook || '',
           phase: ep.phase || '',
-          scenes: i === 0 && ep1Scenes.length > 0 ? ep1Scenes : (ep.scenes || []),
-          duration: 90,
+          scenes: isEp1 ? ep1Scenes : (ep.scenes || []),
+          characters: isEp1 ? ep1Characters : (ep.characters || []),
+          locations: isEp1 ? ep1Locations : (ep.locations || []),
+          props: isEp1 ? ep1Props : (ep.props || []),
+          duration: isEp1 ? ep1Duration : 90,
           status: 'DRAFT',
         });
       }
@@ -205,6 +229,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         episode_number: 1,
         title: 'Episode 1: The Beginning',
         synopsis: synopsis || 'Initial hook and character introduction.',
+        screenplay: ep1Screenplay || '',
+        locations: newSeries.locations || [],
+        props: newSeries.props || [],
         duration: 90,
         status: 'DRAFT',
       });
@@ -271,7 +298,7 @@ router.put('/:id/characters', async (req: Request, res: Response): Promise<void>
 router.put('/:id/episodes/:epId', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id: seriesId, epId } = req.params;
-    const { scenes, title, synopsis, languageTracks, status } = req.body;
+    const { scenes, title, synopsis, languageTracks, thumbnail_url, cover_image, status } = req.body;
     const db = await getDatabaseProvider();
 
     const episodes = await db.getEpisodesBySeriesId(seriesId as string);
@@ -286,6 +313,8 @@ router.put('/:id/episodes/:epId', async (req: Request, res: Response): Promise<v
     if (title !== undefined) updates.title = title;
     if (synopsis !== undefined) updates.synopsis = synopsis;
     if (languageTracks !== undefined) updates.languageTracks = languageTracks;
+    if (thumbnail_url !== undefined) updates.thumbnail_url = thumbnail_url;
+    if (cover_image !== undefined) updates.cover_image = cover_image;
     if (status !== undefined) updates.status = status;
 
     const updatedEpisode = await db.updateEpisode(ep.id, updates);
@@ -326,18 +355,58 @@ router.get('/:id/episodes/:epId/script', async (req: Request, res: Response): Pr
     }
 
     const episodes = await db.getEpisodesBySeriesId(seriesId as string);
-    const ep = episodes.find(e => e.id === epId || String(e.episode_number) === String(epId));
+    const ep = episodes.find(e => e.id === epId || (e as any)._id === epId || String(e.episode_number) === String(epId));
     if (!ep) {
       fail(res, 404, 'Episode not found'); return;
     }
 
-    if (Array.isArray(ep.scenes) && ep.scenes.length > 0) {
+    let screenplay = ep.screenplay || '';
+    if (!screenplay && Array.isArray(ep.scenes) && ep.scenes.length > 0) {
+      screenplay = `# ${(ep.title || `Episode ${ep.episode_number}`).toUpperCase()}\n\n` +
+        ep.scenes.map((s: any) => {
+          let block = `### ${(s.heading || `SCENE ${s.index}`).toUpperCase()}\n\n${s.action || ''}`;
+          if (s.dialogue && s.dialogue.length > 0) {
+            const dlgText = s.dialogue.map((d: any) => {
+              const tone = d.speechTone || d.emotion ? `_(${d.speechTone || d.emotion})_\n` : '';
+              return `**${(d.character || 'CHARACTER').toUpperCase()}**\n${tone}${d.line || ''}`;
+            }).join('\n\n');
+            block += `\n\n${dlgText}`;
+          }
+          return block;
+        }).join('\n\n') + '\n\n##### FADE TO BLACK:';
+    }
+
+    const characters = ep.characters && ep.characters.length > 0
+      ? ep.characters
+      : (series.characters || series.master_plan?.characters || []);
+
+    const locations = ep.locations && ep.locations.length > 0
+      ? ep.locations
+      : (series.locations || series.master_plan?.locations || []);
+
+    const props = ep.props && ep.props.length > 0
+      ? ep.props
+      : (series.props || series.master_plan?.props || []);
+
+    const hasFullScreenplay = Boolean(
+      ep.screenplay &&
+      Array.isArray(ep.scenes) &&
+      ep.scenes.length >= 4 &&
+      Array.isArray(ep.characters) &&
+      ep.characters.length > 0
+    );
+
+    if (hasFullScreenplay) {
       ok(res, {
         episode: `EP ${String(ep.episode_number).padStart(2, '0')}`,
         episodeNumber: ep.episode_number,
         title: ep.title,
         synopsis: ep.synopsis,
+        screenplay,
         scenes: ep.scenes,
+        characters,
+        locations,
+        props,
       });
       return;
     }
@@ -348,7 +417,7 @@ router.get('/:id/episodes/:epId/script', async (req: Request, res: Response): Pr
       episodeNumber: ep.episode_number,
       title: ep.title,
       genre: series.genre,
-      tone: series.tone,
+      visualStyle: series.visual_style,
       synopsis: ep.synopsis,
       sceneCore: ep.scene_core,
       conflictEscalation: ep.conflict_escalation,
@@ -361,11 +430,35 @@ router.get('/:id/episodes/:epId/script', async (req: Request, res: Response): Pr
     });
 
     if (scriptRes?.scenes) {
+      const episodeCharacters = scriptRes.characters && scriptRes.characters.length > 0
+        ? scriptRes.characters
+        : (ep.characters && ep.characters.length > 0 ? ep.characters : (series.characters || series.master_plan?.characters || []));
+
+      const episodeLocations = scriptRes.locations && scriptRes.locations.length > 0
+        ? scriptRes.locations
+        : (ep.locations && ep.locations.length > 0 ? ep.locations : (series.locations || series.master_plan?.locations || []));
+
+      const episodeProps = scriptRes.props && scriptRes.props.length > 0
+        ? scriptRes.props
+        : (ep.props && ep.props.length > 0 ? ep.props : (series.props || series.master_plan?.props || []));
+
       await db.updateEpisode(ep.id, {
         scenes: scriptRes.scenes,
+        screenplay: scriptRes.screenplay || '',
+        characters: episodeCharacters,
+        locations: episodeLocations,
+        props: episodeProps,
+        duration: scriptRes.totalDurationSeconds,
         script: JSON.stringify(scriptRes),
       });
-      ok(res, scriptRes);
+
+      ok(res, {
+        ...scriptRes,
+        characters: episodeCharacters,
+        locations: episodeLocations,
+        props: episodeProps,
+      });
+      return;
     } else {
       fail(res, 500, 'Failed to generate script');
     }
@@ -385,7 +478,7 @@ router.post('/:id/episodes/:epId/generate-script', async (req: Request, res: Res
     }
 
     const episodes = await db.getEpisodesBySeriesId(seriesId as string);
-    const ep = episodes.find(e => e.id === epId || String(e.episode_number) === String(epId));
+    const ep = episodes.find(e => e.id === epId || (e as any)._id === epId || String(e.episode_number) === String(epId));
     if (!ep) {
       fail(res, 404, 'Episode not found'); return;
     }
@@ -396,7 +489,7 @@ router.post('/:id/episodes/:epId/generate-script', async (req: Request, res: Res
       episodeNumber: ep.episode_number,
       title: req.body.title || ep.title,
       genre: series.genre,
-      tone: series.tone,
+      visualStyle: series.visual_style,
       synopsis: req.body.synopsis || ep.synopsis,
       sceneCore: req.body.sceneCore || ep.scene_core,
       conflictEscalation: req.body.conflictEscalation || ep.conflict_escalation,
@@ -409,11 +502,35 @@ router.post('/:id/episodes/:epId/generate-script', async (req: Request, res: Res
     });
 
     if (scriptRes?.scenes) {
+      const episodeCharacters = scriptRes.characters && scriptRes.characters.length > 0
+        ? scriptRes.characters
+        : (ep.characters && ep.characters.length > 0 ? ep.characters : (series.characters || series.master_plan?.characters || []));
+
+      const episodeLocations = scriptRes.locations && scriptRes.locations.length > 0
+        ? scriptRes.locations
+        : (ep.locations && ep.locations.length > 0 ? ep.locations : (series.locations || series.master_plan?.locations || []));
+
+      const episodeProps = scriptRes.props && scriptRes.props.length > 0
+        ? scriptRes.props
+        : (ep.props && ep.props.length > 0 ? ep.props : (series.props || series.master_plan?.props || []));
+
       await db.updateEpisode(ep.id, {
         scenes: scriptRes.scenes,
+        screenplay: scriptRes.screenplay || '',
+        characters: episodeCharacters,
+        locations: episodeLocations,
+        props: episodeProps,
+        duration: scriptRes.totalDurationSeconds,
         script: JSON.stringify(scriptRes),
       });
-      ok(res, scriptRes);
+
+      ok(res, {
+        ...scriptRes,
+        characters: episodeCharacters,
+        locations: episodeLocations,
+        props: episodeProps,
+      });
+      return;
     } else {
       fail(res, 500, 'Failed to generate script');
     }
@@ -503,6 +620,9 @@ episodesRouter.patch('/:episodeId', async (req: Request, res: Response): Promise
   }
 });
 
+import { normalizeTransitionKey } from '../constants/transitions.js';
+import { normalizeEffectKey } from '../constants/effects.js';
+
 // GET /v1/episodes/:episodeId/timeline
 episodesRouter.get('/:episodeId/timeline', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -514,6 +634,17 @@ episodesRouter.get('/:episodeId/timeline', async (req: Request, res: Response): 
 
     const db = await getDatabaseProvider();
     const ep = await db.getEpisodeById(episodeId);
+    if (!ep) {
+      fail(res, 404, 'Episode not found');
+      return;
+    }
+    
+    const series = await db.getSeriesById(ep.series_id);
+    if (!series) {
+      fail(res, 404, 'Series not found');
+      return;
+    }
+
     let rawScenes = ep?.scenes || [];
     if (typeof rawScenes === 'string') {
       try { rawScenes = JSON.parse(rawScenes); } catch { rawScenes = []; }
@@ -529,249 +660,464 @@ episodesRouter.get('/:episodeId/timeline', async (req: Request, res: Response): 
       }
     }
 
-    // Default scenes placeholder if none yet generated
-    if (!rawScenes || rawScenes.length === 0) {
-      rawScenes = [
-        { index: 1, heading: 'SCENE 1: OPENING HOOK', action: 'Dramatic visual hook & character encounter', durationSeconds: 6, dialogue: [{ character: 'Lead', line: 'The truth begins now.' }] },
-        { index: 2, heading: 'SCENE 2: CONFLICT ESCALATION', action: 'Tension rises with shocking revelation', durationSeconds: 8, dialogue: [{ character: 'Rival', line: 'You have no idea what you just started.' }] },
-        { index: 3, heading: 'SCENE 3: CLIFFHANGER', action: 'Dramatic cliffhanger hook cuts to black', durationSeconds: 6, dialogue: [{ character: 'Lead', line: 'Watch me.' }] },
-      ];
+    const seriesRatio = (series?.ratio || '9:16').trim();
+    let canvasWidth = 1080;
+    let canvasHeight = 1920;
+    if (seriesRatio === '16:9') {
+      canvasWidth = 1920;
+      canvasHeight = 1080;
+    } else if (seriesRatio === '4:3') {
+      canvasWidth = 1440;
+      canvasHeight = 1080;
+    } else if (seriesRatio === '1:1') {
+      canvasWidth = 1080;
+      canvasHeight = 1080;
     }
 
-    // 2. Build multi-track 9:16 vertical micro-drama timeline
+    // 1. Check if a saved timeline version already exists in the database
+    const latest = await db.getLatestTimeline(episodeId);
+    if (latest?.timelineData?.tracks && latest?.timelineData?.clips) {
+      const savedTimeline = { ...latest.timelineData };
+      const clips = { ...(savedTimeline.clips || {}) };
+
+      // Synchronize any newly rendered scene assets (video, bgm, voiceover) into existing timeline clips
+      rawScenes.forEach((scene: any, idx: number) => {
+        const vClipId = `clip_v_${episodeId}_s${scene.index || (idx + 1)}`;
+        if (clips[vClipId]) {
+          if (scene.videoUrl) {
+            clips[vClipId].src = scene.videoUrl;
+            clips[vClipId].type = 'Video';
+            clips[vClipId].volume = (scene.dialogue && scene.dialogue.length > 0) ? 0 : 1;
+          } else if (scene.storyboardFrameUrl && clips[vClipId].type === 'Image') {
+            clips[vClipId].src = scene.storyboardFrameUrl;
+          }
+        }
+      });
+
+      savedTimeline.clips = clips;
+      return ok(res, savedTimeline);
+    }
+
+    // 2. Build initial timeline from scratch if not yet saved
+    const timeline = {
+      settings: {
+        width: canvasWidth,
+        height: canvasHeight,
+        fps: 30,
+        backgroundColor: '#111111',
+        format: 'mp4',
+        videoCodec: 'avc1.640033',
+        bitrate: 12000000,
+        audio: true,
+        audioCodec: 'opus',
+        audioSampleRate: 48000,
+        prioritizeSpeed: true,
+        duration: 3_000_000
+      },
+      tracks: [] as any[],
+      clips: {} as Record<string, any>,
+    };
+
+    if (!rawScenes || rawScenes.length === 0) {
+      return ok(res, timeline);
+    }
+
     let currentUs = 0;
     const videoClipIds: string[] = [];
-      const bgmClipIds: string[] = [];
-      const multiLangVoiceTrackClipIds: Record<string, string[]> = {};
-      const multiLangCaptionTrackClipIds: Record<string, string[]> = {};
-      const langTrackMeta: Record<string, any> = {};
-      const clips: Record<string, any> = {};
+    const effectClipIds: string[] = [];
+    const bgmClipIds: string[] = [];
+    const voiceClipIds: string[] = [];
+    const captionClipIds: string[] = [];
+    const clips: Record<string, any> = {};
 
-      const SILENT_AUDIO_SAMPLE = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-      const SAMPLE_IMAGE_BG = 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1080&h=1920&fit=crop';
+    const SAMPLE_IMAGE_BG = `https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=${canvasWidth}&h=${canvasHeight}&fit=crop`;
 
-      const targetEpDurSec = Number(ep?.duration) || 90;
-      const targetEpDurUs = targetEpDurSec * 1_000_000;
-      const sceneCount = rawScenes.length;
-      const rawTotalDurationSec = rawScenes.reduce((acc: number, s: any) => acc + (Number(s.durationSeconds) || 0), 0);
+    rawScenes.forEach((scene: any, idx: number) => {
+      const sceneDurSec = Math.max(2, Number(scene.durationSeconds) || 6);
+      const durationUs = Math.round(sceneDurSec * 1_000_000);
 
-      rawScenes.forEach((scene: any, idx: number) => {
-        let durationUs: number;
-        if (idx === sceneCount - 1) {
-          durationUs = Math.max(1_000_000, targetEpDurUs - currentUs);
-        } else if (rawTotalDurationSec > 0) {
-          const proportion = (Number(scene.durationSeconds) || (targetEpDurSec / sceneCount)) / rawTotalDurationSec;
-          durationUs = Math.round(targetEpDurUs * proportion);
-        } else {
-          durationUs = Math.round(targetEpDurUs / sceneCount);
-        }
+      const fromUs = currentUs;
+      const toUs = currentUs + durationUs;
+      currentUs += durationUs;
 
-        const fromUs = currentUs;
-        const toUs = currentUs + durationUs;
-
-        // Visual Scene Clip (Image for storyboard frame, Video if real video rendered)
-        const vClipId = `clip_v_${episodeId}_s${idx + 1}`;
-        videoClipIds.push(vClipId);
-        const hasVideo = !!scene.videoUrl;
-        clips[vClipId] = {
-          id: vClipId,
-          type: hasVideo ? 'Video' : 'Image',
-          name: scene.heading || `Scene ${idx + 1}`,
-          src: scene.videoUrl || scene.storyboardFrameUrl || SAMPLE_IMAGE_BG,
+      // Visual Scene Clip (Image for storyboard frame, Video if real video rendered)
+      const vClipId = `clip_v_${episodeId}_s${scene.index || (idx + 1)}`;
+      videoClipIds.push(vClipId);
+      const hasVideo = !!scene.videoUrl;
+      const hasDialogue = scene.dialogue?.length > 0;
+      clips[vClipId] = {
+        id: vClipId,
+        type: 'Video',
+        src: scene.videoUrl || scene.imageUrl,
+        name: scene.heading || `Scene ${scene.index || (idx + 1)}`,
+        timing: {
           display: { from: fromUs, to: toUs },
           trim: { from: 0, to: durationUs },
           duration: durationUs,
-          label: scene.heading || `Scene ${idx + 1}`,
-          width: 1080,
-          height: 1920,
-          left: 0,
-          top: 0,
-          transform: {
-            x: 0,
-            y: 0,
-            width: 1080,
-            height: 1920,
+          playbackRate: 1,
+        },
+        visible: true,
+        volume: hasDialogue ? 0 : 1,
+        style: {},
+        locked: false,
+        effects: [],
+        animations: [],
+        transform: {
+          x: 0,
+          y: 0,
+          width: canvasWidth,
+          height: canvasHeight,
+          angle: 0,
+          opacity: 1,
+          zIndex: 10,
+          flip: {
+            x: false,
+            y: false,
           },
-          visualPrompt: scene.visualPrompt || scene.action,
-          cameraMovement: scene.cameraMovement || 'slow push-in',
-          lightingMood: scene.lightingMood || 'cinematic rim light',
+        },
+      };
+
+      // If Video Effect is specified for this scene
+      const effectKey = normalizeEffectKey(scene.videoEffect);
+      if (effectKey) {
+        // Attach directly to video clip according to OpenVideo core spec
+        clips[vClipId].effects = [
+          {
+            id: `eff_${vClipId}`,
+            key: effectKey,
+            startTime: 0,
+            duration: durationUs,
+          },
+        ];
+
+        const effClipId = `clip_eff_${episodeId}_s${scene.index || (idx + 1)}`;
+        effectClipIds.push(effClipId);
+        clips[effClipId] = {
+          id: effClipId,
+          type: 'Effect',
+          name: `FX: ${effectKey}`,
+          effectKey: effectKey,
+          timing: {
+            display: { from: fromUs, to: toUs },
+            trim: { from: 0, to: durationUs },
+            duration: durationUs,
+            playbackRate: 1,
+          },
+          visible: true,
+          style: {},
+          locked: false,
+          effects: [],
+          animations: [],
         };
+      }
 
-        // Voiceover Dialogue Clip
-        // if (Array.isArray(scene.dialogue) && scene.dialogue.length > 0) {
-        //   const firstLine = scene.dialogue[0];
-        //   const aClipId = `clip_a_voice_${episodeId}_s${idx + 1}`;
-        //   voiceClipIds.push(aClipId);
-        //   clips[aClipId] = {
-        //     id: aClipId,
-        //     type: 'Audio',
-        //     name: `${firstLine.character || 'Voice'}: ${firstLine.line || ''}`,
-        //     src: scene.voiceoverUrl || SILENT_AUDIO_SAMPLE,
-        //     display: { from: fromUs, to: toUs },
-        //     duration: durationUs,
-        //     volume: 1,
-        //     label: `${firstLine.character || 'Voice'}: "${firstLine.line || ''}"`,
-        //     speechTone: firstLine.speechTone || firstLine.emotion || 'dramatic',
-        //   };
-
-        //   // Caption Subtitle Clip
-        //   const cClipId = `clip_cap_${episodeId}_s${idx + 1}`;
-        //   captionClipIds.push(cClipId);
-        //   clips[cClipId] = {
-        //     id: cClipId,
-        //     type: 'Caption',
-        //     name: `Sub ${idx + 1}`,
-        //     text: `${firstLine.character ? `${firstLine.character}: ` : ''}${firstLine.line}`,
-        //     display: { from: fromUs + 200_000, to: Math.max(fromUs + 200_000, toUs - 200_000) },
-        //     duration: durationUs - 400_000,
-        //     style: {
-        //       fontSize: 42,
-        //       color: '#FFFFFF',
-        //       verticalPos: 80,
-        //     },
-        //   };
-        // }
-
-        // Scene Background Music (BGM) Clip
-        const bgmClipId = `clip_bgm_${episodeId}_s${idx + 1}`;
+      // If BGM already exists for this scene
+      if (scene.bgmUrl) {
+        const bgmClipId = `clip_bgm_${episodeId}_s${scene.index || (idx + 1)}`;
         bgmClipIds.push(bgmClipId);
         clips[bgmClipId] = {
           id: bgmClipId,
           type: 'Audio',
-          name: `BGM: ${scene.bgmMood || scene.heading || `Scene ${idx + 1}`}`,
-          src: scene.bgmUrl || SILENT_AUDIO_SAMPLE,
-          display: { from: fromUs, to: toUs },
-          duration: durationUs,
-          volume: 0.35,
-          label: `BGM (${scene.bgmMood || 'Cinematic Suspense'})`,
+          name: `BGM Scene ${scene.index || (idx + 1)}`,
+          src: scene.bgmUrl,
+          timing: {
+            display: { from: fromUs, to: toUs },
+            trim: { from: 0, to: durationUs },
+            duration: durationUs,
+            playbackRate: 1,
+          },
+          visible: true,
+          volume: 0.8,
+          style: {},
+          locked: false,
+          effects: [],
+          animations: [],
+        };
+      }
+
+      // Compute exact voiceover and dialogue duration (never stretch to full video duration)
+      let voiceStartUs = 0;
+      let voiceDurUs = 0;
+
+      const rawCues = (Array.isArray(scene.captionsData) && scene.captionsData.length > 0)
+        ? scene.captionsData
+        : (Array.isArray(scene.dialogue) && scene.dialogue.length > 0 ? scene.dialogue : []);
+
+      if (scene.voiceDurationUs && scene.voiceDurationUs > 0) {
+        voiceDurUs = scene.voiceDurationUs;
+        voiceStartUs = scene.voiceStartUs !== undefined ? scene.voiceStartUs : 200_000;
+      } else if (rawCues.length > 0) {
+        const firstCue = rawCues[0];
+        const lastCue = rawCues[rawCues.length - 1];
+        const start = firstCue?.fromUs !== undefined && firstCue.fromUs > 100_000
+          ? Number(firstCue.fromUs)
+          : (firstCue?.startMs !== undefined ? Number(firstCue.startMs) * 1000 : 200_000);
+        const end = lastCue?.toUs !== undefined && lastCue.toUs > 100_000
+          ? Number(lastCue.toUs)
+          : (lastCue?.endMs !== undefined
+            ? Number(lastCue.endMs) * 1000
+            : (start + (Number(lastCue?.durationUs) || (Number(lastCue?.durationMs) * 1000) || 2_500_000)));
+        voiceStartUs = Math.max(0, start);
+        voiceDurUs = Math.min(durationUs - voiceStartUs, Math.max(200_000, end - voiceStartUs));
+      } else if (scene.voiceoverUrl) {
+        voiceStartUs = 200_000;
+        voiceDurUs = Math.min(durationUs - voiceStartUs, 3_000_000);
+      }
+
+      // If Voiceover already exists for this scene
+      if (scene.voiceoverUrl && voiceDurUs > 0) {
+        const aClipId = `clip_a_voice_${episodeId}_s${scene.index || (idx + 1)}`;
+        voiceClipIds.push(aClipId);
+
+        clips[aClipId] = {
+          id: aClipId,
+          type: 'Audio',
+          name: `${scene.dialogue?.[0]?.character || 'Voice'}: ${scene.dialogue?.[0]?.line || ''}`,
+          src: scene.voiceoverUrl,
+          timing: {
+            display: { from: fromUs + voiceStartUs, to: fromUs + voiceStartUs + voiceDurUs },
+            trim: { from: 0, to: voiceDurUs },
+            duration: voiceDurUs,
+            playbackRate: 1,
+          },
+          visible: true,
+          volume: 1,
+          style: {},
+          locked: false,
+          effects: [],
+          animations: [],
+        };
+      }
+
+      // If Captions or Dialogue exist for this scene
+      if (rawCues.length > 0 && voiceDurUs > 0) {
+        const getCaptionTop = (align: string, height: number): number => {
+          if (align === 'top') return 80;
+          if (align === 'center') return Math.round((canvasHeight - height) / 2);
+          return canvasHeight - 450;
         };
 
-        // Multi-Language Tracks Generator (Voiceover Audio + Captions per language)
-        const languageTracksList = Array.isArray(ep?.languageTracks) && ep.languageTracks.length > 0
-          ? ep.languageTracks
-          : [
-              {
-                languageCode: ep?.activeLanguageCode || 'en-US',
-                languageName: 'English',
-                voiceId: 'Puck',
-                sceneVoiceovers: {},
-                sceneCaptions: {},
-              }
-            ];
+        const verticalAlign = (scene.captionStyle?.verticalAlign || 'bottom') as string;
+        const captionWidth = Math.round(canvasWidth * 0.88);
+        const captionHeight = 100;
+        const left = Math.round((canvasWidth - captionWidth) / 2);
+        const top = getCaptionTop(verticalAlign, captionHeight);
 
-        languageTracksList.forEach((lTrack: any) => {
-          const langCode = lTrack.languageCode || 'vi-VN';
-          const safeLang = langCode.replace(/[^a-zA-Z0-9_-]/g, '_');
-          const voiceTrackId = `track_voiceover_${safeLang}`;
-          const capTrackId = `track_caption_${safeLang}`;
+        const totalChars = rawCues.reduce((sum: number, c: any) => sum + (c.text?.length || c.line?.length || 1), 0) || 1;
+        let runningOffsetUs = voiceStartUs;
 
-          if (!multiLangVoiceTrackClipIds[voiceTrackId]) {
-            multiLangVoiceTrackClipIds[voiceTrackId] = [];
-            langTrackMeta[voiceTrackId] = {
-              id: voiceTrackId,
-              name: `🎙 Voiceover (${langCode})`,
-              type: 'Audio',
-              languageCode: langCode,
-              muted: langCode !== (ep?.activeLanguageCode || languageTracksList[0].languageCode),
-            };
-          }
-          if (!multiLangCaptionTrackClipIds[capTrackId]) {
-            multiLangCaptionTrackClipIds[capTrackId] = [];
-            langTrackMeta[capTrackId] = {
-              id: capTrackId,
-              name: `💬 Subtitles (${langCode})`,
-              type: 'Caption',
-              languageCode: langCode,
-              visible: langCode === (ep?.activeLanguageCode || languageTracksList[0].languageCode),
-            };
-          }
+        rawCues.forEach((cue: any, cIdx: number) => {
+          const cClipId = `clip_cap_${episodeId}_s${scene.index || (idx + 1)}_${cIdx + 1}`;
+          captionClipIds.push(cClipId);
+          const cueText = cue.text || cue.line || '';
 
-          // Voiceover Clip for this language
-          const voiceSrc = lTrack.sceneVoiceovers?.[scene.index] || (langCode === 'vi-VN' ? scene.voiceoverUrl : '') || SILENT_AUDIO_SAMPLE;
-          const aClipId = `clip_a_voice_${safeLang}_${episodeId}_s${idx + 1}`;
-          multiLangVoiceTrackClipIds[voiceTrackId].push(aClipId);
-          clips[aClipId] = {
-            id: aClipId,
-            type: 'Audio',
-            name: `${scene.dialogue?.[0]?.character || 'Voice'} (${langCode}): ${scene.dialogue?.[0]?.line || ''}`,
-            src: voiceSrc,
-            display: { from: fromUs, to: toUs },
-            duration: durationUs,
-            volume: 1,
-            languageCode: langCode,
-            label: `${scene.dialogue?.[0]?.character || 'Voice'} (${langCode})`,
-          };
+          // If only 1 cue, span full voice duration; otherwise proportion based on text length
+          const cueFromOffsetUs = cue.fromUs !== undefined
+            ? Number(cue.fromUs)
+            : (cue.startMs !== undefined ? Number(cue.startMs) * 1000 : runningOffsetUs);
+          const cueFromUs = fromUs + cueFromOffsetUs;
 
-          // Caption Clip for this language
-          const capData = lTrack.sceneCaptions?.[scene.index] || [];
-          const captionText = capData.length > 0
-            ? capData.map((c: any) => c.text).join(' ')
-            : (scene.dialogue?.[0]?.line || '');
-          const cClipId = `clip_cap_${safeLang}_${episodeId}_s${idx + 1}`;
-          multiLangCaptionTrackClipIds[capTrackId].push(cClipId);
+          const cueDurUs = cue.durationUs !== undefined
+            ? Number(cue.durationUs)
+            : (cue.durationMs !== undefined
+              ? Number(cue.durationMs) * 1000
+              : (cue.toUs !== undefined && cue.fromUs !== undefined
+                ? (Number(cue.toUs) - Number(cue.fromUs))
+                : (cue.endMs !== undefined && cue.startMs !== undefined
+                  ? (Number(cue.endMs) - Number(cue.startMs)) * 1000
+                  : 1_000_000)));
+
+          const cueToUs = Math.min(toUs, cueFromUs + cueDurUs);
+          runningOffsetUs = (cue.toUs !== undefined ? Number(cue.toUs) : (cueFromOffsetUs + cueDurUs)) + 30_000;
+          const cueDurationUs = cueToUs - cueFromUs;
           clips[cClipId] = {
             id: cClipId,
             type: 'Caption',
-            name: `Sub (${langCode}) ${idx + 1}`,
-            text: captionText,
-            display: { from: fromUs + 200_000, to: Math.max(fromUs + 200_000, toUs - 200_000) },
-            duration: durationUs - 400_000,
-            languageCode: langCode,
+            name: 'Caption',
+            text: cueText,
+            mediaId: vClipId,
+            metadata: {
+              sourceClipId: vClipId,
+            },
+            timing: {
+              display: { from: cueFromUs, to: cueToUs },
+              trim: { from: 0, to: cueDurationUs },
+              duration: cueDurationUs,
+              playbackRate: 1,
+            },
+            visible: true,
+            caption: {
+              words: Array.isArray(cue.words) && cue.words.length > 0
+                ? cue.words.map((w: any, wIdx: number) => {
+                    const divisor = (w.from > 10000 || w.to > 10000) ? 1000 : 1;
+                    const isKeyWord = (wIdx === 0 || wIdx === cue.words.length - 1);//w.isKeyWord 
+                    return {
+                      text: w.text || w.word || '',
+                      from: Math.round((w.from || 0) / divisor),
+                      to: Math.round((w.to || ((w.from || 0) + 300 * divisor)) / divisor),
+                      isKeyWord: isKeyWord
+                    };
+                  })
+                : [{ text: cueText, from: 0, to: Math.round(cueDurUs / 1000), isKeyWord: true }],
+            },
             style: {
-              fontSize: 42,
-              color: '#FFFFFF',
-              verticalPos: 80,
+              color: "#FFFFFF",
+              align: 'center',
+              verticalAlign,
+            },
+            locked: false,
+            effects: [],
+            animations: [],
+            wordsPerLine: '',
+            transform: {
+              x: left,
+              y: top,
+              width: captionWidth,
+              height: captionHeight,
+              angle: 0,
+              opacity: 1,
+              zIndex: 10,
+              flip: {
+                x: false,
+                y: false,
+              },
             },
           };
         });
+      }
+    });
 
-        currentUs += durationUs;
-      });
+    // Add Transitions between adjacent video clips if transitionEffect is specified
+    for (let i = 1; i < videoClipIds.length; i++) {
+      const prevClipId = videoClipIds[i - 1];
+      const currClipId = videoClipIds[i];
+      const rawTrans = rawScenes[i]?.transitionEffect || rawScenes[i - 1]?.transitionEffect;
+      const transKey = normalizeTransitionKey(rawTrans);
+      if (transKey) {
+        const transClipId = `clip_trans_${episodeId}_s${i}`;
+        clips[transClipId] = {
+          id: transClipId,
+          type: 'Transition',
+          name: `Transition: ${transKey}`,
+          transitionKey: transKey,
+          duration: 1_000_000,
+          fromClipId: prevClipId,
+          toClipId: currClipId,
+        };
+      }
+    }
 
-      const totalDurUs = targetEpDurUs;
+    const totalDurUs = Math.max(currentUs, 10_000_000);
 
-      // Construct tracks array: Video Track + BGM Track + [Voiceover + Caption per Language]
-      const dynamicTracks: any[] = [
-        { id: 'track_video_main', name: 'Scene Video (9:16)', type: 'Video', clipIds: videoClipIds },
-        { id: 'track_bgm_main', name: 'Background Music (BGM)', type: 'Audio', clipIds: bgmClipIds },
-      ];
+    const dynamicTracks: any[] = [];
 
-      // Add each language's voiceover and caption track
-      Object.keys(langTrackMeta).forEach((trackId) => {
-        const meta = langTrackMeta[trackId];
-        const clipIds = meta.type === 'Audio'
-          ? (multiLangVoiceTrackClipIds[trackId] || [])
-          : (multiLangCaptionTrackClipIds[trackId] || []);
-
-        dynamicTracks.push({
-          id: meta.id,
-          name: meta.name,
-          type: meta.type,
-          languageCode: meta.languageCode,
-          muted: meta.muted || false,
-          visible: meta.visible !== undefined ? meta.visible : true,
-          clipIds,
-        });
-      });
-
-      const timeline = {
-        settings: {
-          width: 1080,
-          height: 1920,
-          fps: 30,
-          duration: totalDurUs,
-          backgroundColor: '#0a0a0a',
-          format: 'mp4',
-          videoCodec: 'avc1.640033',
-          bitrate: 12000000,
-          audio: true,
-          audioCodec: 'opus',
-          audioSampleRate: 48000,
-          prioritizeSpeed: true,
+    // 1. Caption Track (Topmost layer, multi-language supported)
+    if (captionClipIds.length > 0) {
+      const captionConfig = {
+        captions: {
+          style: {
+            fontSize: 80,
+            fontFamily: 'Inter',
+            fontWeight: '700',
+            fontStyle: 'normal',
+            color: '#ffffff',
+            align: 'center',
+            fontUrl: 'https://fonts.gstatic.com/s/poppins/v15/pxiByp8kv8JHgFVrLCz7V1tvFP-KUEg.ttf',
+            stroke: {
+              color: '#000000',
+              width: 4,
+            },
+            shadow: {
+              color: '#000000',
+              alpha: 0.5,
+              blur: 4,
+              offsetX: 2,
+              offsetY: 2,
+            },
+          },
+          colors: {
+            active: {
+              color: '#ffffff',
+              background: '#FF5700',
+            },
+            future: {
+              color: '#ffffff',
+            },
+            keyword: {
+              color: '#ffffff',
+              preserveAfterSpoken: true,
+            },
+          },
+          positioning: {
+            videoWidth: canvasWidth,
+            videoHeight: canvasHeight,
+          },
+          wordsPerLine: 'multiple',
         },
-        tracks: dynamicTracks,
-        clips,
       };
+
+      dynamicTracks.push({
+        id: 'track_captions_main',
+        name: 'Captions',
+        type: 'caption',
+        clipIds: captionClipIds,
+        accepts: ['caption'],
+        config: captionConfig,
+      });
+    }
+
+    // 2. Video Effects Track (Above video)
+    if (effectClipIds.length > 0) {
+      dynamicTracks.push({
+        id: 'track_effects',
+        name: 'Effects',
+        type: 'effect',
+        clipIds: effectClipIds,
+        accepts: ['effect'],
+      });
+    }
+
+    // 3. Video Track (Main visual content)
+    dynamicTracks.push({
+      id: 'track_video',
+      name: `Video`,
+      type: 'video',
+      clipIds: videoClipIds,
+      accepts: ['video', 'image'],
+    });
+
+    // 4. Voiceover Audio Track (Multi-language supported)
+    if (voiceClipIds.length > 0) {
+      dynamicTracks.push({
+        id: 'track_voiceover_main',
+        name: 'Voiceover',
+        type: 'audio',
+        clipIds: voiceClipIds,
+        accepts: ['audio'],
+      });
+    }
+
+    // 5. BGM Ambient Audio Track (Bottom layer)
+    if (bgmClipIds.length > 0) {
+      dynamicTracks.push({
+        id: 'track_bgm',
+        name: 'BGM',
+        type: 'audio',
+        clipIds: bgmClipIds,
+        accepts: ['audio'],
+      });
+    }
+
+    timeline.settings.duration = totalDurUs;
+    timeline.tracks = dynamicTracks;
+    timeline.clips = clips;
+
+    // Automatically persist initial timeline
+    try {
+      await db.saveTimeline(episodeId, timeline, { id: 'system', name: 'Studio System' }, 'Initial Timeline Creation');
+    } catch (saveErr) {
+      Logger.warn(`[seriesRouter.getTimeline] Auto-save initial timeline notice: ${(saveErr as any)?.message}`);
+    }
 
     ok(res, timeline);
   } catch (err: any) {
@@ -783,23 +1129,104 @@ episodesRouter.get('/:episodeId/timeline', async (req: Request, res: Response): 
 episodesRouter.put('/:episodeId/timeline', async (req: Request, res: Response): Promise<void> => {
   try {
     const episodeId = req.params.episodeId as string;
-    const { settings, tracks, clips, changeSummary, author } = req.body;
+    const user = getAuthUser(req) as any;
+    if (!user) {
+      fail(res, 401, 'Unauthorized');
+      return;
+    }
+    const { settings, tracks, clips, changeSummary, clientTimestamp, baseVersionNumber } = req.body;
+    const db = await getDatabaseProvider();
+    const ep = await db.getEpisodeById(episodeId);
+    if (!ep) {
+      fail(res, 404, 'Episode not found');
+      return;
+    }
+    const series = ep.series_id ? await db.getSeriesById(ep.series_id) : null;
+    const seriesRatio = (series?.ratio || '9:16').trim();
+    let canvasWidth = 1080;
+    let canvasHeight = 1920;
+    if (seriesRatio === '16:9') {
+      canvasWidth = 1920;
+      canvasHeight = 1080;
+    } else if (seriesRatio === '4:3') {
+      canvasWidth = 1440;
+      canvasHeight = 1080;
+    } else if (seriesRatio === '1:1') {
+      canvasWidth = 1080;
+      canvasHeight = 1080;
+    }
+
+    // 1. Concurrency Timestamp Check: Ensure client is not overwriting a newer version
+    const historyRes = await db.getTimelineHistory(episodeId, 1, 0);
+    const latestVersion = historyRes.history?.[0];
+    const latestTimeline = await db.getLatestTimeline(episodeId);
+
+    if (latestVersion && clientTimestamp) {
+      const serverTime = new Date(latestVersion.createdAt).getTime();
+      const clientTime = new Date(clientTimestamp).getTime();
+      if (!isNaN(serverTime) && !isNaN(clientTime) && clientTime < serverTime) {
+        fail(res, 409, `Timeline version conflict: Your edit is based on an older version (${clientTimestamp}). Current server version was updated at ${latestVersion.createdAt}.`);
+        return;
+      }
+    }
 
     const timelineData = {
-      settings: settings || { width: 1080, height: 1920, fps: 30 },
+      settings: settings || { width: canvasWidth, height: canvasHeight, fps: 30 },
       tracks: tracks || [],
       clips: clips || {},
     };
 
-    const authorObj = author || { id: 'usr_default', name: 'Editor Alpha' };
-    const db = await getDatabaseProvider();
-    const result = await db.saveTimeline(episodeId, timelineData, authorObj, changeSummary || 'Manual timeline edit');
+    // 2. Change Detection (Diffing)
+    const diffDetails: string[] = [];
+    if (latestTimeline) {
+      const oldTracks = latestTimeline.tracks || [];
+      const newTracks = tracks || [];
+      const oldClips = latestTimeline.clips || {};
+      const newClips = clips || {};
+
+      if (newTracks.length !== oldTracks.length) {
+        diffDetails.push(`${newTracks.length} tracks (was ${oldTracks.length})`);
+      }
+      const oldClipKeys = Object.keys(oldClips);
+      const newClipKeys = Object.keys(newClips);
+      const addedClips = newClipKeys.filter(k => !oldClips[k]);
+      const removedClips = oldClipKeys.filter(k => !newClips[k]);
+      const modifiedClips = newClipKeys.filter(k => oldClips[k] && JSON.stringify(oldClips[k]) !== JSON.stringify(newClips[k]));
+
+      if (addedClips.length > 0) diffDetails.push(`+${addedClips.length} clips`);
+      if (removedClips.length > 0) diffDetails.push(`-${removedClips.length} clips`);
+      if (modifiedClips.length > 0) diffDetails.push(`updated ${modifiedClips.length} clips`);
+
+      // If data is identical, return current version without duplicating history
+      if (diffDetails.length === 0 && JSON.stringify(latestTimeline.settings) === JSON.stringify(timelineData.settings)) {
+        ok(res, {
+          success: true,
+          versionId: latestVersion?.versionId || 'ver_current',
+          versionNumber: latestVersion?.versionNumber || 1,
+          updatedAt: latestVersion?.createdAt || new Date().toISOString(),
+          noChanges: true,
+        }, 'Timeline data is already up to date');
+        return;
+      }
+    }
+
+    const effectiveSummary = changeSummary || (diffDetails.length > 0 ? diffDetails.join(', ') : 'Timeline update');
+    const userObject = {
+      id: user.id || 'usr_default',
+      name: user.name || 'Studio Editor',
+      avatar: user.avatar,
+    };
+
+    // 3. Save new Timeline version & snapshot history
+    const result = await db.saveTimeline(episodeId, timelineData, userObject, effectiveSummary);
 
     ok(res, {
       success: true,
       versionId: result.versionId,
       versionNumber: result.versionNumber,
       updatedAt: result.updatedAt,
+      changeSummary: effectiveSummary,
+      diff: diffDetails,
     }, 'Timeline saved successfully');
   } catch (err: any) {
     fail(res, 500, err.message || 'Internal server error');
@@ -810,6 +1237,11 @@ episodesRouter.put('/:episodeId/timeline', async (req: Request, res: Response): 
 episodesRouter.get('/:episodeId/timeline/history', async (req: Request, res: Response): Promise<void> => {
   try {
     const episodeId = req.params.episodeId as string;
+    const userId = getUserId(req);
+    if (!userId) {
+      fail(res, 401, 'Unauthorized');
+      return;
+    }
     const limit = parseInt(req.query.limit as string) || 20;
     const offset = parseInt(req.query.offset as string) || 0;
 
@@ -826,6 +1258,11 @@ episodesRouter.get('/:episodeId/timeline/history/:versionId', async (req: Reques
   try {
     const episodeId = req.params.episodeId as string;
     const versionId = req.params.versionId as string;
+    const userId = getUserId(req);
+    if (!userId) {
+      fail(res, 401, 'Unauthorized');
+      return;
+    }
 
     const db = await getDatabaseProvider();
     const versionData = await db.getTimelineVersion(episodeId, versionId);
@@ -846,6 +1283,11 @@ episodesRouter.post('/:episodeId/timeline/restore', async (req: Request, res: Re
   try {
     const episodeId = req.params.episodeId as string;
     const { versionId, reason, author } = req.body;
+    const userId = getUserId(req);
+    if (!userId) {
+      fail(res, 401, 'Unauthorized');
+      return;
+    }
 
     if (!versionId) {
       fail(res, 400, 'versionId is required for restore');
@@ -863,4 +1305,3 @@ episodesRouter.post('/:episodeId/timeline/restore', async (req: Request, res: Re
 });
 
 export default router;
-

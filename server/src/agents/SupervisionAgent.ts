@@ -1,6 +1,7 @@
 import { geminiClient } from '../integrations/ai/gemini/GeminiClient.js';
 import { mcpClient } from '../integrations/mcp/ParallelMCPClient.js';
 import { loadSkill } from '../utils/SkillLoader.js';
+import { PromptLoader } from '../utils/PromptLoader.js';
 import { Logger } from '../utils/logger.js';
 import { ScriptItem } from './ScriptAgent.js';
 
@@ -103,67 +104,26 @@ export class SupervisionAgent {
     }
 
     // 2. AI Compliance Audit with compliance_check.md skill
-    const prompt = `
-Perform a strict Supervision & Compliance Audit for the following micro-drama Master Plan in target market "${country}" (${ratio} aspect ratio).
+    const charactersList = (masterPlan?.characters || [])
+      .map((c: any) => `${c.name} (${c.role}): ${c.identity} - ${c.traits}`)
+      .join('; ');
+    const sampleEpisodesJson = JSON.stringify(
+      (masterPlan?.episodes || []).slice(0, 5).map((e: any) => ({
+        ep: e.episodeNumber,
+        title: e.title,
+        synopsis: e.synopsis,
+      }))
+    );
 
-Master Plan to Audit:
-- Series Title: ${title}
-- Genre: ${masterPlan?.genre || 'Drama'}
-- Tone: ${masterPlan?.tone || 'Cinematic'}
-- Story Core: ${synopsis}
-- Target Country: ${country}
-- Characters: ${(masterPlan?.characters || []).map((c: any) => `${c.name} (${c.role}): ${c.identity} - ${c.traits}`).join('; ')}
-- Sample Episodes (First 5): ${JSON.stringify((masterPlan?.episodes || []).slice(0, 5).map((e: any) => ({ ep: e.episodeNumber, title: e.title, synopsis: e.synopsis })))}
-
-Audit against micro-drama Redlines:
-1. Violence / Gore (Gory violence, prohibited weapons, extreme blood)
-2. Adult Content (Explicit sexual acts, taboo themes)
-3. Cultural & Regional Sensitivity (Local customs, religious redlines in ${country}, political taboos)
-4. Copyright & IP / Plagiarism (Originality of core tropes and characters)
-
-Respond strictly in JSON matching the schema:
-{
-  "overallScore": 98,
-  "isCompliant": true,
-  "categories": {
-    "violence": {
-      "label": "Violence / Gore",
-      "score": 98,
-      "status": "Passed",
-      "safe": true,
-      "notes": "No prohibited extreme violence detected"
-    },
-    "adultContent": {
-      "label": "Adult Content",
-      "score": 100,
-      "status": "Passed",
-      "safe": true,
-      "notes": "Compliant with platform commercial standards"
-    },
-    "culturalSensitivity": {
-      "label": "Cultural Sensitivity",
-      "score": 94,
-      "status": "Passed",
-      "safe": true,
-      "notes": "Harmonious with target market sensibilities"
-    },
-    "copyrightIP": {
-      "label": "Copyright / IP",
-      "score": 96,
-      "status": "Passed",
-      "safe": true,
-      "notes": "Original trope combination without trademark infringement"
-    }
-  },
-  "copyrightChecks": [
-    { "label": "Script Origin & Plagiarism", "status": "Passed", "safe": true },
-    { "label": "Generated Visual Assets", "status": "Passed", "safe": true },
-    { "label": "Audio & Foley Library", "status": "Passed", "safe": true }
-  ],
-  "identifiedIssues": [],
-  "recommendations": []
-}
-`;
+    const prompt = PromptLoader.render('compliance/supervision_audit', {
+      country,
+      ratio,
+      title,
+      genre: masterPlan?.genre || 'Drama',
+      synopsis,
+      charactersList,
+      sampleEpisodesJson,
+    });
 
     try {
       const rawText = await geminiClient.generateText({

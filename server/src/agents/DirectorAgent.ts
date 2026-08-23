@@ -6,7 +6,7 @@ import { supervisionAgent, type SupervisionResult } from './SupervisionAgent.js'
 export interface FullScriptPipelineRequest {
   title: string;
   genre: string;
-  tone: string;
+  visualStyle?: string;
   synopsis: string;
   episodeNumber?: number;
   totalEpisodes?: number;
@@ -25,12 +25,12 @@ export class DirectorAgent {
     const outline = await storySkeletonAgent.execute({
       title: request.title,
       genre: request.genre,
-      tone: request.tone,
+      visualStyle: request.visualStyle,
       synopsis: request.synopsis,
       totalEpisodes: request.totalEpisodes || 20,
     });
 
-    // 2. Determine adaptation strategy
+    // 2. Compute adaptation strategy
     const adaptation = await adaptationStrategyAgent.execute({
       synopsis: request.synopsis,
       targetEpisodeCount: outline.totalEpisodes,
@@ -43,7 +43,7 @@ export class DirectorAgent {
       seriesId: outline.seriesId,
       episodeNumber: targetEpisode,
       genre: request.genre,
-      tone: request.tone,
+      visualStyle: request.visualStyle,
       synopsis: request.synopsis,
     });
 

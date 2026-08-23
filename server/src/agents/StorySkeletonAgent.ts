@@ -1,17 +1,20 @@
 import { geminiClient, GEMINI_SUPPORTED_VOICES } from '../integrations/ai/gemini/GeminiClient.js';
 import { loadSkill } from '../utils/SkillLoader.js';
+import { PromptLoader } from '../utils/PromptLoader.js';
 import { Logger } from '../utils/logger.js';
 import { getLanguageForCountry } from '../utils/LanguageMapping.js';
+import { getVisualStylePrompt } from '../constants/VisualStyles.js';
 
 export interface StorySkeletonInput {
   title: string;
   genre: string;
-  tone: string;
+  visualStyle?: string;
+  visualStylePrompt?: string;
   synopsis: string;
   totalEpisodes?: number;
   episodeDurationSeconds?: number;
   country?: string;
-  region?: string;
+  language?: string;
   ratio?: string;
   viralTopic?: string;
   referenceAssets?: any[];
@@ -26,6 +29,9 @@ export interface CharacterPersona {
   voiceId?: string;
   identity: string;
   appearance?: string; // Facial features, physical build, age appearance matching target country
+  visualTraits?: string;
+  physicalCharacteristics?: string;
+  description?: string;
   costumeStyle?: string; // Signature cultural/regional wardrobe, styling, and signature accessories
   traits: string;
   circumstance: string;
@@ -80,16 +86,32 @@ export interface StoryCore {
   goldFingerRule: string;
 }
 
+export interface LocationPersona {
+  id?: string;
+  name: string;
+  physicalCharacteristics: string;
+  timeOfDay?: string;
+  imageUrl?: string;
+}
+
+export interface PropPersona {
+  id?: string;
+  name: string;
+  physicalCharacteristics: string;
+  imageUrl?: string;
+}
+
 export interface MasterPlanOutput {
   seriesId: string;
   title: string;
   genre: string;
-  tone: string;
+  visualStyle: string;
+  visualStylePrompt: string;
   country: string;
   ratio: string;
   totalEpisodes: number;
   totalDurationSeconds?: number;
-  targetLanguage: string;
+  language: string;
   settingContext?: {
     era: string; // e.g. Modern 2026, Cyberpunk, 1990s retro
     location: string; // e.g. High-tech metropolis, bustling apartment complex, corporate towers
@@ -101,6 +123,8 @@ export interface MasterPlanOutput {
   viralHook: string;
   estimatedRetention: string;
   characters: CharacterPersona[];
+  locations?: LocationPersona[];
+  props?: PropPersona[];
   threeActs: ActStructure[];
   majorReversals: MajorReversal[];
   paywallHooks: PaywallHook[];
@@ -116,7 +140,7 @@ export class StorySkeletonAgent {
     const totalEpisodes = input.totalEpisodes || 24;
     const totalDurationSeconds = Math.min(Math.max(Number(input.episodeDurationSeconds), 30), 600);
     const durationDisplay = `${Math.floor(totalDurationSeconds / 60)}m ${totalDurationSeconds % 60 ? `${totalDurationSeconds % 60}s` : ''}`.trim();
-    const country = input.country || input.region || 'US';
+    const country = input.country || 'US';
     const langInfo = getLanguageForCountry(country);
     const skillInstruction = loadSkill('script_skeleton');
 
@@ -138,62 +162,40 @@ export class StorySkeletonAgent {
       .map(v => `  * "${v.id}": ${v.description}`)
       .join('\n');
 
-    // Step 1: Generate the Core Architecture (Story Core, Characters, Setting Context, Three Acts, Reversals, Paywalls)
+    const voiceCatalog = [
+      '  [Male Voices]',
+      maleVoicesCatalog,
+      '  [Female Voices]',
+      femaleVoicesCatalog,
+      '  [Neutral Voices]',
+      neutralVoicesCatalog,
+    ].join('\n');
+
+    const episodeScopeInstruction = totalEpisodes <= CHUNK_SIZE
+      ? `Generate all ${totalEpisodes} episodes in the episodes array.`
+      : `Provide the first ${CHUNK_SIZE} episodes (1 to ${CHUNK_SIZE}) in the episodes array.`;
+
     Logger.info(`[StorySkeletonAgent] Generating Master Plan Core for "${input.title}" (${totalEpisodes} eps, ${durationDisplay}/ep, Target: ${langInfo.name})...`);
-    
-    const corePrompt = `
-Generate the complete high-level Master Story Plan Core for a ${totalEpisodes}-episode vertical micro-drama series.
-Target Country: ${country} (${langInfo.name} - ${langInfo.nativeName}).
 
-LANGUAGE SPECIFICATION (MANDATORY):
-${langInfo.promptInstruction}
-- The story must resonate culturally with audiences in ${country}.
-- All titles, loglines, synopses, character descriptions, settings, and narrative hooks MUST BE IN ${langInfo.name.toUpperCase()} (${langInfo.nativeName}).
-
-Project Parameters:
-- Series Title: ${input.title || 'Untitled Series'}
-- Genre: ${input.genre || 'Suspense / Mystery'}
-- Visual Tone: ${input.tone || 'Cinematic Neon'}
-- Synopsis: ${input.synopsis || 'A high-stakes conflict of power, betrayal, and redemption.'}
-- Target Country: ${country}
-- Aspect Ratio: ${input.ratio || '9:16'}
-- Total Episodes: ${totalEpisodes}
-- Duration per Episode: ${durationDisplay} (${totalDurationSeconds} seconds)
-- Viral Topic: ${input.viralTopic || 'None'}
-
-Setting Context (Regional & Cultural Atmosphere for Visual Consistency):
-- era: Specific time period in target language (e.g. "Modern 2026", "1990s retro", "Near future")
-- location: Specific geographic and architectural setting in ${country} (e.g. "Urban apartment complex and corporate financial towers")
-- culturalAtmosphere: Local social context, cultural habits, and ambient visual mood of ${country}.
-
-Characters Specification (mandatory for each character persona):
-- name: Culturally authentic character name for ${country}
-- role: "protagonist" | "antagonist" | "supporter"
-- gender: "male" | "female" | "neutral" (MANDATORY: Must accurately assign biological/character gender "female", "male", or "neutral" based on character name, identity, pronouns, and role in ${langInfo.name})
-- age: Authentic character age (e.g. 25)
-- nationality: Authentic nationality / citizenship (e.g. "${country}")
-- voiceId: Selected voice preset precisely matching character gender, age, personality, and tone from the official Gemini Voice Catalog below (MUST strictly match the character's gender):
-  [Male Voices]
-${maleVoicesCatalog}
-  [Female Voices]
-${femaleVoicesCatalog}
-  [Neutral Voices]
-${neutralVoicesCatalog}
-- identity: Social standing / profession
-- appearance: Specific physical features, face structure, hairstyle, and age appearance reflecting authentic people in ${country}
-- costumeStyle: Distinctive wardrobe, clothing style, color palette, and signature accessories matching their social status and local context in ${country}
-- traits: Key personality traits
-- circumstance: Initial context / backstory / trigger
-- action: Core goal and strategic actions
-- ending: Fate / resolution / ultimate outcome
-- speechStyle: Vocal tone and speaking style
-- empathyElements: Emotional resonance points for audience
-
-Generate the settingContext, storyCore, hiddenLine, targetAudience, viralHook, estimatedRetention, characters (≤ 4), threeActs, majorReversals (~3), and paywallHooks (at ~10%, ~30%, ~50%, ~70%, ~90%).
-${totalEpisodes <= CHUNK_SIZE ? `Generate all ${totalEpisodes} episodes in the episodes array.` : `Provide the first ${CHUNK_SIZE} episodes (1 to ${CHUNK_SIZE}) in the episodes array.`}
-
-Respond strictly in JSON matching the MasterPlanOutput schema.
-`;
+    const corePrompt = PromptLoader.render('skeleton/story_skeleton_core', {
+      totalEpisodes,
+      totalDurationSeconds,
+      durationDisplay,
+      country,
+      languageName: langInfo.name,
+      languageNativeName: langInfo.nativeName,
+      languageCode: input.language || langInfo.code,
+      languageInstruction: langInfo.promptInstruction,
+      title: input.title || 'Untitled Series',
+      genre: input.genre || 'Suspense / Mystery',
+      visualStyle: input.visualStyle || 'realistic',
+      visualStylePrompt: input.visualStylePrompt || getVisualStylePrompt(input.visualStyle || 'realistic'),
+      synopsis: input.synopsis || 'A high-stakes conflict of power, betrayal, and redemption.',
+      ratio: input.ratio || '9:16',
+      viralTopic: input.viralTopic || 'None',
+      voiceCatalog,
+      episodeScopeInstruction,
+    });
 
     const rawText = await geminiClient.generateText({
       prompt: corePrompt,
@@ -243,8 +245,15 @@ Respond strictly in JSON matching the MasterPlanOutput schema.
           }
         }
 
+        const visualDesc = c.visualTraits || c.appearance || c.physicalCharacteristics || c.description || (c.traits ? `Observable visual traits: ${c.traits}` : '');
+        const fullDesc = c.description || c.appearance || c.physicalCharacteristics || c.traits || '';
+
         return {
           ...c,
+          appearance: visualDesc,
+          physicalCharacteristics: visualDesc,
+          visualTraits: visualDesc,
+          description: fullDesc,
           age: Number(c.age) || (c.role === 'supporter' ? 35 : 24),
           gender,
           nationality,
@@ -253,10 +262,66 @@ Respond strictly in JSON matching the MasterPlanOutput schema.
       });
     }
 
+    // Fallback sanitizer for locations
+    if (!Array.isArray(parsed.locations) || parsed.locations.length === 0) {
+      
+    } else {
+      parsed.locations = parsed.locations.map((loc, idx) => ({
+        id: loc.id || `loc_${idx + 1}`,
+        name: loc.name || `Location ${idx + 1}`,
+        physicalCharacteristics: loc.physicalCharacteristics || '',
+        timeOfDay: loc.timeOfDay || 'DAY',
+      }));
+    }
+
+    // Fallback sanitizer for props: Ensure 2-5 props exist
+    if (!Array.isArray(parsed.props) || parsed.props.length === 0) {
+      
+    } else {
+      parsed.props = parsed.props.map((p, idx) => ({
+        id: p.id || `prop_${idx + 1}`,
+        name: p.name || `Prop ${idx + 1}`,
+        physicalCharacteristics: p.physicalCharacteristics || '',
+      }));
+    }
+
     parsed.totalEpisodes = totalEpisodes;
     parsed.totalDurationSeconds = totalDurationSeconds;
     parsed.country = country;
-    parsed.targetLanguage = langInfo.name;
+    parsed.language = langInfo.name;
+    parsed.visualStyle = input.visualStyle || parsed.visualStyle || 'realistic';
+    parsed.visualStylePrompt = input.visualStylePrompt || parsed.visualStylePrompt || getVisualStylePrompt(parsed.visualStyle);
+    parsed.ratio = input.ratio || parsed.ratio || '9:16';
+    parsed.genre = input.genre || parsed.genre || 'Suspense / Mystery';
+
+    // Fallback sanitizer for threeActs: Ensure all 3 acts exist
+    if (!Array.isArray(parsed.threeActs) || parsed.threeActs.length < 3) {
+      const epAct1End = Math.max(2, Math.ceil(totalEpisodes * 0.33));
+      const epAct2End = Math.max(epAct1End + 2, Math.ceil(totalEpisodes * 0.75));
+      const currentActs = Array.isArray(parsed.threeActs) ? parsed.threeActs : [];
+
+      const act1 = currentActs.find(a => a.actNumber === 1);
+      const act2 = currentActs.find(a => a.actNumber === 2);
+      const act3 = currentActs.find(a => a.actNumber === 3);
+      if(act1){
+        parsed.threeActs.push(act1);
+      }
+      if(act2){
+        parsed.threeActs.push(act2);
+      }
+      if(act3){
+        parsed.threeActs.push(act3);
+      }
+    }
+
+    // Fallback sanitizer for paywallHooks: Ensure all 5 strategic hooks exist
+    if (!Array.isArray(parsed.paywallHooks) || parsed.paywallHooks.length < 5) {
+      const defaultHooks: PaywallHook[] = [];
+
+      const currentHooks = Array.isArray(parsed.paywallHooks) ? parsed.paywallHooks : [];
+      const existingByPercent = new Map(currentHooks.map(h => [h.percentage, h]));
+      parsed.paywallHooks = defaultHooks.map(def => existingByPercent.get(def.percentage) || def);
+    }
 
     if (!parsed.seriesId) {
       parsed.seriesId = `series_${Date.now()}`;
@@ -368,40 +433,32 @@ Respond strictly in JSON matching the MasterPlanOutput schema.
   ): Promise<EpisodeSkeleton[]> {
     Logger.info(`[StorySkeletonAgent] Chunk Generation: Episodes ${startEp} to ${endEp}...`);
 
-    const prompt = `
-You are the Episode Chunk Generator for a vertical micro-drama series.
-Target Country: ${country || 'Global'}
-${languageInstruction ? `LANGUAGE REQUIREMENT: ${languageInstruction}` : ''}
+    const threeActsOverview = (corePlan.threeActs || [])
+      .map(a => `  * Act ${a.actNumber} (${a.episodeRange}): ${a.name} - ${a.function}`)
+      .join('\n');
+    const majorReversalsOverview = (corePlan.majorReversals || [])
+      .map(r => `  * Ep ${r.episodeNumber} Reversal: ${r.setupHook} -> ${r.reversalEvent}`)
+      .join('\n');
+    const paywallHooksOverview = (corePlan.paywallHooks || [])
+      .map(p => `  * Ep ${p.episodeNumber} (${p.percentage}): ${p.hookDescription}`)
+      .join('\n');
 
-Series Context:
-- Title: ${corePlan.title}
-- Genre: ${corePlan.genre}
-- Core Story: ${corePlan.storyCore?.coreAttraction || ''}
-- Total Episodes in Series: ${totalEpisodes}
-- Three-Act Structure: ${JSON.stringify(corePlan.threeActs || [])}
-- Characters: ${(corePlan.characters || []).map(c => `${c.name} (${c.role}): ${c.identity}`).join('; ')}
-
-Task:
-Generate EXACTLY episodes ${startEp} through ${endEp} (inclusive). Every episode from ${startEp} to ${endEp} MUST be generated.
-Each episode must follow the Golden Single-Episode Formula (Plot Continuation + Conflict Escalation + Value Exchange + Next-Episode Hook).
-All episode titles, synopses, sceneCore, and cliffhangerHook must be in the target language.
-
-Respond strictly in JSON matching the following schema:
-{
-  "episodes": [
-    {
-      "episodeNumber": ${startEp},
-      "title": "Episode ${startEp} Title",
-      "synopsis": "Concise episode plot synopsis",
-      "sceneCore": "Core dramatic experience",
-      "conflictEscalation": "Conflict escalation beat",
-      "cliffhangerHook": "End-of-episode cliffhanger hook",
-      "phase": "Act Phase",
-      "sceneCount": 3
-    }
-  ]
-}
-`;
+    const prompt = PromptLoader.render('skeleton/story_skeleton_chunk', {
+      startEp,
+      endEp,
+      totalEpisodes,
+      title: corePlan.title || 'Untitled',
+      genre: corePlan.genre || 'Drama',
+      country: country || corePlan.country || 'US',
+      languageName: languageInstruction || corePlan.language || 'English',
+      synopsis: corePlan.storyCore?.coreAttraction || 'Drama series',
+      storyCore: JSON.stringify(corePlan.storyCore || {}),
+      hiddenLine: corePlan.hiddenLine || '',
+      targetAudience: corePlan.targetAudience || '',
+      threeActsOverview,
+      majorReversalsOverview,
+      paywallHooksOverview,
+    });
 
     try {
       const rawText = await geminiClient.generateText({

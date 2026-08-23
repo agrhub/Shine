@@ -3,38 +3,60 @@ import { nanoid } from 'nanoid';
 import { IStorageAdapter } from './StorageAdapter.js';
 import { S3StorageAdapter } from './S3StorageAdapter.js';
 import { B2StorageAdapter } from './B2StorageAdapter.js';
+import { GCSStorageAdapter } from './GCSStorageAdapter.js';
 import { LocalStorageAdapter } from './LocalStorageAdapter.js';
-import { config, isStorageConfigured } from '@/config/env.js';
+import { config, EnvConfig, isStorageConfigured } from '@/config/env.js';
+import { getDatabaseProvider } from '~/database/index.js';
 
-export type StorageProviderType = 's3' | 'r2' | 'b2' | 'local';
+export type StorageProviderType = 's3' | 'r2' | 'b2' | 'gcs' | 'local';
 
 export class StorageFactory {
   private static adapters: Map<string, Promise<IStorageAdapter>> = new Map();
+
+  public static clearAdapters(): void {
+    this.adapters.clear();
+    GCSStorageAdapter.resetInstance();
+    S3StorageAdapter.resetInstance();
+    B2StorageAdapter.resetInstance();
+  }
 
   /**
    * Returns active storage adapter based on env variables or fallback.
    */
   public static async getActiveAdapter(): Promise<IStorageAdapter> {
     let provider: StorageProviderType = 'local';
-    const envProvider = (config.s3.provider || '').toLowerCase();
+    const db = await getDatabaseProvider();
+    const savedConfig = await db.getSystemSetting('studio_config');
+    const envProvider = (
+      savedConfig?.s3?.provider ||
+      savedConfig?.storage?.provider ||
+      config.s3.provider ||
+      ''
+    ).toLowerCase();
 
-    if (envProvider === 'b2') {
+    if (envProvider === 'gcs') {
+      provider = 'gcs';
+    } else if (envProvider === 'b2') {
       provider = 'b2';
-    } else if (envProvider === 'r2' || (config.s3.accountId && isStorageConfigured())) {
+    } else if (envProvider === 'r2') {
       provider = 'r2';
-    } else if (envProvider === 's3' || isStorageConfigured()) {
+    } else if (envProvider === 's3') {
+      provider = 's3';
+    } else if (config.s3.accountId && isStorageConfigured()) {
+      provider = 'r2';
+    } else if (isStorageConfigured()) {
       provider = 's3';
     } else {
       provider = 'local';
     }
 
-    return this.getAdapter(provider);
+    return this.getAdapter(provider, savedConfig);
   }
 
   /**
    * Returns singleton instance of requested adapter.
    */
-  public static async getAdapter(provider: StorageProviderType): Promise<IStorageAdapter> {
+  public static async getAdapter(provider: StorageProviderType, savedConfig?: any): Promise<IStorageAdapter> {
     if (this.adapters.has(provider)) {
       return this.adapters.get(provider)!;
     }
@@ -42,7 +64,15 @@ export class StorageFactory {
     const adapterPromise = (async () => {
       let adapter: IStorageAdapter;
 
-      if (provider === 'b2') {
+      if (provider === 'gcs') {
+        try {
+          adapter = GCSStorageAdapter.getInstance(savedConfig?.gcs);
+          console.log('[StorageFactory] Active Storage Provider: Google Cloud Storage (GCSStorageAdapter)');
+        } catch (e) {
+          console.warn('[StorageFactory] Google Cloud Storage config failed, falling back to Local Storage:', e);
+          adapter = LocalStorageAdapter.getInstance();
+        }
+      } else if (provider === 'b2') {
         try {
           adapter = B2StorageAdapter.getInstance();
           console.log('[StorageFactory] Active Storage Provider: Backblaze B2 (B2StorageAdapter)');
@@ -148,6 +178,22 @@ export class StorageFactory {
       key = decodeURIComponent(match[1]);
     }
     const adapter = await this.getActiveAdapter();
+    const exists = await adapter.exists?.(key);
+    if (exists === false) {
+      // Fallback: try local disk or B2 if file was uploaded prior to switching adapter
+      try {
+        const local = await this.getAdapter('local');
+        if (await local.exists?.(key)) {
+          return local.getFileStream(key);
+        }
+      } catch {}
+      try {
+        const b2 = await this.getAdapter('b2');
+        if (await b2.exists?.(key)) {
+          return b2.getFileStream(key);
+        }
+      } catch {}
+    }
     return adapter.getFileStream(key);
   }
 

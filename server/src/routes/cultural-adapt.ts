@@ -5,13 +5,13 @@ export const culturalAdaptRouter = Router();
 
 // POST /v1/ai/cultural-adapt — Localize script dialogue and cultural nuances
 culturalAdaptRouter.post('/cultural-adapt', async (req: Request, res: Response) => {
-  const { dialogue, targetCulture = 'US_ENTERTAINMENT', targetLanguage = 'en' } = req.body;
+  const { dialogue, targetCulture = 'US_ENTERTAINMENT', language = 'en' } = req.body;
 
   try {
     const prompt = `Adapt the following micro-drama dialogue for target market and culture:
 Original Dialogue: "${dialogue || 'He is an arrogant CEO.'}"
 Target Culture: ${targetCulture}
-Target Language: ${targetLanguage}
+Target Language: ${language}
 
 Respond in strict JSON:
 {
@@ -30,9 +30,9 @@ Respond in strict JSON:
       code: 200,
       data: {
         originalDialogue: dialogue || 'He is an arrogant CEO.',
-        adaptedDialogue: parsed.adaptedDialogue || (targetLanguage === 'vi' ? 'Hắn ta là một Tổng Tài bá đạo.' : 'He is a high-powered tech founder.'),
+        adaptedDialogue: parsed.adaptedDialogue || (language === 'vi' ? 'Hắn ta là một Tổng Tài bá đạo.' : 'He is a high-powered tech founder.'),
         targetCulture,
-        targetLanguage,
+        language,
         culturalNotes: parsed.culturalNotes || 'Adapted CEO trope to fit target market archetype.',
       },
       message: 'Script dialogue localized for target cultural market via Gemini',
@@ -43,9 +43,9 @@ Respond in strict JSON:
       code: 200,
       data: {
         originalDialogue: dialogue || 'He is an arrogant CEO.',
-        adaptedDialogue: targetLanguage === 'vi' ? 'Hắn ta là một Tổng Tài bá đạo.' : 'He is a high-powered tech founder.',
+        adaptedDialogue: language === 'vi' ? 'Hắn ta là một Tổng Tài bá đạo.' : 'He is a high-powered tech founder.',
         targetCulture,
-        targetLanguage,
+        language,
         culturalNotes: 'Adapted CEO trope to fit US tech founder archetype for maximum audience resonance.',
       },
       message: 'Script dialogue localized for target cultural market',

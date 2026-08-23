@@ -109,3 +109,53 @@ If the target cannot be matched, return: `Unable to recognize audit target. Plea
 3. **Wandering Narrative**: Introducing new subplots unrelated to the primary conflict.
 4. **Expository Monologues**: Characters stating their backstories directly to camera.
 5. **Flat Endings**: Episode ending with clean problem resolution without cliffhanger.
+
+---
+
+## Required Output Schema (JSON)
+
+Respond strictly in valid JSON format matching this exact schema:
+
+```json
+{
+  "overallScore": 98,
+  "isCompliant": true,
+  "categories": {
+    "violence": {
+      "label": "Violence / Gore",
+      "score": 98,
+      "status": "Passed",
+      "safe": true,
+      "notes": "No prohibited extreme violence detected"
+    },
+    "adultContent": {
+      "label": "Adult Content",
+      "score": 100,
+      "status": "Passed",
+      "safe": true,
+      "notes": "Compliant with platform commercial standards"
+    },
+    "culturalSensitivity": {
+      "label": "Cultural Sensitivity",
+      "score": 94,
+      "status": "Passed",
+      "safe": true,
+      "notes": "Harmonious with target market sensibilities"
+    },
+    "copyrightIP": {
+      "label": "Copyright / IP",
+      "score": 96,
+      "status": "Passed",
+      "safe": true,
+      "notes": "Original trope combination without trademark infringement"
+    }
+  },
+  "copyrightChecks": [
+    { "label": "Script Origin & Plagiarism", "status": "Passed", "safe": true },
+    { "label": "Generated Visual Assets", "status": "Passed", "safe": true },
+    { "label": "Audio & Foley Library", "status": "Passed", "safe": true }
+  ],
+  "identifiedIssues": [],
+  "recommendations": []
+}
+```

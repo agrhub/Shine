@@ -7,6 +7,13 @@ const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password_hash: String,
   name: String,
+  avatar: String,
+  role: { type: String, default: 'user' },
+  api_key: String,
+  api_key_rotated_at: String,
+  two_factor_enabled: { type: Boolean, default: false },
+  integrations: [mongoose.Schema.Types.Mixed],
+  connected_channels: [mongoose.Schema.Types.Mixed],
   tier: { type: String, default: 'FREE' },
   credits: { type: Number, default: 100 },
   theme: { type: String, default: 'dark' },
@@ -19,16 +26,19 @@ const SeriesSchema = new mongoose.Schema({
   user_id: { type: String, required: true },
   title: { type: String, required: true },
   genre: { type: String, required: true },
-  tone: String,
+  visual_style: String,
+  visual_style_prompt: String,
   synopsis: String,
   description: String,
-  visual_style: String,
   target_audience: String,
   country: String,
+  language: String,
   ratio: String,
   viral_hook: String,
   master_plan: { type: mongoose.Schema.Types.Mixed },
   characters: [mongoose.Schema.Types.Mixed],
+  locations: [mongoose.Schema.Types.Mixed],
+  props: [mongoose.Schema.Types.Mixed],
   episode_count: { type: Number, default: 20 },
   status: { type: String, default: 'DRAFT' },
   created_at: { type: Date, default: Date.now },
@@ -41,13 +51,18 @@ const EpisodeSchema = new mongoose.Schema({
   episode_number: { type: Number, required: true },
   title: String,
   synopsis: String,
+  screenplay: String,
   scene_core: String,
   conflict_escalation: String,
   phase: String,
   scenes: [mongoose.Schema.Types.Mixed],
+  locations: [mongoose.Schema.Types.Mixed],
+  props: [mongoose.Schema.Types.Mixed],
   languageTracks: [mongoose.Schema.Types.Mixed],
   activeLanguageCode: { type: String, default: 'vi-VN' },
   script: String,
+  thumbnail_url: String,
+  cover_image: String,
   duration: { type: Number, default: 90 },
   status: { type: String, default: 'DRAFT' },
   created_at: { type: Date, default: Date.now },
@@ -332,7 +347,15 @@ export class MongoDBProvider implements IDatabaseProvider {
 
   async upsertFlowAccount(account: FlowAccountEntity): Promise<FlowAccountEntity> {
     if (mongoose.connection.readyState < 1) return account;
-    const updated = await FlowAccountModel.findOneAndUpdate({ email: account.email }, account, { upsert: true, returnDocument: 'after' }).lean();
+    const { id, ...updateFields } = account;
+    const updated = await FlowAccountModel.findOneAndUpdate(
+      { email: account.email },
+      {
+        $set: updateFields,
+        $setOnInsert: { id: id || `flow_${Date.now()}` },
+      },
+      { upsert: true, returnDocument: 'after' }
+    ).lean();
     return updated as any;
   }
 

@@ -23,7 +23,7 @@ graph TD
 
 ## 2. Content Model
 
-The core hierarchy of DramaFlowAI maps directly to the serialized short drama format.
+The core hierarchy of Shine maps directly to the serialized short drama format.
 
 ```mermaid
 erDiagram

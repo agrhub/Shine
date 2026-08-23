@@ -36,11 +36,11 @@ export class CaptchaService {
         } catch {}
 
         const apiKey = captchaConfig.apiKey || '';
-        const baseUrl = (captchaConfig.baseUrl || 'https://api.capsolver.com').replace(/\/$/, '');
-        let method = captchaConfig.method || 'capsolver';
+        const baseUrl = (captchaConfig.baseUrl).replace(/\/$/, '');
+        let method = captchaConfig.method;
 
         // Auto-detect CapSolver vs YesCaptcha vs others based on key prefix or baseUrl
-        if (apiKey.startsWith('CAP-') || baseUrl.includes('capsolver.com')) {
+        if (baseUrl.includes('capsolver.com')) {
             method = 'capsolver';
         } else if (baseUrl.includes('yescaptcha.com')) {
             method = 'yescaptcha';
@@ -89,7 +89,7 @@ export class CaptchaService {
             return null;
         }
 
-        const baseUrl = (config.baseUrl || 'https://api.yescaptcha.com').replace(/\/$/, '');
+        const baseUrl = (config.baseUrl).replace(/\/$/, '');
         const projectUrl = `https://labs.google/fx/tools/flow/project/${options.projectId}`;
 
         try {

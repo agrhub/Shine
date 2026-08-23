@@ -277,7 +277,7 @@ router.post('/feedback-to-script', requireAuth, async (req: Request, res: Respon
     const generatedResult = await directorAgent.runPipeline({
       title: series.title,
       genre: series.genre,
-      tone: series.tone || 'Dramatic & High-Stakes',
+      visualStyle: series.visual_style || 'realistic',
       synopsis: augmentedSynopsis,
       episodeNumber: targetEpisodeNumber || 2,
       totalEpisodes: series.episode_count || 20,

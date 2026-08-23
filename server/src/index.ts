@@ -30,6 +30,7 @@ import { adminRouter } from './routes/admin';
 import { viralCoverRouter } from './routes/viral-cover';
 import socialAuthRouter from './routes/social-auth';
 import engagementRouter from './routes/engagement';
+import { visualStylesRouter } from './routes/visualStyles';
 import { assetsRouter } from './routes/assets';
 import { PatchSyncService } from './realtime/PatchSyncService';
 import { flowSyncService } from './integrations/ai/flow/FlowSyncService';
@@ -44,12 +45,14 @@ const PORT = process.env.PORT || 3001;
 getDatabaseProvider().catch((err) => console.warn('[Database] Provider initialization warning:', err));
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // ─── API Routes ──────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/series', seriesRoutes);
 app.use('/api/episodes', episodesRouter);
+app.use('/api/visual-styles', visualStylesRouter);
 app.use('/api/admin/flow-accounts', flowAccountsRoutes);
 app.use('/api/contact', contactRoutes);   // FR-008: Contact & Support
 app.use('/api/ai', aiRouter);              // FR-009 to FR-015, FR-074: AI Script & Trends

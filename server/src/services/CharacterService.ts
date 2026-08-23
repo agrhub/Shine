@@ -1,6 +1,8 @@
 import { aiProviderRouter } from '@/integrations/ai/router/AIProviderRouter.js';
 import { StorageFactory } from '@/services/storage/StorageFactory.js';
 import { Logger } from '@/utils/logger.js';
+import { getVisualStylePrompt } from '../constants/VisualStyles.js';
+import { PromptLoader } from '@/utils/PromptLoader.js';
 
 export interface CharacterPersona {
   id: string;
@@ -25,27 +27,39 @@ export interface CharacterPersona {
 }
 
 export class CharacterService {
-  private getAnchorDefinitions(charName: string, desc: string = '', age?: number, gender?: string, wardrobeDesc?: string) {
+  private getAnchorDefinitions(charName: string, desc: string = '', age?: number, gender?: string, wardrobeDesc?: string, visualStyle?: string, visualStylePrompt?: string) {
     const ageTag = age ? `${age}-year-old ` : '';
     const genderTag = gender && gender !== 'neutral' ? `${gender} ` : '';
     const charTag = `${ageTag}${genderTag}${charName}`;
-    const wardrobeTag = wardrobeDesc ? `wearing ${wardrobeDesc}` : 'wearing signature outfit';
+    const wardrobeTag = wardrobeDesc ? `wearing ${wardrobeDesc}` : 'wearing signature character costume';
+    const styleModifier = visualStylePrompt || getVisualStylePrompt(visualStyle);
+
+    const makePrompt = (angleDescription: string, framingDirectives: string) => {
+      return PromptLoader.render('character/facial_anchor', {
+        angleDescription,
+        characterTag: charTag,
+        wardrobeTag,
+        description: desc,
+        visualStyle: styleModifier,
+        framingDirectives,
+      });
+    };
 
     return [
-      { id: 'anc-1', name: `${charName} Frontal Primary View`, landmarkType: 'front', matchScore: 99.2, prompt: `Facial consistency anchor, front view portrait of ${charTag}, ${wardrobeTag}, ${desc}, perfectly centered, sharp eyes, age-accurate skin texture, studio lighting, highly detailed 8k cinematic photorealistic portrait.` },
-      { id: 'anc-2', name: `${charName} 45-Degree Left Profile`, landmarkType: 'quarter_left', matchScore: 98.4, prompt: `Facial consistency anchor, 45-degree angle turned left portrait of ${charTag}, ${wardrobeTag}, ${desc}, consistent facial bone structure, cinematic key lighting, photorealistic 8k.` },
-      { id: 'anc-3', name: `${charName} 45-Degree Right Profile`, landmarkType: 'quarter_right', matchScore: 98.1, prompt: `Facial consistency anchor, 45-degree angle turned right portrait of ${charTag}, ${wardrobeTag}, ${desc}, consistent facial features, rim lighting, photorealistic 8k.` },
-      { id: 'anc-4', name: `${charName} Profile Left (90 deg)`, landmarkType: 'profile_left', matchScore: 97.5, prompt: `Facial consistency anchor, direct 90-degree side profile left view of ${charTag}, ${wardrobeTag}, ${desc}, sharp jawline and nose profile, cinematic studio lighting, photorealistic 8k.` },
-      { id: 'anc-5', name: `${charName} Profile Right (90 deg)`, landmarkType: 'profile_right', matchScore: 97.3, prompt: `Facial consistency anchor, direct 90-degree side profile right view of ${charTag}, ${wardrobeTag}, ${desc}, sharp jawline and facial symmetry, photorealistic 8k.` },
-      { id: 'anc-6', name: `${charName} Low Dramatic Angle`, landmarkType: 'low_angle', matchScore: 96.8, prompt: `Facial consistency anchor, dramatic low angle looking up at ${charTag}, ${wardrobeTag}, ${desc}, heroic confident framing, dramatic cinematic shadows, photorealistic 8k.` },
-      { id: 'anc-7', name: `${charName} High Tense Angle`, landmarkType: 'high_angle', matchScore: 96.4, prompt: `Facial consistency anchor, high angle looking down at ${charTag}, ${wardrobeTag}, ${desc}, cinematic suspense mood, sharp focal depth, photorealistic 8k.` },
-      { id: 'anc-8', name: `${charName} Cinematic Dramatic Close-up`, landmarkType: 'dramatic_close_up', matchScore: 98.9, prompt: `Facial consistency anchor, ultra photorealistic cinematic close-up emotive portrait of ${charTag}, ${wardrobeTag}, ${desc}, intense focused dramatic expression, realistic human skin pores, sharp eye reflection, natural cinematic lighting, 8k photorealistic, identical character face to frontal portrait.` },
+      { id: 'anc-1', name: `${charName} Frontal Primary View`, landmarkType: 'front', matchScore: 99.2, prompt: makePrompt('front view', 'centered framing, sharp eyes') },
+      { id: 'anc-2', name: `${charName} 45-Degree Left Profile`, landmarkType: 'quarter_left', matchScore: 98.4, prompt: makePrompt('45-degree angle turned left', 'consistent facial structure') },
+      { id: 'anc-3', name: `${charName} 45-Degree Right Profile`, landmarkType: 'quarter_right', matchScore: 98.1, prompt: makePrompt('45-degree angle turned right', 'consistent facial features') },
+      { id: 'anc-4', name: `${charName} Profile Left (90 deg)`, landmarkType: 'profile_left', matchScore: 97.5, prompt: makePrompt('direct 90-degree side profile left view', 'sharp jawline and nose profile') },
+      { id: 'anc-5', name: `${charName} Profile Right (90 deg)`, landmarkType: 'profile_right', matchScore: 97.3, prompt: makePrompt('direct 90-degree side profile right view', 'sharp jawline and profile symmetry') },
+      { id: 'anc-6', name: `${charName} Low Dramatic Angle`, landmarkType: 'low_angle', matchScore: 96.8, prompt: makePrompt('dramatic low angle looking up at', 'dynamic framing') },
+      { id: 'anc-7', name: `${charName} High Tense Angle`, landmarkType: 'high_angle', matchScore: 96.4, prompt: makePrompt('high angle looking down at', 'dramatic mood, sharp focal depth') },
+      { id: 'anc-8', name: `${charName} Cinematic Dramatic Close-up`, landmarkType: 'dramatic_close_up', matchScore: 98.9, prompt: makePrompt('close-up emotive', 'intense focused dramatic expression, identical character face to frontal portrait') },
     ];
   }
 
-  async extractFacialAnchors(characterId: string, charName: string, desc: string = '', age?: number, gender?: string, wardrobeDesc?: string, existingFrontalUrl?: string): Promise<CharacterPersona['facialAnchors']> {
+  async extractFacialAnchors(characterId: string, charName: string, desc: string = '', age?: number, gender?: string, wardrobeDesc?: string, existingFrontalUrl?: string, visualStyle?: string, visualStylePrompt?: string): Promise<CharacterPersona['facialAnchors']> {
     const loraModelId = `lora_${charName.toLowerCase().replace(/\s+/g, '_')}_v1`;
-    const anchorDefinitions = this.getAnchorDefinitions(charName, desc, age, gender, wardrobeDesc);
+    const anchorDefinitions = this.getAnchorDefinitions(charName, desc, age, gender, wardrobeDesc, visualStyle, visualStylePrompt);
 
     const generatedAnchors: any[] = new Array(anchorDefinitions.length);
 
@@ -157,11 +171,11 @@ export class CharacterService {
     };
   }
 
-  async extractSingleAnchor(characterId: string, anchorId: string, charName: string, desc: string = '', age?: number, gender?: string, wardrobeDesc?: string, referenceImageUrl?: string) {
-    const anchorDefinitions = this.getAnchorDefinitions(charName, desc, age, gender, wardrobeDesc);
+  async extractSingleAnchor(characterId: string, anchorId: string, charName: string, desc: string = '', age?: number, gender?: string, wardrobeDesc?: string, referenceImageUrl?: string, visualStyle?: string, visualStylePrompt?: string) {
+    const anchorDefinitions = this.getAnchorDefinitions(charName, desc, age, gender, wardrobeDesc, visualStyle, visualStylePrompt);
     const targetDef = anchorDefinitions.find(a => a.id === anchorId) || anchorDefinitions[0];
 
-    Logger.info(`[CharacterService] Re-generating single anchor "${targetDef.name}" (${anchorId}) for ${charName} with frontal reference: ${referenceImageUrl || 'none'}...`);
+    Logger.info(`[CharacterService] Re-generating single anchor "${targetDef.name}" (${anchorId}) for ${charName} in style "${visualStyle || 'default'}" with frontal reference: ${referenceImageUrl || 'none'}...`);
 
     const refPool = referenceImageUrl ? [referenceImageUrl] : [];
     const consistentPrompt = referenceImageUrl

@@ -128,7 +128,7 @@ Timestamps must be in microseconds (1s = 1,000,000us).
             id: `clip_trans_glitch_${now}`,
             type: 'Transition',
             name: 'Glitch Reveal',
-            transitionKey: 'glitch',
+            transitionKey: 'glitchMemories',
             timing: { display: { from: 5000000, to: 6000000 }, duration: 1000000 },
           },
         },

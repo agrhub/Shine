@@ -171,51 +171,6 @@ export const EnvConfig = {
   get geminiMaxTokens() {
     return Number(process.env.GEMINI_MAX_TOKENS) || 8192;
   },
-  get parallelApiKey() {
-    return process.env.PARALLEL_API_KEY || '';
-  },
-  get parallelConcurrency() {
-    return Number(process.env.PARALLEL_CONCURRENCY) || 8;
-  },
-  get parallelEndpoint() {
-    return process.env.PARALLEL_ENDPOINT || 'https://api.parallel.ai/v1';
-  },
-  get clickhouse() {
-    return {
-      host: process.env.CLICKHOUSE_HOST || 'oq0lfoamri.us-east1.gcp.clickhouse.cloud',
-      port: Number(process.env.CLICKHOUSE_PORT) || 8443,
-      user: process.env.CLICKHOUSE_USER || 'default',
-      password: process.env.CLICKHOUSE_PASSWORD || '',
-      database: process.env.CLICKHOUSE_DB || 'microcine',
-    };
-  },
-  get grafana() {
-    return {
-      url: process.env.GRAFANA_URL || 'https://bronzeholly2284.grafana.net',
-      mcpEndpoint: process.env.GRAFANA_MCP_ENDPOINT || 'https://mcp.grafana.com/mcp',
-      apiKey: process.env.GRAFANA_API_KEY || '',
-    };
-  },
-  get pexels() {
-    return {
-      url: process.env.PEXELS_URL || 'https://api.pexels.com',
-      apiKey: process.env.PEXELS_API_KEY || '',
-    };
-  },
-  get deepgram() {
-    return {
-      url: process.env.DEEPGRAM_URL || 'https://api.deepgram.com/v1',
-      apiKey: process.env.DEEPGRAM_API_KEY || '',
-      model: process.env.DEEPGRAM_MODEL || 'deepgram-aura',
-    };
-  },
-  get elevenlabs() {
-    return {
-      url: process.env.ELEVENLABS_URL || 'https://api.elevenlabs.io',
-      apiKey: process.env.ELEVENLABS_API_KEY || '',
-      model: process.env.ELEVENLABS_MODEL || 'eleven_multilingual_v2',
-    };
-  },
   get smtp() {
     const host = process.env.SMTP_HOST || 'smtp.example.com';
     const port = Number(process.env.SMTP_PORT) || 465;
@@ -239,9 +194,9 @@ export const EnvConfig = {
   },
   get captcha() {
     return {
-      method: process.env.CAPTCHA_METHOD || 'yescaptcha',
-      apiKey: process.env.YESCAPTCHA_API_KEY || process.env.CAPTCHA_API_KEY || '',
-      baseUrl: process.env.CAPTCHA_BASE_URL || 'https://api.yescaptcha.com',
+      method: process.env.CAPTCHA_METHOD || 'capsolver',
+      apiKey: process.env.CAPTCHA_API_KEY || '',
+      baseUrl: process.env.CAPTCHA_BASE_URL || 'https://api.capsolver.com',
     };
   },
   get defaultCreditRates() {
@@ -274,23 +229,28 @@ export const EnvConfig = {
       google: {
         clientId: process.env.GOOGLE_CLIENT_ID || '',
         clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-        redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3001/api/v1/auth/google/callback',
+        redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3001/api/auth/sso/callback/google',
       },
       youtube: {
         clientId: process.env.YOUTUBE_CLIENT_ID || '',
         clientSecret: process.env.YOUTUBE_CLIENT_SECRET || '',
-        redirectUri: process.env.YOUTUBE_REDIRECT_URI || 'http://localhost:3001/api/v1/auth/youtube/callback',
+        redirectUri: process.env.YOUTUBE_REDIRECT_URI || 'http://localhost:3001/api/auth/oauth/callback/youtube',
       },
       facebook: {
         clientId: process.env.FACEBOOK_CLIENT_ID || '',
         clientSecret: process.env.FACEBOOK_CLIENT_SECRET || '',
-        redirectUri: process.env.FACEBOOK_REDIRECT_URI || 'http://localhost:3001/api/v1/auth/facebook/callback',
+        redirectUri: process.env.FACEBOOK_REDIRECT_URI || 'http://localhost:3001/api/auth/oauth/callback/facebook',
       },
       tiktok: {
         clientId: process.env.TIKTOK_CLIENT_ID || '',
         clientSecret: process.env.TIKTOK_CLIENT_SECRET || '',
-        redirectUri: process.env.TIKTOK_REDIRECT_URI || 'http://localhost:3001/api/v1/auth/tiktok/callback',
+        redirectUri: process.env.TIKTOK_REDIRECT_URI || 'http://localhost:3001/api/auth/oauth/callback/tiktok',
       },
+    };
+  },
+  get video() {
+    return {
+      generateStartEndFrame: process.env.GENERATE_START_END_FRAME === 'true' || false,
     };
   },
   get notifications() {
@@ -300,33 +260,65 @@ export const EnvConfig = {
       emailAlerts: true,
     };
   },
-  get ibmConfluent() {
+  get grafana() {
     return {
-      bootstrapServers: process.env.IBM_BOOTSTRAP_SERVERS || 'pkc-619z3.us-east1.gcp.confluent.cloud:9092',
-      restEndpoint: process.env.IBM_REST_ENDPOINT || 'https://pkc-619z3.us-east1.gcp.confluent.cloud:443',
-      apiKey: process.env.IBM_API_KEY || '',
+      url: process.env.GRAFANA_URL || 'https://bronzeholly2284.grafana.net',
+      mcpEndpoint: process.env.GRAFANA_MCP_ENDPOINT || 'https://mcp.grafana.com/mcp',
+      apiKey: process.env.GRAFANA_API_KEY || '',
     };
   },
-  get replit() {
+  get elevenlabs() {
     return {
-      apiKey: process.env.REPLIT_API_KEY || '',
+      url: process.env.ELEVENLABS_URL || 'https://api.elevenlabs.io',
+      apiKey: process.env.ELEVENLABS_API_KEY || '',
+      model: process.env.ELEVENLABS_MODEL || 'eleven_multilingual_v2',
+    };
+  },
+  get pexels() {
+    return {
+      url: process.env.PEXELS_URL || 'https://api.pexels.com',
+      apiKey: process.env.PEXELS_API_KEY || '',
     };
   },
   get pixabay() {
     return {
       apiKey: process.env.PIXABAY_API_KEY || '',
+      endpoint: process.env.PIXABAY_URL || 'https://pixabay.com/api',
     };
   },
   get freesound() {
     return {
       apiKey: process.env.FREESOUND_API_KEY || '',
       clientId: process.env.FREESOUND_CLIENT_ID || '',
+      endpoint: process.env.FREESOUND_URL || 'https://freesound.org/apiv2/search/text',
     };
   },
   get parallel() {
     return {
       apiKey: process.env.PARALLEL_API_KEY || '',
-      endpoint: process.env.PARALLEL_MCP_SERVER || 'https://task-mcp.parallel.ai/v1',
+      endpoint: process.env.PARALLEL_URL || 'https://search.parallel.ai/mcp',
+    };
+  },
+  get gcs() {
+    return {
+      bucketName: process.env.GCS_BUCKET_NAME || 'shine-studio-media',
+      projectId: process.env.GOOGLE_CLOUD_PROJECT || '',
+      keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS || '',
+      publicDomain: process.env.GCS_PUBLIC_DOMAIN || '',
+    };
+  },
+  get pubsub() {
+    return {
+      topicRender: process.env.PUBSUB_TOPIC_RENDER || 'shine-render-jobs',
+      subscriptionRender: process.env.PUBSUB_SUBSCRIPTION_RENDER || 'shine-render-sub',
+      projectId: process.env.GOOGLE_CLOUD_PROJECT || '',
+    };
+  },
+  get cloudRun() {
+    return {
+      renderUrl: process.env.CLOUD_RUN_RENDER_URL || '',
+      serviceName: process.env.CLOUD_RUN_SERVICE_NAME || 'shine-render-worker',
+      region: process.env.CLOUD_RUN_REGION || 'us-central1',
     };
   },
   s3: storageConfig,

@@ -1,0 +1,1 @@
+Facial consistency anchor, {{angleDescription}} portrait of {{characterTag}}, {{wardrobeTag}}, {{description}}, visual style: {{visualStyle}}, {{framingDirectives}}, character continuity reference portrait.

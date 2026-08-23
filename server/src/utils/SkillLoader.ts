@@ -26,3 +26,26 @@ export function loadSkill(skillFileName: string): string {
   console.warn(`[SkillLoader] Skill file not found: ${normalizedName}`);
   return '';
 }
+
+/**
+ * Load a skill file and interpolate `{{variable}}` and `{{#if var}}...{{/if}}` blocks.
+ * Variables not found in the map are replaced with an empty string.
+ */
+export function renderSkill(skillFileName: string, variables: Record<string, any> = {}): string {
+  let template = loadSkill(skillFileName);
+  if (!template) return '';
+
+  // 1. Process conditional blocks: {{#if varName}}...{{/if}}
+  template = template.replace(/\{\{#if\s+([a-zA-Z0-9_]+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (_, varName, inner) => {
+    const val = variables[varName];
+    return (val && (!Array.isArray(val) || val.length > 0) && val !== '') ? inner : '';
+  });
+
+  // 2. Process variable placeholders: {{varName}}
+  template = template.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (match, varName) => {
+    const val = variables[varName];
+    return (val !== undefined && val !== null) ? String(val) : '';
+  });
+
+  return template.trim();
+}

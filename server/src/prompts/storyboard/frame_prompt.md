@@ -1,0 +1,1 @@
+{{frameVisual}}. Camera motion: {{frameMotion}}.{{#if assetContext}} Featuring: {{assetContext}}.{{/if}} Visual style: {{visualStyle}}. Clean full-frame illustration, absolutely no text, no subtitles, no watermark, no captions, no typography, no title cards, no UI overlays.

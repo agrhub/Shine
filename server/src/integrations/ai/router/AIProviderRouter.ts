@@ -2,7 +2,7 @@ import axios from 'axios';
 import { geminiClient, GEMINI_SUPPORTED_VOICES } from '../gemini/GeminiClient.js';
 import { flowAdapter } from '../flow/FlowAdapter.js';
 import { getDatabaseProvider, AIAccountStatus, AIAccountType } from '@/database/index.js';
-import { Logger } from '../../../utils/logger.js';
+import { Logger } from '@/utils/logger.js';
 import { EnvConfig } from '@/config/env.js';
 
 export interface RouteGenerationOptions {
@@ -16,7 +16,8 @@ export interface RouteGenerationOptions {
   systemInstruction?: string;
   characterReferences?: string[];
   imageInputs?: string[];
-  backgroundImageId?: string;
+  imageStart?: string;
+  imageEnd?: string;
 }
 
 export class AIProviderRouter {
@@ -92,15 +93,15 @@ export class AIProviderRouter {
       }
 
       // Fallback to GeminiClient
-      Logger.info(`[AIProviderRouter] Generating Image via Gemini Imagen (${options.model})`);
-      const refImg = options.imageInputs?.[0] || options.characterReferences?.[0];
-      const imageResult = await geminiClient._generateImage(
+      Logger.info(`[AIProviderRouter] Generating Image via GeminiClient (${options.model})`);
+      const imageResult = await geminiClient.generateImage(
         options.prompt,
         String(options.model),
         {
           aspectRatio: options.aspectRatio || '9:16',
           systemPrompt: options.systemInstruction,
-          image: refImg,
+          imageInputs: options.imageInputs,
+          characterReferences: options.characterReferences,
         }
       );
 
@@ -109,7 +110,7 @@ export class AIProviderRouter {
       }
 
       return {
-        provider: 'Gemini (Imagen 3)',
+        provider: 'Gemini',
         url: imageResult.url,
         mimeType: imageResult.mimeType || 'image/png',
       };
@@ -143,8 +144,9 @@ export class AIProviderRouter {
               String(options.model),
               {
                 aspectRatio: options.aspectRatio === '1:1' ? '1:1' : options.aspectRatio === '16:9' ? '16:9' : '9:16',
-                characterReferences: options.characterReferences || [],
-                imageInputs: options.imageInputs || (options.backgroundImageId ? [options.backgroundImageId] : []),
+                characterReferences: options.imageEnd ? [] : (options.characterReferences || []),//ingore reference images if start + end frame are provided
+                imageStart: options.imageStart,
+                imageEnd: options.imageEnd,
               }
             );
 
@@ -166,6 +168,9 @@ export class AIProviderRouter {
       Logger.info(`[AIProviderRouter] Generating Video via GeminiClient (${options.model})`);
       const videoResult: any = await geminiClient.generateVideo(options.prompt, options.model, {
         aspectRatio: options.aspectRatio === '1:1' ? '1:1' : options.aspectRatio === '16:9' ? '16:9' : '9:16',
+        characterReferences: options.imageEnd ? [] : (options.characterReferences || []),//ingore reference images if start + end frame are provided
+        imageStart: options.imageStart,
+        imageEnd: options.imageEnd,
       });
 
       return {
@@ -337,7 +342,7 @@ export class AIProviderRouter {
     };
   }
 
-  async generateVideo(prompt: string, options?: { aspectRatio?: '9:16' | '1:1' | '16:9'; model?: string; characterReferences?: string[]; imageInputs?: string[]; backgroundImageId?: string }): Promise<{ url: string; provider: string }> {
+  async generateVideo(prompt: string, options?: { aspectRatio?: '9:16' | '1:1' | '16:9'; model?: string; characterReferences?: string[]; imageInputs?: string[]; backgroundImageId?: string; startFrameUrl?: string; endFrameUrl?: string; imageStart?: string; imageEnd?: string }): Promise<{ url: string; provider: string }> {
     const db = await getDatabaseProvider();
     const studioConfig: any = (await db.getSystemSetting('studio_config')) || {};
     const targetModel = options?.model || studioConfig?.gemini?.videoModel || EnvConfig.geminiModelVideo;
@@ -348,7 +353,8 @@ export class AIProviderRouter {
       model: targetModel,
       characterReferences: options?.characterReferences,
       imageInputs: options?.imageInputs,
-      backgroundImageId: options?.backgroundImageId,
+      imageStart: options?.imageStart,
+      imageEnd: options?.imageEnd,
     });
     return {
       url: res.url || '',

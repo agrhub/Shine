@@ -3,6 +3,7 @@ import { emailService } from '@/services/EmailService.js';
 import { loadSkill } from '@/utils/SkillLoader.js';
 import axios from 'axios';
 import { geminiClient } from '../ai/gemini/GeminiClient';
+import { EnvConfig } from '~/config/env';
 
 export interface TrendTopic {
   id?: string;
@@ -33,65 +34,15 @@ const LANGUAGE_NAMES: Record<string, string> = {
   id: 'Indonesian (Bahasa Indonesia)',
 };
 
-/**
- * 1. DYNAMIC QUERY GENERATOR
- */
-// async function generateNativeQuery(countryName) {
-//   const prompt = `
-// You are an expert in global social media trends and short-form video platforms.
-// Target Country: "${countryName}"
-
-// Task:
-// Generate a single search query string in the NATIVE language of "${countryName}" optimized to find current viral drama trends, social media controversies, or popular short-form drama tropes (TikTok, Reels, Douyin, or local platforms).
-
-// Requirements:
-// 1. Output ONLY a valid JSON object.
-// 2. Include native slang/terms for "viral", "short drama", "conflict/scandal", and "hot trend".
-// 3. Do not include markdown codeblocks or explanation.
-
-// JSON Format:
-// {
-//   "nativeLanguage": "Language name",
-//   "nativeQuery": "Native search string here"
-// }
-// `;
-
-// async function fetchParallelTrends(query) {
-//   try {
-//     const response = await axios.post(
-//       SEARCH_MCP_URL,
-//       {
-//         jsonrpc: '2.0',
-//         id: `req-${Date.now()}`,
-//         method: 'tools/call',
-//         params: {
-//           name: 'web_search',
-//           arguments: { query }
-//         }
-//       },
-//       {
-//         headers: {
-//           'Content-Type': 'application/json',
-//           ...(API_KEY && { Authorization: `Bearer ${API_KEY}` })
-//         }
-//       }
-//     );
-//     return response.data;
-//   } catch (error: any) {
-//     console.error('Parallel MCP Error:', error.response?.data || error.message);
-//     return null;
-//   }
-// };
-
 export class ParallelMCPClient {
   private isConnected = false;
   private mcpEndpoint: string;
   private apiKey: string;
 
   constructor() {
-    const rawEndpoint = process.env.PARALLEL_MCP_SERVER || process.env.PARALLEL_SERVER_ENDPOINT || 'https://search.parallel.ai/mcp';
+    const rawEndpoint = EnvConfig.parallel.endpoint;
     this.mcpEndpoint = rawEndpoint.includes('task-mcp') ? 'https://search.parallel.ai/mcp' : rawEndpoint;
-    this.apiKey = process.env.PARALLEL_API_KEY || '';
+    this.apiKey = EnvConfig.parallel.apiKey;
   }
 
   public async connect() {
@@ -260,116 +211,6 @@ Respond strictly in JSON matching the TrendTopicOutput array schema:
     const trends = await this.processCountryDramaSkill(cleanRegion, languageName, queryTrend.nativeQuery, mcpData);
     Logger.info(`[ParallelMCP] Found ${trends?.length} real-time trending topics for ${cleanRegion} in ${languageName}`);
     return trends;
-
-    // const topics: TrendTopic[] = [];
-    // for (const item of trends) {
-
-
-
-    //   if (item.type === 'text' && item.text) {
-    //     try {
-    //       const parsed = JSON.parse(item.text);
-    //       const results = parsed.results || (Array.isArray(parsed) ? parsed : []);
-    //       for (let i = 0; i < results.length && topics.length < 6; i++) {
-    //         const res = results[i];
-    //         const excerptsText = (res.excerpts || []).join(' ');
-    //         topics.push({
-    //           id: `${cleanRegion.toLowerCase()}_${i + 1}`,
-    //           topic: res.title ? res.title.replace(/^#+\s*/, '').slice(0, 80) : `Viral Drama ${i + 1}`,
-    //           viralScore: 98 - i * 3,
-    //           platform: 'TikTok / Reels / ReelShort',
-    //           region: cleanRegion,
-    //           language: languageName,
-    //           tropes: [res.title?.slice(0, 40) || 'Revenge / Status Inversion'],
-    //           description: excerptsText ? excerptsText.slice(0, 180) + '...' : `Trending micro-drama narrative in ${cleanRegion}`,
-    //           hashtagVelocity: `+${480 - i * 30}% (Weekly Surge)`,
-    //           competitorHook: `3-second opening hook for ${res.title || 'trending series'}`,
-    //         });
-    //       }
-    //     } catch {
-    //       // Raw text response
-    //     }
-    //   }
-    // }
-
-    // Logger.info(`[ParallelMCP] Found ${topics.length} real-time trending topics for ${cleanRegion} in ${languageName}`);
-    // return topics;
-
-    // Logger.info(`[ParallelMCP] Scanning real-time viral trends for region: ${cleanRegion}, language: ${languageName}`);
-
-    // // Build language-specific search queries
-    // const searchQueries: string[] = [
-    //   `viral drama trends hot tiktok douyin micro drama conflict ideas in ${cleanRegion} with language ${languageName}`,
-    // ];
-
-    // if (cleanLang === 'vi') {
-    //   searchQueries.unshift(`xu hướng phim ngắn micro drama hot nhất thị trường ${cleanRegion} 2026`);
-    // } else if (cleanLang === 'zh' || cleanLang === 'zh-cn' || cleanLang === 'zh-tw') {
-    //   searchQueries.unshift(`爆款微短剧热门题材 逆袭 穿越 豪门 ${cleanRegion}`);
-    // } else if (cleanLang === 'jp' || cleanLang === 'ja') {
-    //   searchQueries.unshift(`ショートドラマ トレンド 人気マイクロドラマ ${cleanRegion}`);
-    // } else if (cleanLang === 'es') {
-    //   searchQueries.unshift(`tendencias micro drama novelas cortas verticales ${cleanRegion}`);
-    // }
-
-    // try {
-    //   const response = await axios.post(
-    //     this.mcpEndpoint,
-    //     {
-    //       jsonrpc: '2.0',
-    //       id: Date.now(),
-    //       method: 'tools/call',
-    //       params: {
-    //         name: 'web_search',
-    //         arguments: {
-    //           // objective: `Following Trend Radar skill guidelines (focus on 3 densities, high-converting tropes, viral themes, and 3-second competitor hooks), discover real-time viral vertical short drama storylines, trending tropes, competitor hooks, and viewer rankings in ${cleanRegion} in ${languageName} language. Don't response the search results. Only response the micro drama trend topics`,
-    //           prompt: `Following Trend Radar skill guidelines: ${trendSkill}. (focus on 3 densities, high-converting tropes, viral themes, and 3-second competitor hooks)`,
-    //           search_queries: searchQueries,
-    //         },
-    //       },
-    //     },
-    //     {
-    //       headers: this.getHeaders(),
-    //       timeout: 15000,
-    //     }
-    //   );
-
-    //   const content = response.data?.result?.content || [];
-    //   const topics: TrendTopic[] = [];
-
-    //   for (const item of content) {
-    //     if (item.type === 'text' && item.text) {
-    //       try {
-    //         const parsed = JSON.parse(item.text);
-    //         const results = parsed.results || (Array.isArray(parsed) ? parsed : []);
-    //         for (let i = 0; i < results.length && topics.length < 6; i++) {
-    //           const res = results[i];
-    //           const excerptsText = (res.excerpts || []).join(' ');
-    //           topics.push({
-    //             id: `${cleanRegion.toLowerCase()}_${i + 1}`,
-    //             topic: res.title ? res.title.replace(/^#+\s*/, '').slice(0, 80) : `Viral Drama ${i + 1}`,
-    //             viralScore: 98 - i * 3,
-    //             platform: 'TikTok / Reels / ReelShort',
-    //             region: cleanRegion,
-    //             language: languageName,
-    //             tropes: [res.title?.slice(0, 40) || 'Revenge / Status Inversion'],
-    //             description: excerptsText ? excerptsText.slice(0, 180) + '...' : `Trending micro-drama narrative in ${cleanRegion}`,
-    //             hashtagVelocity: `+${480 - i * 30}% (Weekly Surge)`,
-    //             competitorHook: `3-second opening hook for ${res.title || 'trending series'}`,
-    //           });
-    //         }
-    //       } catch {
-    //         // Raw text response
-    //       }
-    //     }
-    //   }
-
-    //   Logger.info(`[ParallelMCP] Found ${topics.length} real-time trending topics for ${cleanRegion} in ${languageName}`);
-    //   return topics;
-    // } catch (error: any) {
-    //   Logger.error(`[ParallelMCP] Error calling MCP server for viral trends: ${error.message}`);
-    //   throw new Error(`Failed to fetch viral trends from Parallel MCP: ${error.message}`);
-    // }
   }
 
   public async checkCopyrightSafety(content: string, contentType: 'script' | 'audio' | 'video'): Promise<{ safe: boolean; issues: string[] }> {

@@ -442,7 +442,7 @@ Dynamic Cliffhanger Hook Engine (Proposal 3): Automatically generates and inject
   {
     "episodeId": "ep_01",
     "climaxSceneId": "scene_15",
-    "transitionKey": "glitch",
+    "transitionKey": "glitchMemories",
     "stingerType": "cinematic_impact_riser",
     "ctaText": "EPISODE 2 UNLOCKED IN 3S",
     "freezeFrameMs": 800

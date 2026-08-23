@@ -58,9 +58,12 @@ export class SQLiteProvider implements IDatabaseProvider {
           user_id TEXT NOT NULL,
           title TEXT NOT NULL,
           genre TEXT NOT NULL,
-          tone TEXT,
           visual_style TEXT,
+          visual_style_prompt TEXT,
           target_audience TEXT,
+          country TEXT DEFAULT 'Vietnam',
+          language TEXT DEFAULT 'vi-VN',
+          ratio TEXT DEFAULT '9:16',
           episode_count INTEGER DEFAULT 20,
           status TEXT DEFAULT 'DRAFT',
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -75,6 +78,14 @@ export class SQLiteProvider implements IDatabaseProvider {
           title TEXT,
           synopsis TEXT,
           duration INTEGER DEFAULT 90,
+          scenes TEXT,
+          script TEXT,
+          thumbnail_url TEXT,
+          cover_image TEXT,
+          language_tracks TEXT,
+          scene_core TEXT,
+          conflict_escalation TEXT,
+          cliffhanger_hook TEXT,
           status TEXT DEFAULT 'DRAFT',
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY(series_id) REFERENCES series(id)
@@ -124,39 +135,63 @@ export class SQLiteProvider implements IDatabaseProvider {
         );
       `);
 
-      try {
-        this.db.prepare("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'").run();
-      } catch {
-        // column already exists
+      const userColumns = [
+        "role TEXT DEFAULT 'user'",
+        'avatar TEXT',
+        'avatar_url TEXT',
+        'api_key TEXT',
+        'api_key_rotated_at TEXT',
+        'two_factor_enabled INTEGER DEFAULT 0',
+        'integrations TEXT',
+        'connected_channels TEXT'
+      ];
+      for (const colDef of userColumns) {
+        try {
+          this.db.prepare(`ALTER TABLE users ADD COLUMN ${colDef}`).run();
+        } catch {
+          // column already exists
+        }
       }
 
-      const countUser = (this.db.prepare('SELECT COUNT(*) as c FROM users').get() as any)?.c;
-      if (countUser === 0) {
-        this.db.prepare(`
-          INSERT INTO users (id, email, name, tier, credits)
-          VALUES ('usr_default', 'creator@shine.ai', 'Creator Alpha', 'PRO', 1000)
-        `).run();
-
-        this.db.prepare(`
-          INSERT INTO series (id, user_id, title, genre, tone, visual_style, target_audience, episode_count, status)
-          VALUES 
-            ('srs_01', 'usr_default', 'The Hidden Heiress Reclaims the Empire', 'Revenge', 'Tense & High Stakes', 'Cinematic 9:16', 'Young Adults', 24, 'PUBLISHED'),
-            ('srs_02', 'usr_default', 'Shadow CEO: Double Identity', 'Suspense', 'Mysterious', 'Neo-Noir Dark', 'Gen-Z', 30, 'DRAFT')
-        `).run();
-
-        this.db.prepare(`
-          INSERT INTO episodes (id, series_id, episode_number, title, synopsis, status)
-          VALUES 
-            ('ep_01', 'srs_01', 1, 'Episode 1: The Banquet Betrayal', 'A grand banquet turns into a corporate takeover when the exiled daughter returns.', 'PUBLISHED'),
-            ('ep_02', 'srs_01', 2, 'Episode 2: Unmasking the Imposter', 'The CEO reveals the fraudulent stock transfer in front of the board.', 'DRAFT')
-        `).run();
-
-        this.db.prepare(`
-          INSERT INTO flow_accounts (id, email, session_token, access_token, project_id, status, credits_remaining, last_synced_at)
-          VALUES 
-            ('flow_01', 'pool_account_1@labs.google', 'flowST_mock_session_token_alpha', 'ya29.flow_mock_access_token_alpha', 'proj_pinhole_alpha', 'ACTIVE', 100, CURRENT_TIMESTAMP)
-        `).run();
+      const seriesColumns = [
+        "language TEXT DEFAULT 'vi-VN'",
+        "country TEXT DEFAULT 'Vietnam'",
+        "ratio TEXT DEFAULT '9:16'",
+        "visual_style_prompt TEXT",
+        "characters TEXT",
+        "locations TEXT",
+        "props TEXT",
+        "master_plan TEXT"
+      ];
+      for (const colDef of seriesColumns) {
+        try {
+          this.db.prepare(`ALTER TABLE series ADD COLUMN ${colDef}`).run();
+        } catch {
+          // column already exists
+        }
       }
+
+      const episodeColumns = [
+        'scenes TEXT',
+        'script TEXT',
+        'screenplay TEXT',
+        'locations TEXT',
+        'props TEXT',
+        'thumbnail_url TEXT',
+        'cover_image TEXT',
+        'language_tracks TEXT',
+        'scene_core TEXT',
+        'conflict_escalation TEXT',
+        'cliffhanger_hook TEXT',
+      ];
+      for (const colDef of episodeColumns) {
+        try {
+          this.db.prepare(`ALTER TABLE episodes ADD COLUMN ${colDef}`).run();
+        } catch {
+          // column already exists
+        }
+      }
+
     } catch (err: any) {
       console.warn('[SQLiteProvider] Native DB init error, switching to fallback:', err.message);
       this.isFallback = true;
@@ -167,32 +202,7 @@ export class SQLiteProvider implements IDatabaseProvider {
   private seedFallback() {
     const now = new Date().toISOString();
     if (this.usersStore.length === 0) {
-      this.usersStore.push({
-        id: 'usr_default',
-        email: 'creator@shine.ai',
-        name: 'Creator Alpha',
-        tier: 'PRO',
-        credits: 1000,
-        created_at: now,
-      });
-      this.seriesStore.push(
-        { id: 'srs_01', user_id: 'usr_default', title: 'The Hidden Heiress Reclaims the Empire', genre: 'Revenge', tone: 'Tense & High Stakes', visual_style: 'Cinematic 9:16', target_audience: 'Young Adults', episode_count: 24, status: 'PUBLISHED', created_at: now },
-        { id: 'srs_02', user_id: 'usr_default', title: 'Shadow CEO: Double Identity', genre: 'Suspense', tone: 'Mysterious', visual_style: 'Neo-Noir Dark', target_audience: 'Gen-Z', episode_count: 30, status: 'DRAFT', created_at: now }
-      );
-      this.episodesStore.push(
-        { id: 'ep_01', series_id: 'srs_01', episode_number: 1, title: 'Episode 1: The Banquet Betrayal', synopsis: 'A grand banquet turns into a corporate takeover when the exiled daughter returns.', duration: 90, status: 'PUBLISHED', created_at: now },
-        { id: 'ep_02', series_id: 'srs_01', episode_number: 2, title: 'Episode 2: Unmasking the Imposter', synopsis: 'The CEO reveals the fraudulent stock transfer in front of the board.', duration: 90, status: 'DRAFT', created_at: now }
-      );
-      this.flowStore.push({
-        id: 'flow_01',
-        email: 'pool_account_1@labs.google',
-        session_token: 'flowST_mock_session_token_alpha',
-        access_token: 'ya29.flow_mock_access_token_alpha',
-        project_id: 'proj_pinhole_alpha',
-        status: 'ACTIVE',
-        credits_remaining: 100,
-        last_synced_at: now,
-      });
+      
     }
   }
 
@@ -238,12 +248,46 @@ export class SQLiteProvider implements IDatabaseProvider {
     }
   }
 
+  private mapUserRow(row: any): UserEntity | null {
+    if (!row) return null;
+    let integrations: any[] = [];
+    if (row.integrations) {
+      try {
+        integrations = typeof row.integrations === 'string' ? JSON.parse(row.integrations) : row.integrations;
+      } catch {}
+    }
+    let connectedChannels: any[] = [];
+    if (row.connected_channels) {
+      try {
+        connectedChannels = typeof row.connected_channels === 'string' ? JSON.parse(row.connected_channels) : row.connected_channels;
+      } catch {}
+    }
+    return {
+      id: row.id,
+      email: row.email,
+      password_hash: row.password_hash,
+      name: row.name,
+      avatar: row.avatar || row.avatar_url || '',
+      role: row.role || 'user',
+      tier: row.tier || 'FREE',
+      credits: Number(row.credits ?? 100),
+      theme: row.theme || 'dark',
+      language: row.language || 'en',
+      api_key: row.api_key || '',
+      api_key_rotated_at: row.api_key_rotated_at || '',
+      two_factor_enabled: row.two_factor_enabled === 1 || row.two_factor_enabled === 'true' || row.two_factor_enabled === true,
+      integrations,
+      connected_channels: connectedChannels,
+      created_at: row.created_at,
+    };
+  }
+
   async getUserByEmail(email: string): Promise<UserEntity | null> {
     if (this.isFallback) {
       return this.usersStore.find((u) => u.email === email) || null;
     }
     const row = this.db.prepare('SELECT * FROM users WHERE email = ?').get(email) as any;
-    return row || null;
+    return this.mapUserRow(row);
   }
 
   async getUserById(id: string): Promise<UserEntity | null> {
@@ -251,7 +295,17 @@ export class SQLiteProvider implements IDatabaseProvider {
       return this.usersStore.find((u) => u.id === id) || null;
     }
     const row = this.db.prepare('SELECT * FROM users WHERE id = ?').get(id) as any;
-    return row || null;
+    return this.mapUserRow(row);
+  }
+
+  async getUsers(): Promise<UserEntity[]> {
+    if (this.isFallback) return [...this.usersStore];
+    try {
+      const rows = this.db.prepare('SELECT * FROM users ORDER BY created_at DESC').all() as any[];
+      return rows.map((r) => this.mapUserRow(r)!).filter(Boolean);
+    } catch {
+      return [];
+    }
   }
 
   async updateUserPreferences(userId: string, prefs: { theme?: string; language?: string }): Promise<UserEntity | null> {
@@ -285,27 +339,48 @@ export class SQLiteProvider implements IDatabaseProvider {
       return user;
     }
 
+    const avatar = user.avatar || '';
+    const integrationsJson = user.integrations ? (typeof user.integrations === 'string' ? user.integrations : JSON.stringify(user.integrations)) : '[]';
+    const connectedChannelsJson = (user as any).connected_channels ? (typeof (user as any).connected_channels === 'string' ? (user as any).connected_channels : JSON.stringify((user as any).connected_channels)) : '[]';
+    const twoFactor = user.two_factor_enabled ? 1 : 0;
+
     try {
       this.db.prepare(`
         UPDATE users 
-        SET name = ?, email = ?, avatar = ?, theme = ?, language = ?, credits = ?, tier = ?
+        SET name = ?, email = ?, avatar = ?, avatar_url = ?, theme = ?, language = ?, credits = ?, tier = ?,
+            role = ?, api_key = ?, api_key_rotated_at = ?, two_factor_enabled = ?, integrations = ?, connected_channels = ?
         WHERE id = ?
       `).run(
         user.name,
         user.email,
-        user.avatar || '',
+        avatar,
+        avatar,
         user.theme || 'dark',
         user.language || 'en',
-        user.credits,
-        user.tier,
+        user.credits ?? 100,
+        user.tier || 'FREE',
+        user.role || 'user',
+        user.api_key || '',
+        user.api_key_rotated_at || '',
+        twoFactor,
+        integrationsJson,
+        connectedChannelsJson,
         user.id
       );
-    } catch {
-      this.db.prepare(`
-        UPDATE users 
-        SET name = ?, email = ?
-        WHERE id = ?
-      `).run(user.name, user.email, user.id);
+    } catch (e: any) {
+      try {
+        this.db.prepare(`
+          UPDATE users 
+          SET name = ?, email = ?, avatar = ?, avatar_url = ?
+          WHERE id = ?
+        `).run(user.name, user.email, avatar, avatar, user.id);
+      } catch {
+        this.db.prepare(`
+          UPDATE users 
+          SET name = ?, email = ?
+          WHERE id = ?
+        `).run(user.name, user.email, user.id);
+      }
     }
 
     return (await this.getUserById(user.id)) || user;
@@ -385,10 +460,58 @@ export class SQLiteProvider implements IDatabaseProvider {
       return series;
     }
     this.db.prepare(`
-      INSERT INTO series (id, user_id, title, genre, tone, visual_style, target_audience, episode_count, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(series.id, series.user_id, series.title, series.genre, series.tone || 'Dramatic', series.visual_style || 'Cinematic', series.target_audience || 'General', series.episode_count, series.status);
+      INSERT INTO series (id, user_id, title, genre, visual_style, visual_style_prompt, target_audience, episode_count, country, language, ratio, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      series.id,
+      series.user_id,
+      series.title,
+      series.genre,
+      series.visual_style || 'realistic',
+      series.visual_style_prompt || '',
+      series.target_audience || 'General',
+      series.episode_count,
+      series.country || 'Vietnam',
+      series.language || 'vi-VN',
+      series.ratio || '9:16',
+      series.status
+    );
     return (await this.getSeriesById(series.id))!;
+  }
+
+  private formatSeriesRow(row: any): SeriesEntity | null {
+    if (!row) return null;
+    let characters = row.characters;
+    if (typeof characters === 'string') {
+      try { characters = JSON.parse(characters); } catch {}
+    }
+    let locations = row.locations;
+    if (typeof locations === 'string') {
+      try { locations = JSON.parse(locations); } catch {}
+    }
+    let props = row.props;
+    if (typeof props === 'string') {
+      try { props = JSON.parse(props); } catch {}
+    }
+    let masterPlan = row.master_plan;
+    if (typeof masterPlan === 'string') {
+      try { masterPlan = JSON.parse(masterPlan); } catch {}
+    }
+    return {
+      ...row,
+      characters: Array.isArray(characters) ? characters : [],
+      locations: Array.isArray(locations) ? locations : [],
+      props: Array.isArray(props) ? props : [],
+      master_plan: masterPlan || undefined,
+    };
+  }
+
+  async getSeriesById(id: string): Promise<SeriesEntity | null> {
+    if (this.isFallback) {
+      return this.seriesStore.find((s) => s.id === id) || null;
+    }
+    const row = this.db.prepare('SELECT * FROM series WHERE id = ?').get(id) as any;
+    return this.formatSeriesRow(row);
   }
 
   async getSeriesList(userId?: string, search?: string, status?: string): Promise<SeriesEntity[]> {
@@ -413,15 +536,8 @@ export class SQLiteProvider implements IDatabaseProvider {
       params.push(status);
     }
     query += ' ORDER BY created_at DESC';
-    return this.db.prepare(query).all(...params) as SeriesEntity[];
-  }
-
-  async getSeriesById(id: string): Promise<SeriesEntity | null> {
-    if (this.isFallback) {
-      return this.seriesStore.find((s) => s.id === id) || null;
-    }
-    const row = this.db.prepare('SELECT * FROM series WHERE id = ?').get(id) as any;
-    return row || null;
+    const rows = this.db.prepare(query).all(...params) as any[];
+    return rows.map(r => this.formatSeriesRow(r)!).filter(Boolean);
   }
 
   async updateSeries(id: string, updates: Partial<SeriesEntity>): Promise<SeriesEntity | null> {
@@ -437,7 +553,11 @@ export class SQLiteProvider implements IDatabaseProvider {
     const values: any[] = [];
     for (const [key, val] of Object.entries(updates)) {
       fields.push(`${key} = ?`);
-      values.push(val);
+      if (typeof val === 'object' && val !== null) {
+        values.push(JSON.stringify(val));
+      } else {
+        values.push(val);
+      }
     }
     if (fields.length === 0) return this.getSeriesById(id);
     values.push(id);
@@ -457,15 +577,60 @@ export class SQLiteProvider implements IDatabaseProvider {
     return res.changes > 0;
   }
 
+  private formatEpisodeRow(row: any): EpisodeEntity {
+    if (!row) return row;
+    let scenes = row.scenes;
+    if (typeof scenes === 'string') {
+      try { scenes = JSON.parse(scenes); } catch {}
+    }
+    let locations = row.locations;
+    if (typeof locations === 'string') {
+      try { locations = JSON.parse(locations); } catch {}
+    }
+    let props = row.props;
+    if (typeof props === 'string') {
+      try { props = JSON.parse(props); } catch {}
+    }
+    let languageTracks = row.language_tracks || row.languageTracks;
+    if (typeof languageTracks === 'string') {
+      try { languageTracks = JSON.parse(languageTracks); } catch {}
+    }
+    return {
+      ...row,
+      scenes: Array.isArray(scenes) ? scenes : [],
+      locations: Array.isArray(locations) ? locations : [],
+      props: Array.isArray(props) ? props : [],
+      languageTracks: Array.isArray(languageTracks) ? languageTracks : [],
+      thumbnail_url: row.thumbnail_url || row.cover_image || '',
+      cover_image: row.cover_image || row.thumbnail_url || '',
+    };
+  }
+
   async createEpisode(episode: EpisodeEntity): Promise<EpisodeEntity> {
     if (this.isFallback) {
       this.episodesStore.push(episode);
       return episode;
     }
     this.db.prepare(`
-      INSERT INTO episodes (id, series_id, episode_number, title, synopsis, status)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(episode.id, episode.series_id, episode.episode_number, episode.title, episode.synopsis || '', episode.status);
+      INSERT INTO episodes (id, series_id, episode_number, title, synopsis, duration, scenes, script, thumbnail_url, cover_image, language_tracks, scene_core, conflict_escalation, cliffhanger_hook, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      episode.id,
+      episode.series_id,
+      episode.episode_number,
+      episode.title,
+      episode.synopsis || '',
+      episode.duration || 90,
+      typeof episode.scenes === 'object' ? JSON.stringify(episode.scenes) : (episode.scenes || '[]'),
+      episode.script || '',
+      episode.thumbnail_url || episode.cover_image || '',
+      episode.cover_image || episode.thumbnail_url || '',
+      typeof episode.languageTracks === 'object' ? JSON.stringify(episode.languageTracks) : (episode.languageTracks || '[]'),
+      episode.scene_core || '',
+      episode.conflict_escalation || '',
+      episode.cliffhanger_hook || '',
+      episode.status || 'DRAFT'
+    );
     return episode;
   }
 
@@ -473,15 +638,16 @@ export class SQLiteProvider implements IDatabaseProvider {
     if (this.isFallback) {
       return this.episodesStore.filter((e) => e.series_id === seriesId);
     }
-    return this.db.prepare('SELECT * FROM episodes WHERE series_id = ? ORDER BY episode_number ASC').all(seriesId) as EpisodeEntity[];
+    const rows = this.db.prepare('SELECT * FROM episodes WHERE series_id = ? ORDER BY episode_number ASC').all(seriesId) as any[];
+    return rows.map((r) => this.formatEpisodeRow(r));
   }
 
   async getEpisodeById(id: string): Promise<EpisodeEntity | null> {
     if (this.isFallback) {
       return this.episodesStore.find((e) => e.id === id) || null;
     }
-    const ep = this.db.prepare('SELECT * FROM episodes WHERE id = ?').get(id) as EpisodeEntity | undefined;
-    return ep || null;
+    const ep = this.db.prepare('SELECT * FROM episodes WHERE id = ?').get(id) as any;
+    return ep ? this.formatEpisodeRow(ep) : null;
   }
 
   async updateEpisode(id: string, updates: Partial<EpisodeEntity>): Promise<EpisodeEntity | null> {
@@ -493,13 +659,32 @@ export class SQLiteProvider implements IDatabaseProvider {
       }
       return null;
     }
-    const current = this.db.prepare('SELECT * FROM episodes WHERE id = ?').get(id) as EpisodeEntity | undefined;
+    const current = this.db.prepare('SELECT * FROM episodes WHERE id = ?').get(id) as any;
     if (!current) return null;
-    const updated = { ...current, ...updates };
-    this.db.prepare(`
-      UPDATE episodes SET title = ?, synopsis = ?, status = ? WHERE id = ?
-    `).run(updated.title, updated.synopsis || '', updated.status, id);
-    return updated;
+
+    const fields: string[] = [];
+    const values: any[] = [];
+    for (const [key, val] of Object.entries(updates)) {
+      if (key === 'scenes' || key === 'locations' || key === 'props') {
+        fields.push(`${key} = ?`);
+        values.push(typeof val === 'object' ? JSON.stringify(val) : val);
+      } else if (key === 'languageTracks' || key === 'language_tracks') {
+        fields.push('language_tracks = ?');
+        values.push(typeof val === 'object' ? JSON.stringify(val) : val);
+      } else if (key === 'thumbnail_url' || key === 'cover_image') {
+        fields.push('thumbnail_url = ?', 'cover_image = ?');
+        values.push(val, val);
+      } else if (key !== 'id') {
+        fields.push(`${key} = ?`);
+        values.push(val);
+      }
+    }
+
+    if (fields.length > 0) {
+      values.push(id);
+      this.db.prepare(`UPDATE episodes SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    }
+    return this.getEpisodeById(id);
   }
 
   async getFlowAccounts(status?: string): Promise<FlowAccountEntity[]> {

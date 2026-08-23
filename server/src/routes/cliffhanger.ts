@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { normalizeTransitionKey } from '../constants/transitions.js';
 
 const router = Router();
 
@@ -7,11 +8,13 @@ router.post('/generate', (req: Request, res: Response) => {
   const {
     episodeId = 'ep-001',
     climaxSceneId = 'scene_15',
-    transitionKey = 'glitch',
+    transitionKey: rawTransitionKey = 'glitchMemories',
     stingerType = 'cinematic_impact_riser',
     ctaText = 'EPISODE 2 UNLOCKED IN 3S - WILL MARA SURVIVE?',
     freezeFrameMs = 800,
   } = req.body;
+
+  const transitionKey = normalizeTransitionKey(rawTransitionKey) || 'glitchMemories';
 
   const now = Date.now();
   const transitionClipId = `clip_trans_${transitionKey}_${now}`;

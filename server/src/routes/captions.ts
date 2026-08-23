@@ -82,7 +82,7 @@ router.post('/auto-generate', async (req: Request, res: Response) => {
 Language: ${language}
 Dialogue: "${dialogue}"
 
-Respond in strict JSON:
+Respond in strict JSON (words timestamps must be relative in milliseconds from 0 to cue duration):
 [
   {
     "id": "cue_1",
@@ -90,22 +90,32 @@ Respond in strict JSON:
     "fromUs": 0,
     "toUs": 1800000,
     "words": [
-      { "text": "Where", "from": 0, "to": 400000, "isKeyWord": false },
-      { "text": "are", "from": 400000, "to": 700000, "isKeyWord": false },
-      { "text": "you,", "from": 700000, "to": 1100000, "isKeyWord": false },
-      { "text": "Kael?", "from": 1100000, "to": 1800000, "isKeyWord": true }
+      { "text": "Where", "from": 0, "to": 400, "isKeyWord": false },
+      { "text": "are", "from": 400, "to": 700, "isKeyWord": false },
+      { "text": "you,", "from": 700, "to": 1100, "isKeyWord": false },
+      { "text": "Kael?", "from": 1100, "to": 1800, "isKeyWord": true }
     ]
   }
 ]`;
 
     const raw = await geminiClient.generateText({
       prompt,
-      systemInstruction: 'You are an AI Subtitle & Kinetic Caption Timing Engine for vertical short-form video.',
+      systemInstruction: 'You are an AI Subtitle & Kinetic Caption Timing Engine for vertical short-form video. word.from and word.to must be relative milliseconds from 0.',
       jsonMode: true,
     });
 
     const parsed = JSON.parse(raw);
-    const cues = Array.isArray(parsed) ? parsed : (parsed.cues || []);
+    const rawCues = Array.isArray(parsed) ? parsed : (parsed.cues || []);
+    const cues = rawCues.map((c: any) => ({
+      ...c,
+      words: Array.isArray(c.words)
+        ? c.words.map((w: any) => ({
+            ...w,
+            from: w.from > 10000 ? Math.round(w.from / 1000) : w.from,
+            to: w.to > 10000 ? Math.round(w.to / 1000) : w.to,
+          }))
+        : undefined,
+    }));
 
     return res.json({
       code: 200,
@@ -135,8 +145,8 @@ Respond in strict JSON:
         timing: { display: { from: fromUs, to: toUs }, duration: durationUs },
         words: chunk.map((w: string, idx: number) => ({
           text: w,
-          from: fromUs + idx * 380000,
-          to: fromUs + (idx + 1) * 380000,
+          from: idx * 380,
+          to: (idx + 1) * 380,
           isKeyWord: idx === chunk.length - 1,
         })),
       });
@@ -158,11 +168,11 @@ Respond in strict JSON:
 
 // POST /v1/captions/translate
 router.post('/translate', async (req: Request, res: Response) => {
-  const { episodeId = 'ep-001', targetLanguage = 'vi-VN', text, cues = [] } = req.body;
+  const { episodeId = 'ep-001', language = 'vi-VN', text, cues = [] } = req.body;
   const sourceText = text || (cues.map((c: any) => c.text).join(' ')) || 'Where are you, Kael?';
 
   try {
-    const prompt = `Translate this micro-drama subtitle dialogue into ${targetLanguage}:
+    const prompt = `Translate this micro-drama subtitle dialogue into ${language}:
 Source: "${sourceText}"
 
 Respond with strict JSON:
@@ -183,11 +193,11 @@ Respond with strict JSON:
       code: 200,
       data: {
         episodeId,
-        targetLanguage,
+        language,
         translatedText,
         cuesCount: cues.length || 1,
       },
-      message: `Captions translated to ${targetLanguage} successfully via Gemini`,
+      message: `Captions translated to ${language} successfully via Gemini`,
       error: null,
     });
   } catch (err: any) {

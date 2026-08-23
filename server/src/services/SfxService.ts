@@ -4,6 +4,7 @@ import { EnvConfig } from '@/config/env.js';
 import { aiProviderRouter } from '@/integrations/ai/router/AIProviderRouter.js';
 import { StorageFactory } from '@/services/storage/StorageFactory.js';
 import { Logger } from '@/utils/logger.js';
+import { PromptLoader } from '@/utils/PromptLoader.js';
 
 export interface SfxCandidate {
   id: string | number;
@@ -22,9 +23,12 @@ export class SfxService {
    * Get active API keys from MongoDB System Settings or EnvConfig
    */
   private static async getProviderKeys() {
-    let freesoundKey = EnvConfig.freesound?.apiKey || process.env.FREESOUND_API_KEY || '';
-    let pixabayKey = EnvConfig.pixabay?.apiKey || process.env.PIXABAY_API_KEY || '';
-    let parallelKey = EnvConfig.parallel?.apiKey || process.env.PARALLEL_API_KEY || '';
+    let freesoundKey = EnvConfig.freesound.apiKey;
+    let pixabayKey = EnvConfig.pixabay.apiKey;
+    let parallelKey = EnvConfig.parallel.apiKey;
+    let freesoundEndpoint = EnvConfig.freesound.endpoint;
+    let pixabayEndpoint = EnvConfig.pixabay.endpoint;
+    let parallelEndpoint = EnvConfig.parallel.endpoint;
 
     try {
       const { SystemSettingModel } = await import('@/database/MongoDBProvider.js');
@@ -36,21 +40,25 @@ export class SfxService {
         if (s.key === 'freesound' && s.value?.apiKey) freesoundKey = s.value.apiKey;
         if (s.key === 'pixabay' && s.value?.apiKey) pixabayKey = s.value.apiKey;
         if (s.key === 'parallel' && s.value?.apiKey) parallelKey = s.value.apiKey;
+
+        if (s.key === 'freesound' && s.value?.endpoint) freesoundEndpoint = s.value.endpoint;
+        if (s.key === 'pixabay' && s.value?.endpoint) pixabayEndpoint = s.value.endpoint;
+        if (s.key === 'parallel' && s.value?.endpoint) parallelEndpoint = s.value.endpoint;
       }
     } catch {}
 
-    return { freesoundKey, pixabayKey, parallelKey };
+    return { freesoundKey, pixabayKey, parallelKey, freesoundEndpoint, pixabayEndpoint, parallelEndpoint };
   }
 
   /**
    * Extract 1-2 concise English audio keywords via AI
    */
-  static async extractAudioKeywords(rawPrompt: string, genre?: string, tone?: string): Promise<string> {
-    const combined = `${rawPrompt || ''} ${genre || ''} ${tone || ''}`.trim();
+  static async extractAudioKeywords(rawPrompt: string, genre?: string, visualStyle?: string): Promise<string> {
+    const combined = `${rawPrompt || ''} ${genre || ''} ${visualStyle || ''}`.trim();
     if (!combined) return 'cinematic suspense';
 
     try {
-      const prompt = `Extract 1-2 concise English sound effect / foley search keywords from this scene mood (e.g. "heartbeat", "clock ticking", "gunshot", "suspense drone", "footsteps", "thunder", "impact", "whoosh"). Return ONLY the lowercase keywords separated by space, without punctuation.\n\nDescription: "${combined}"`;
+      const prompt = PromptLoader.render('audio/sfx_keyword_extraction', { description: combined });
       const aiRes = await aiProviderRouter.generateText(prompt);
       const cleaned = (typeof aiRes === 'string' ? aiRes : (aiRes as any)?.text || '').replace(/[^a-zA-Z0-9\s]/g, '').trim().toLowerCase();
       if (cleaned && cleaned.length > 1) {
@@ -66,13 +74,13 @@ export class SfxService {
   /**
    * Provider 1: Freesound API Search
    */
-  static async searchFreesound(query: string, apiKey: string, durationMax: number = 20): Promise<SfxCandidate[]> {
+  static async searchFreesound(query: string, apiKey: string, endpoint: string, durationMax: number = 20): Promise<SfxCandidate[]> {
     if (!apiKey) return [];
     const candidates: SfxCandidate[] = [];
 
     try {
       Logger.info(`[SfxService] Querying Freesound API for "${query}"`);
-      const res = await axios.get('https://freesound.org/apiv2/search/text/', {
+      const res = await axios.get(endpoint, {
         params: {
           query: query.trim(),
           token: apiKey,
@@ -110,13 +118,13 @@ export class SfxService {
   /**
    * Provider 2: Pixabay API Search
    */
-  static async searchPixabay(query: string, apiKey: string): Promise<SfxCandidate[]> {
+  static async searchPixabay(query: string, apiKey: string, endpoint: string): Promise<SfxCandidate[]> {
     if (!apiKey) return [];
     const candidates: SfxCandidate[] = [];
 
     try {
       Logger.info(`[SfxService] Querying Pixabay API for "${query}"`);
-      const res = await axios.get('https://pixabay.com/api/', {
+      const res = await axios.get(endpoint, {
         params: {
           key: apiKey,
           q: encodeURIComponent(query),
@@ -225,15 +233,13 @@ export class SfxService {
   /**
    * Provider 4: Parallel AI / Web Search MCP Fallback
    */
-  static async searchParallelMcp(query: string, apiKey: string): Promise<SfxCandidate[]> {
+  static async searchParallelMcp(query: string, apiKey: string, endpoint: string): Promise<SfxCandidate[]> {
     if (!apiKey) return [];
     const candidates: SfxCandidate[] = [];
 
     try {
       Logger.info(`[SfxService] Querying Parallel MCP task for sound effects: "${query}"`);
-      const parallelEndpoint = EnvConfig.parallel?.endpoint || 'https://task-mcp.parallel.ai/v1';
-      const res = await axios.post(
-        `${parallelEndpoint}/tasks`,
+      const res = await axios.post(endpoint,
         {
           task: `Find direct MP3/WAV royalty-free sound effect audio preview URL for keyword: ${query}`,
           stream: false,
@@ -335,24 +341,24 @@ export class SfxService {
   static async getSceneAudio(options: {
     prompt: string;
     genre?: string;
-    tone?: string;
+    visualStyle?: string;
     duration?: number;
   }): Promise<{ audioUrl: string; s3Key: string; sizeBytes: number; title: string; duration: number; provider: string }> {
     const durationSeconds = options.duration || 8;
-    const keywords = await this.extractAudioKeywords(options.prompt, options.genre, options.tone);
-    const { freesoundKey, pixabayKey, parallelKey } = await this.getProviderKeys();
+    const keywords = await this.extractAudioKeywords(options.prompt, options.genre, options.visualStyle);
+    const { freesoundKey, pixabayKey, parallelKey, freesoundEndpoint, pixabayEndpoint, parallelEndpoint } = await this.getProviderKeys();
 
     const allCandidates: SfxCandidate[] = [];
 
     // 1. Check Freesound API (Primary SFX database if configured)
     if (freesoundKey) {
-      const fsCandidates = await this.searchFreesound(keywords, freesoundKey, durationSeconds);
+      const fsCandidates = await this.searchFreesound(keywords, freesoundKey, freesoundEndpoint, durationSeconds);
       allCandidates.push(...fsCandidates);
     }
 
     // 2. Check Pixabay API (if configured)
     if (pixabayKey && allCandidates.length === 0) {
-      const pbCandidates = await this.searchPixabay(keywords, pixabayKey);
+      const pbCandidates = await this.searchPixabay(keywords, pixabayKey, pixabayEndpoint);
       allCandidates.push(...pbCandidates);
     }
 
@@ -366,7 +372,7 @@ export class SfxService {
     // 4. Fallback to Parallel AI / MCP
     if (allCandidates.length === 0 && parallelKey) {
       Logger.info(`[SfxService] Searching Parallel MCP for "${keywords}"`);
-      const parCandidates = await this.searchParallelMcp(keywords, parallelKey);
+      const parCandidates = await this.searchParallelMcp(keywords, parallelKey, parallelEndpoint);
       allCandidates.push(...parCandidates);
     }
 

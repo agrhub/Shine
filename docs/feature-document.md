@@ -2,7 +2,7 @@
 
 ## Product Feature Document
 
-**Product Name:** Shine (aka DramaFlowAI)
+**Product Name:** Shine
 **Document Version:** 1.0
 **Date:** August 2026
 
@@ -229,7 +229,7 @@ Advanced neural voice synthesis and performance control.
 Solves the hardest problem in AI video: keeping characters looking identical across scenes.
 *   **Key Capabilities:** Persona management with Facial Consistency Anchors. Outfit Continuity locking. Continuity Check mesh matching (e.g., Face Match 98.4%). Generation modes (Hi-Fi, Proxy) and Character Strength weighting.
 
-### 9. Analytics & Audience Engagement (DramaFlow Insights) 📈
+### 9. Analytics & Audience Engagement (Shine Insights) 📈
 Actionable data to drive narrative decisions, monetization, and automated audience engagement.
 *   **Key Capabilities:** 
     - KPIs (Total Views, Completion Rate, Revenue Est., Virality Index). Viewer Retention Analysis charts. Platform Revenue breakdown. Top Performing Episodes tracking.
@@ -245,7 +245,7 @@ Professional-grade audio post-production simplified by AI.
 Predictive AI to maximize the crucial first 3 seconds of a video.
 *   **Key Capabilities:** Retention Prediction scoring. AI Headline Variations. Visual/Emotional Trigger analysis. Apply Hook Elements directly to the timeline.
 *   **Dynamic Cliffhanger Hook Engine (Proposal 3):**
-  - **OpenVideo GLSL Transition Injection:** Automatically inserts high-intensity transition clips (`transitionKey: "glitch"`, `transitionKey: "flash"`, `transitionKey: "circleReveal"`) at the 3-second mark before episode ends.
+  - **OpenVideo GLSL Transition Injection:** Automatically inserts high-intensity transition clips (`transitionKey: "glitchMemories"`, `transitionKey: "fade"`, `transitionKey: "circleopen"`) at the 3-second mark before episode ends.
   - **OpenVideo Animation Keyframe Shake & Zoom:** Applies stackable property animations (`zoomIn` scale 1.0 → 1.4 over 400ms) and mask reveals (`rectExpand`) on freeze frames at shock reveal moments.
   - **Cliffhanger Sound Stinger & Dialogue Cut-Off:** Injects crescendo sound stingers on `SFX 1` audio track and cuts dialogue abruptly on a climax line.
   - **Animated Hook Captions:** Overlays bold, animated CTA text (*"EPISODE 2 UNLOCKED IN 3S"* / *"WILL KAEL SURVIVE?"*) using OpenVideo `Caption` clips with word-level highlight animation.
@@ -437,7 +437,7 @@ Background music for scenes generated via `generateMusic()`:
 14. After render, creator hits **"Publish Now"**. Episode is live across all selected platforms.
 
 **Phase D — Series Analytics**
-15. Back in *Analytics (DramaFlow Insights)*, creator monitors cross-episode performance: Viewer Retention (Day 1–30), Platform Revenue breakdown (TikTok 52%, IG 30%, YT 18%), Virality Index. Top performing episodes inform next episode's script direction.
+15. Back in *Analytics (Shine Insights)*, creator monitors cross-episode performance: Viewer Retention (Day 1–30), Platform Revenue breakdown (TikTok 52%, IG 30%, YT 18%), Virality Index. Top performing episodes inform next episode's script direction.
 
 **Flow 2: Team Collaboration on Revisions**
 1. Editor A assembles a rough cut and requests review.

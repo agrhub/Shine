@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { GoogleGenAI, FileState } from '@google/genai';
 import fs from 'fs';
 import path from 'path';
@@ -6,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { Logger } from '@/utils/logger.js';
 import { EnvConfig } from '@/config/env.js';
 import { emailService } from '~/services/EmailService.js';
+import { StorageFactory } from '@/services/storage/StorageFactory.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -229,50 +231,115 @@ export class GeminiClient {
     }
   }
 
-  public async generateImage(options: { model?: string; prompt: string; aspectRatio?: '1:1' | '9:16' | '16:9' }) {
-    const res = await this._generateImage(options.prompt, options.model || EnvConfig.geminiModelImage, options);
-    return res?.url?.split('base64,')[1] || null;
+  // Helper to resolve images for Veo API structure
+  public async resolveToVeoImage(input: any) {
+    if (!input) return undefined;
+    if (typeof input !== 'string') return input; // Already resolved or object
+
+    try {
+      let buffer: Buffer;
+      let mimeType = 'image/png';
+
+      if (input.startsWith('https://') || input.startsWith('http://')) {
+        const response = await axios.get(input, { responseType: 'arraybuffer' });
+        buffer = Buffer.from(response.data);
+        mimeType = String(response.headers['content-type'] || 'image/png');
+      } else if (input.startsWith('data:')) {
+        const parts = input.split(',');
+        mimeType = parts[0].split(':')[1].split(';')[0];
+        buffer = Buffer.from(parts[1], 'base64');
+      } else {
+        const stream = await StorageFactory.getFileStream(input);
+        const chunks: any[] = [];
+        buffer = await new Promise<Buffer>((resolve, reject) => {
+          stream.on('data', (chunk: any) => chunks.push(chunk));
+          stream.on('error', reject);
+          stream.on('end', () => resolve(Buffer.concat(chunks)));
+        });
+
+        if (input.endsWith('.jpg') || input.endsWith('.jpeg')) mimeType = 'image/jpeg';
+        else if (input.endsWith('.webp')) mimeType = 'image/webp';
+        else if (input.endsWith('.mp4')) mimeType = 'video/mp4';
+      }
+
+      Logger.info(`[GeminiClient] Resolved media reference ${input} to ${buffer.length} bytes, mime: ${mimeType}`);
+
+      return {
+        mediaBytes: buffer.toString('base64'),
+        mimeType
+      };
+    } catch (err: any) {
+      Logger.warn(`[GeminiClient] Failed to resolve reference media: ${err.message}`);
+      return undefined;
+    }
   }
 
-  public async _generateImage(prompt: string, modelId: string = EnvConfig.geminiModelImage, options: any = {}): Promise<{ url: string; mimeType: string } | null> {
+  public async generateImage(
+    promptOrOptions: string | { prompt: string; model?: string; aspectRatio?: '1:1' | '9:16' | '16:9'; imageInputs?: string[]; characterReferences?: string[]; referenceImages?: string[]; characterImages?: string[]; image?: string; imageStart?: string; parameters?: any },
+    modelId?: string,
+    options: any = {}
+  ): Promise<{ url: string; mimeType: string } | null> {
     try {
-      const client = this.getClient(modelId);
-      const isImagenModel = modelId.startsWith('imagen-');
+      const isStringPrompt = typeof promptOrOptions === 'string';
+      const prompt = isStringPrompt ? promptOrOptions : promptOrOptions.prompt;
+      const opts = isStringPrompt ? options : { ...promptOrOptions, ...options };
+      const selectedModel = (isStringPrompt ? modelId : promptOrOptions.model) || EnvConfig.geminiModelImage;
 
-      if (isImagenModel) {
-        Logger.info(`[GeminiClient] Using generateImages() for Imagen model: ${modelId}`);
-        const response = await (client as any).models.generateImages({
-          model: modelId,
-          prompt: prompt,
-          config: {
-            numberOfImages: 1,
-            outputMimeType: 'image/png',
-            aspectRatio: options.aspectRatio || '1:1',
-            ...options.parameters,
-          },
-        });
-        if (response.generatedImages?.length > 0) {
-          const img = response.generatedImages[0];
-          return { url: `data:image/png;base64,${img.image.imageBytes}`, mimeType: 'image/png' };
-        }
-        throw new Error('No images returned from Imagen API');
-      } else {
-        Logger.info(`[GeminiClient] Using generateContent() for Gemini image model: ${modelId}`);
-        const parts = Array.isArray(prompt) ? prompt : [{ text: String(prompt) }];
-        const response = await (client as any).models.generateContent({
-          model: modelId,
-          contents: [{ role: 'user', parts }],
-          config: { responseModalities: ['IMAGE'] },
-        });
-        const responseParts = response?.candidates?.[0]?.content?.parts || [];
-        for (const part of responseParts) {
-          if (part?.inlineData?.data) {
-            const mimeType = part.inlineData.mimeType || 'image/png';
-            return { url: `data:${mimeType};base64,${part.inlineData.data}`, mimeType };
+      // If an old imagen-* model is requested, migrate to gemini-3.1-flash-image
+      const targetModel = selectedModel.startsWith('imagen-') ? (EnvConfig.geminiModelImage || 'gemini-3.1-flash-image') : selectedModel;
+      const client = this.getClient(targetModel);
+
+      // 1. Collect all potential reference images (up to 4 supported by Gemini API)
+      const rawImages = [
+        ...(opts.imageInputs || []),
+        ...(opts.referenceImages || []),
+        ...(opts.characterReferences || []),
+        ...(opts.characterImages || []),
+        opts.image,
+        opts.imageStart,
+      ].filter(Boolean);
+
+      const uniqueImages = [...new Set(rawImages)].slice(0, 4);
+      const resolvedImages: Array<{ inlineData: { data: string; mimeType: string } }> = [];
+
+      if (uniqueImages.length > 0) {
+        Logger.info(`[GeminiClient] Resolving ${uniqueImages.length} reference images for image generation...`);
+        for (const img of uniqueImages) {
+          const resolved = await this.resolveToVeoImage(img);
+          if (resolved?.mediaBytes) {
+            resolvedImages.push({
+              inlineData: {
+                data: resolved.mediaBytes,
+                mimeType: resolved.mimeType || 'image/png',
+              },
+            });
           }
         }
-        throw new Error('No image data in Gemini response');
+        Logger.info(`[GeminiClient] Successfully resolved ${resolvedImages.length} reference images.`);
       }
+
+      // 2. Multimodal Image Generation via Gemini generateContent API
+      Logger.info(`[GeminiClient] Using generateContent() for image generation (${targetModel}) with ${resolvedImages.length} reference images`);
+
+      const parts: any[] = [
+        ...resolvedImages,
+        ...(Array.isArray(prompt) ? prompt : [{ text: String(prompt) }]),
+      ];
+
+      const response = await (client as any).models.generateContent({
+        model: targetModel,
+        contents: [{ role: 'user', parts }],
+        config: { responseModalities: ['IMAGE'] },
+      });
+
+      const responseParts = response?.candidates?.[0]?.content?.parts || [];
+      for (const part of responseParts) {
+        if (part?.inlineData?.data) {
+          const mimeType = part.inlineData.mimeType || 'image/png';
+          return { url: `data:${mimeType};base64,${part.inlineData.data}`, mimeType };
+        }
+      }
+      throw new Error('No image data in Gemini response');
     } catch (error: any) {
       Logger.error(`[GeminiClient] generateImage failed: ${error.message}`);
       return null;
@@ -288,10 +355,56 @@ export class GeminiClient {
       if (options.durationSeconds) genConfig.durationSeconds = String(options.durationSeconds);
       if (options.personGeneration) genConfig.personGeneration = options.personGeneration;
 
+      // RESOLVE ALL IMAGES UPFRONT
+      const resolvedOptions = { ...options };
+      Logger.info(`Starting image resolution for video generation...`, 'GeminiClient');
+      
+      if (options.imageStart || options.image) {
+        Logger.info(`Resolving imageStart/image: ${options.imageStart || options.image}`, 'GeminiClient');
+        resolvedOptions.imageStart = await this.resolveToVeoImage(options.imageStart || options.image);
+        resolvedOptions.image = resolvedOptions.imageStart;
+      }
+
+      if (options.imageEnd) {
+        Logger.info(`Resolving imageEnd: ${options.imageEnd}`, 'GeminiClient');
+        resolvedOptions.imageEnd = await this.resolveToVeoImage(options.imageEnd);
+      }
+
+      const charRefs = options.characterImages || options.characterReferences || [];
+      Logger.info(`[GeminiClient] Found ${charRefs.length} character references to resolve.`, 'GeminiClient');
+      if (Array.isArray(charRefs) && charRefs.length > 0) {
+        const resolvedChars = await Promise.all(charRefs.map(async (img, idx) => {
+          Logger.info(`[GeminiClient] Resolving character image [${idx}]: ${img}`, 'GeminiClient');
+          return await this.resolveToVeoImage(img);
+        }));
+        resolvedOptions.characterImages = resolvedChars.filter(img => !!img);
+        resolvedOptions.characterReferences = resolvedOptions.characterImages;
+        Logger.info(`[GeminiClient] Successfully resolved ${resolvedOptions.characterImages.length} character images.`, 'GeminiClient');
+      }
+
+      // Interpolation (lastFrame)
+      if (resolvedOptions.imageEnd) {
+        genConfig.lastFrame = resolvedOptions.imageEnd;
+      }
+
+      // Reference Images (R2V) - Only if not using I2V interpolation (lastFrame)
+      if (!genConfig.lastFrame && resolvedOptions.characterImages && Array.isArray(resolvedOptions.characterImages) && resolvedOptions.characterImages.length > 0) {
+        genConfig.referenceImages = resolvedOptions.characterImages.map((img: any) => ({
+          image: img,
+          referenceType: 'asset'
+        }));
+      }
+
       const generateParams: any = {
         model: modelId,
         prompt,
+        image: resolvedOptions.imageStart || resolvedOptions.image
       };
+
+      // Currently Veo3 doesn't support both image and referenceImages
+      if(genConfig.referenceImages && genConfig.referenceImages.length > 0){
+        delete generateParams.image;
+      }
 
       if (Object.keys(genConfig).length > 0) generateParams.config = genConfig;
 
@@ -330,7 +443,7 @@ export class GeminiClient {
     }
   }
 
-  public async generateAudio(text: string, voiceId: string = 'Puck', modelId: string = EnvConfig.geminiModelVoice, options: any = {}): Promise<{ url: string; mimeType: string }> {
+  public async generateAudio(text: string, voiceId: string = 'Puck', modelId: string = EnvConfig.geminiModelVoice, options: any = {}): Promise<{ url: string; mimeType: string; durationSeconds: number }> {
     try {
       const client = this.getClient(modelId);
       let speechConfig: any;
@@ -388,12 +501,16 @@ export class GeminiClient {
       let mimeType = part?.inlineData?.mimeType || 'audio/L16;rate=24000';
       if (!base64) throw new Error('No audio data returned from Gemini TTS API');
 
+      let durationSeconds = 0;
+
       // PCM → WAV conversion
       if (mimeType.toLowerCase().includes('l16') || mimeType.toLowerCase().includes('pcm')) {
         try {
           const audioBuffer = Buffer.from(base64, 'base64');
           const sampleRate = 24000;
           const numChannels = 1;
+          durationSeconds = Math.round((audioBuffer.length / (sampleRate * numChannels * 2)) * 100) / 100;
+
           const wavBuffer = Buffer.allocUnsafe(44 + audioBuffer.length);
           wavBuffer.write('RIFF', 0);
           wavBuffer.writeUInt32LE(36 + audioBuffer.length, 4);
@@ -416,7 +533,7 @@ export class GeminiClient {
         }
       }
 
-      return { url: `data:${mimeType};base64,${base64}`, mimeType };
+      return { url: `data:${mimeType};base64,${base64}`, mimeType, durationSeconds };
     } catch (error: any) {
       Logger.error(`[GeminiClient] generateAudio failed: ${error.message}`);
       throw error;

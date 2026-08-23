@@ -4,6 +4,7 @@ import { characterService } from '../services/CharacterService.js';
 import { aiProviderRouter } from '../integrations/ai/router/AIProviderRouter.js';
 import { StorageFactory } from '../services/storage/StorageFactory.js';
 import { SynthIDService } from '../services/SynthIDService.js';
+import { getVisualStylePrompt } from '../constants/VisualStyles.js';
 import { Logger } from '@/utils/logger.js';
 import { nanoid } from 'nanoid';
 
@@ -121,7 +122,7 @@ characterRouter.post('/', async (req: Request, res: Response) => {
 characterRouter.post('/:characterId/portrait', async (req: Request, res: Response) => {
   try {
     const { characterId } = req.params;
-    const { seriesId, name, age, gender, visualTraits, prompt, style } = req.body;
+    const { seriesId, name, age, gender, visualTraits, prompt, style, visualStyle, visualStylePrompt, aspectRatio } = req.body;
     const db = await getDatabaseProvider();
 
     let charName = name;
@@ -143,15 +144,19 @@ characterRouter.post('/:characterId/portrait', async (req: Request, res: Respons
       }
     }
 
+    const resolvedStyle = visualStyle || targetSeries?.visual_style || 'realistic';
+    const resolvedStylePrompt = visualStylePrompt || getVisualStylePrompt(resolvedStyle);
+    const targetAspect = "9:16"//(aspectRatio || targetSeries?.ratio || '9:16').trim();
+
     charName = charName || 'Character';
     charTraits = charTraits || 'Cinematic character portrait';
     const ageTag = charAge ? `${charAge}-year-old ` : '';
     const genderTag = charGender && charGender !== 'neutral' ? `${charGender} ` : '';
 
-    const fullPrompt = prompt || `Photorealistic 8k vertical 9:16 portrait of ${ageTag}${genderTag}${charName}, ${charTraits}, ${style || 'cinematic studio rim lighting'}, age-accurate facial bone structure and skin texture, sharp facial focus.`;
+    const fullPrompt = prompt || `${resolvedStylePrompt}, portrait of ${ageTag}${genderTag}${charName}, ${charTraits}, ${style || 'cinematic lighting'}, age-accurate facial features, character continuity reference.`;
 
     const imgResult = await aiProviderRouter.generateImage(fullPrompt, {
-      aspectRatio: '9:16',
+      aspectRatio: targetAspect,
     });
 
     if (!imgResult || !imgResult.url) {
@@ -229,7 +234,7 @@ characterRouter.post('/:characterId/portrait', async (req: Request, res: Respons
 characterRouter.post('/:characterId/anchors', async (req: Request, res: Response) => {
   try {
     const { characterId } = req.params;
-    const { seriesId, name, age, gender, visualTraits } = req.body;
+    const { seriesId, name, age, gender, visualTraits, visualStyle, visualStylePrompt } = req.body;
     const db = await getDatabaseProvider();
 
     let targetSeries: any = null;
@@ -255,6 +260,9 @@ characterRouter.post('/:characterId/anchors', async (req: Request, res: Response
       }
     }
 
+    const resolvedStyle = visualStyle || targetSeries?.visual_style || 'realistic';
+    const resolvedStylePrompt = visualStylePrompt || getVisualStylePrompt(resolvedStyle);
+
     charName = charName || 'Character';
     charTraits = charTraits || 'Modern cinematic look';
 
@@ -274,8 +282,8 @@ characterRouter.post('/:characterId/anchors', async (req: Request, res: Response
       existingFrontalUrl = dbChar.avatarUrl || dbChar.avatar || dbChar.anchors?.[0]?.imageUrl || '';
     }
 
-    // 1. Generate multi-angle facial consistency anchors using CharacterService with age, gender, wardrobe, and frontal reference
-    const facialAnchors = await characterService.extractFacialAnchors(characterId, charName, charTraits, charAge, charGender, wardrobeDesc, existingFrontalUrl);
+    // 1. Generate multi-angle facial consistency anchors using CharacterService with age, gender, wardrobe, visualStyle, and frontal reference
+    const facialAnchors = await characterService.extractFacialAnchors(characterId, charName, charTraits, charAge, charGender, wardrobeDesc, existingFrontalUrl, resolvedStyle, resolvedStylePrompt);
 
     const prompt = `Analyze facial consistency landmarks for character "${charName}" with visual traits: "${charTraits}".
 Extract 8 spatial key landmarks for LoRA face-lock in short drama video generation:
@@ -378,7 +386,7 @@ Respond in strict JSON:
 characterRouter.post('/:characterId/anchors/:anchorId', async (req: Request, res: Response) => {
   try {
     const { characterId, anchorId } = req.params;
-    const { seriesId, name, age, gender, visualTraits, wardrobeDesc } = req.body;
+    const { seriesId, name, age, gender, visualTraits, wardrobeDesc, visualStyle, visualStylePrompt } = req.body;
     const db = await getDatabaseProvider();
 
     let targetSeries: any = null;
@@ -404,6 +412,9 @@ characterRouter.post('/:characterId/anchors/:anchorId', async (req: Request, res
       }
     }
 
+    const resolvedStyle = visualStyle || targetSeries?.visual_style || 'realistic';
+    const resolvedStylePrompt = visualStylePrompt || getVisualStylePrompt(resolvedStyle);
+
     let referenceImageUrl = '';
     if (anchorId !== 'anc-1') {
       const dbChar = (targetSeries?.characters || targetSeries?.master_plan?.characters || []).find(
@@ -414,7 +425,7 @@ characterRouter.post('/:characterId/anchors/:anchorId', async (req: Request, res
       }
     }
 
-    const singleAnchor = await characterService.extractSingleAnchor(characterId, anchorId, charName, charTraits, charAge, charGender, outfitTag, referenceImageUrl);
+    const singleAnchor = await characterService.extractSingleAnchor(characterId, anchorId, charName, charTraits, charAge, charGender, outfitTag, referenceImageUrl, resolvedStyle, resolvedStylePrompt);
 
     // Update in database series
     let updatedAnchors: any[] = [];
@@ -478,13 +489,13 @@ characterRouter.post('/:characterId/wardrobe', async (req: Request, res: Respons
     let charGender = 'Female';
     let charAge = 25;
     let seriesGenre = 'micro-drama';
-    let seriesTone = 'cinematic';
+    let seriesVisual = 'realistic';
 
     if (seriesId) {
       targetSeries = await db.getSeriesById(seriesId);
       if (targetSeries) {
         seriesGenre = targetSeries.genre || seriesGenre;
-        seriesTone = targetSeries.tone || seriesTone;
+        seriesVisual = targetSeries.visual_style || seriesVisual;
         const dbChar = (targetSeries.characters || targetSeries.master_plan?.characters || []).find(
           (c: any) => c.id === characterId
         );
@@ -504,7 +515,8 @@ characterRouter.post('/:characterId/wardrobe', async (req: Request, res: Respons
 
     // If tags are not provided, generate structured outfit breakdown via AI
     if (!outfitTags || outfitTags.length === 0 || !outfitName) {
-      const outfitPrompt = `You are a cinematic costume designer for a ${seriesGenre} (${seriesTone}) vertical drama.
+      const visualPrompt = getVisualStylePrompt(seriesVisual);
+      const outfitPrompt = `You are a cinematic costume designer for a ${seriesGenre} vertical drama with visual style: "${visualPrompt}".
 Character: ${charName} (${charAge} y/o ${charGender}, role: ${charTraits}).
 Generate a detailed wardrobe outfit spec for category "${outfitCategory}".
 Return strict JSON:
@@ -531,7 +543,8 @@ Return strict JSON:
     // If thumbnail is not provided, generate a photorealistic outfit reference image
     if (!outfitThumbnail) {
       try {
-        const imagePrompt = `Vertical 9:16 fashion costume concept for character ${charName}, wearing ${outfitName} (${outfitTags.join(', ')}), ${style || seriesTone} studio lighting, highly detailed fabric texture, 8k render.`;
+        const visualPrompt = getVisualStylePrompt(seriesVisual);
+        const imagePrompt = `Vertical 9:16 fashion costume concept for character ${charName}, wearing ${outfitName} (${outfitTags.join(', ')}), visual style: ${visualPrompt}, highly detailed fabric texture, 8k render.`;
         const imgResult = await aiProviderRouter.generateImage(imagePrompt, { aspectRatio: '9:16' });
         if (imgResult?.url) {
           const s3 = await StorageFactory.uploadMedia(imgResult.url, 'images', 'png', imgResult.mimeType || 'image/png');

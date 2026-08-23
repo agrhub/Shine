@@ -96,8 +96,27 @@ Project Initialization -> Stage 1: Story Skeleton -> Stage 2: Adaptation Strateg
 **Task instructions dispatched to execution and supervision layers (excluding the `[Project Configuration]` header) must strictly not exceed 100 words.**
 
 ### Subagent Invocation
-| Stage | Subagent |
-|---|---|
 | Story Skeleton | `run_sub_agent_storySkeleton` |
 | Adaptation Strategy | `run_sub_agent_adaptationStrategy` |
 | Script Writing | `run_sub_agent_script` |
+
+---
+
+## Required Output Schema (JSON)
+
+Respond strictly in valid JSON format matching this exact array schema:
+
+```json
+[
+  {
+    "id": "trend_1",
+    "topic": "Catchy Viral Drama Title in target language",
+    "description": "2-sentence dramatic synopsis in target language",
+    "trope": "Core Micro-Drama Trope in target language",
+    "hashtagVelocity": "+520% (TikTok/Reels/Shorts)",
+    "competitorHook": "3-second opening hook in target language",
+    "region": "VN",
+    "engagementScore": 98
+  }
+]
+```

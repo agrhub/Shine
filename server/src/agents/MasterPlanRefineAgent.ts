@@ -1,6 +1,7 @@
 import { geminiClient } from '../integrations/ai/gemini/GeminiClient.js';
 import { storySkeletonAgent, EpisodeSkeleton, MasterPlanOutput } from './StorySkeletonAgent.js';
 import { loadSkill } from '../utils/SkillLoader.js';
+import { PromptLoader } from '../utils/PromptLoader.js';
 import { Logger } from '../utils/logger.js';
 import { getLanguageForCountry } from '../utils/LanguageMapping.js';
 
@@ -31,54 +32,14 @@ export class MasterPlanRefineAgent {
 
     Logger.info(`[MasterPlanRefineAgent] Refining master plan with user instruction in ${langInfo.name}: "${userInstruction}"`);
 
-    // Provide the current plan structure to Gemini for semantic understanding without text-matching regex
-    const prompt = `
-User Instruction: "${userInstruction}"
-Target Country: ${country} (${langInfo.name} - ${langInfo.nativeName})
-
-LANGUAGE REQUIREMENT:
-${langInfo.promptInstruction}
-
-Current Master Plan:
-${JSON.stringify(currentPlan, null, 2)}
-
-Task:
-Refine the Master Plan according to the user instruction while strictly preserving the schema, language, and structural integrity:
-1. Semantically interpret the user's intent in any language (e.g. modifying total episodes, duration per episode in seconds, adding characters, changing tone, revising paywalls, or rewriting arcs).
-2. If total episodes are modified, update totalEpisodes, threeActs, and paywallHooks accordingly.
-3. If episode duration is modified, update totalDurationSeconds (e.g. 90 for 1m30s, 60 for 1m, 120 for 2m, etc.).
-4. Apply all requested creative refinements to characters, storyCore, hiddenLine, or individual episodes in ${langInfo.name}.
-
-Respond strictly in JSON matching the schema:
-{
-  "updatedPlan": {
-    "seriesId": "${currentPlan.seriesId || `series_${Date.now()}`}",
-    "title": "${currentPlan.title || 'Untitled Series'}",
-    "genre": "${currentPlan.genre || 'Drama'}",
-    "tone": "${currentPlan.tone || 'Cinematic'}",
-    "country": "${country}",
-    "targetLanguage": "${langInfo.name}",
-    "ratio": "${currentPlan.ratio || '9:16'}",
-    "totalEpisodes": ${currentPlan.totalEpisodes || 24},
-    "totalDurationSeconds": ${currentPlan.totalDurationSeconds || 60},
-    "storyCore": {
-      "coreAttraction": "string",
-      "psychologicalPleasure": "string",
-      "goldFingerRule": "string"
-    },
-    "hiddenLine": "string",
-    "targetAudience": "string",
-    "viralHook": "string",
-    "estimatedRetention": "string",
-    "characters": [],
-    "threeActs": [],
-    "majorReversals": [],
-    "paywallHooks": [],
-    "episodes": []
-  },
-  "explanation": "Clear summary of all adjustments applied in target language"
-}
-`;
+    const prompt = PromptLoader.render('screenplay/master_plan_refine', {
+      userInstruction,
+      country,
+      languageName: langInfo.name,
+      languageNativeName: langInfo.nativeName,
+      languageInstruction: langInfo.promptInstruction,
+      currentPlanJson: JSON.stringify(currentPlan, null, 2),
+    });
 
     const rawText = await geminiClient.generateText({
       prompt,
@@ -104,7 +65,10 @@ Respond strictly in JSON matching the schema:
     updatedPlan.totalEpisodes = targetEpisodes;
     updatedPlan.totalDurationSeconds = durationSecs;
     updatedPlan.country = country;
-    updatedPlan.targetLanguage = langInfo.name;
+    updatedPlan.language = langInfo.name;
+    updatedPlan.visualStyle = currentPlan.visualStyle || updatedPlan.visualStyle || 'realistic';
+    updatedPlan.visualStylePrompt = currentPlan.visualStylePrompt || updatedPlan.visualStylePrompt || '';
+    updatedPlan.ratio = currentPlan.ratio || updatedPlan.ratio || '9:16';
 
     if (!updatedPlan.seriesId) {
       updatedPlan.seriesId = currentPlan.seriesId || `series_${Date.now()}`;

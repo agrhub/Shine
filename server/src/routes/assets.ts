@@ -9,6 +9,9 @@ import { CreditService } from '@/services/CreditService.js';
 import { getUserId } from '@/utils/auth.js';
 import { getDatabaseProvider } from '@/database/index.js';
 import { Logger } from '@/utils/logger.js';
+import { getVisualStylePrompt } from '../constants/VisualStyles.js';
+import { geminiClient } from '@/integrations/ai/gemini/GeminiClient.js';
+import { videoService } from '@/services/VideoService.js';
 
 export const assetsRouter = Router();
 
@@ -27,6 +30,17 @@ assetsRouter.get('/file/*', async (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
 
     if (stream && typeof stream.pipe === 'function') {
+      stream.on('error', (streamErr: any) => {
+        Logger.warn(`[Asset Proxy] Stream error for key ${rawKey}: ${streamErr?.message || streamErr}`);
+        if (!res.headersSent) {
+          res.status(404).json({
+            code: 404,
+            data: null,
+            message: `Asset key not found in storage: ${streamErr?.message || 'Not found'}`,
+            error: 'ASSET_NOT_FOUND',
+          });
+        }
+      });
       stream.pipe(res);
     } else {
       res.send(stream);
@@ -129,8 +143,7 @@ assetsRouter.delete('/:id', async (req: Request, res: Response) => {
 // POST /api/assets/image-generate — Dedicated Scene & Background Image Generation
 assetsRouter.post('/image-generate', async (req: Request, res: Response) => {
   try {
-    const { type, prompt, seriesId, episodeId, sceneId, aspectRatio, style, sceneIndex, characters: reqCharacters } = req.body;
-    const db = await getDatabaseProvider();
+    const { type, prompt, seriesId, episodeId, sceneId, aspectRatio, style, sceneIndex, characters, sceneData, isEndFrame } = req.body;
     const userId = getUserId(req);
 
     const deduct = await CreditService.deductUserCredits(userId, 'sceneImage', 'Scene Background Generation', `Scene: ${sceneId || 'frame'}`);
@@ -138,160 +151,37 @@ assetsRouter.post('/image-generate', async (req: Request, res: Response) => {
       return res.status(402).json({ code: 402, data: null, message: deduct.error, error: 'INSUFFICIENT_CREDITS' });
     }
 
-    const frameSkill = loadSkill('production_frame_prompt') || '';
-    const targetAspect = aspectRatio === '16:9' ? '16:9' : '9:16';
-
-    // Contextual enrichment from Series and Episode in Database
-    let targetSeries: any = null;
-    let seriesTitle = '';
-    let seriesGenre = 'micro-drama';
-    let seriesTone = 'cinematic';
-    let seriesVisual = 'modern cinematic';
-
-    if (seriesId) {
-      targetSeries = await db.getSeriesById(seriesId);
-    }
-
-    if (episodeId && !targetSeries) {
-      const episode = await db.getEpisodeById(episodeId);
-      if (episode && episode.series_id) {
-        targetSeries = await db.getSeriesById(episode.series_id);
-      }
-    }
-
-    if (targetSeries) {
-      seriesTitle = targetSeries.title || '';
-      seriesGenre = targetSeries.genre || seriesGenre;
-      seriesTone = targetSeries.tone || seriesTone;
-      seriesVisual = targetSeries.visual_style || seriesVisual;
-    }
-
-    // ─── Character Continuity & Face Reference Extraction ─────────────────────
-    const allSeriesCharacters: any[] = targetSeries?.characters || targetSeries?.master_plan?.characters || [];
-    const characterReferences: string[] = [];
-    const characterContinuityDescriptions: string[] = [];
-    const promptUpper = (prompt || '').toUpperCase();
-
-    for (const char of allSeriesCharacters) {
-      const charNameUpper = (char.name || '').toUpperCase();
-      const isPresent = (Array.isArray(reqCharacters) && reqCharacters.some((c: string) => c.toUpperCase() === charNameUpper)) ||
-                        (charNameUpper && promptUpper.includes(charNameUpper));
-
-      if (isPresent) {
-        const refUrl = char.anchors?.[0]?.imageUrl || char.avatarUrl || char.avatar;
-        if (refUrl && !characterReferences.includes(refUrl)) {
-          characterReferences.push(refUrl);
-        }
-
-        const ageTag = char.age ? `${char.age}-year-old ` : '';
-        const genderTag = char.gender && char.gender !== 'neutral' ? `${char.gender} ` : '';
-        let wardrobeTag = '';
-        if (Array.isArray(char.wardrobe) && char.wardrobe.length > 0) {
-          const wTags = Array.isArray(char.wardrobe[0].tags) ? char.wardrobe[0].tags.join(', ') : char.wardrobe[0].name;
-          if (wTags) wardrobeTag = `, wearing ${wTags}`;
-        }
-        const traits = char.visualTraits || char.traits || char.identity || '';
-        characterContinuityDescriptions.push(`Character ${char.name}: ${ageTag}${genderTag}${traits}${wardrobeTag}, exact face matching reference photo.`);
-      }
-    }
-
-    // Build rich, contextual prompt
-    let enhancedPrompt = `Vertical 9:16 micro-drama cinematic scene storyboard shot, ${seriesGenre} genre, tone: ${style || seriesTone}, visual style: ${seriesVisual}.`;
-    if (prompt) {
-      enhancedPrompt += ` Scene setting: ${prompt}.`;
-    }
-    if (characterContinuityDescriptions.length > 0) {
-      enhancedPrompt += ` Character Continuity: ${characterContinuityDescriptions.join(' ')}`;
-    }
-    enhancedPrompt += ` Highly atmospheric cinematic lighting, depth of field, high-contrast rim lighting, photorealistic 8k render.`;
-
-    Logger.info(`[assetsRouter] Generating scene image with ${characterReferences.length} character reference(s) for scene ${sceneId || sceneIndex || 'frame'}`);
-
-    // Generate image via AIProviderRouter (loads Google Flow or Gemini dynamically with character references)
-    const imageResult = await aiProviderRouter.generateImage(enhancedPrompt, {
-      aspectRatio: targetAspect,
-      systemPrompt: frameSkill,
-      characterReferences,
-      imageInputs: characterReferences,
-    });
-
-    if (!imageResult || !imageResult.url) {
-      throw new Error('Image generation failed across all AI providers.');
-    }
-
-    // Upload to Storage
-    const s3Result = await StorageFactory.uploadMedia(imageResult.url, 'images', 'png', imageResult.mimeType || 'image/png');
-    const internalUrl = `/api/assets/file/${s3Result.key}`;
-
-    // Embed SynthID Watermark
-    const synthIdResult = await SynthIDService.embedSynthID({
-      assetType: 'image',
-      model: imageResult.provider || 'Google Flow',
-      seriesId: seriesId || episodeId,
-      sceneId,
-    });
-
-    const assetId = `ast_${nanoid(8)}`;
-    const assetName = `Scene_${sceneId || sceneIndex || 'Background'}_${nanoid(4)}`;
-
-    // Save Asset in Database
-    const savedAsset = await db.saveAsset({
-      id: assetId,
-      user_id: userId,
-      name: assetName,
-      type: 'scene_image',
-      ext: '.PNG',
-      size: `${(s3Result.size / (1024 * 1024)).toFixed(1)} MB`,
-      sizeBytes: s3Result.size,
-      categoryLabel: 'Scene Background',
-      categoryColor: 'text-pink-500 dark:text-pink-400',
-      s3Key: s3Result.key,
-      url: internalUrl,
-      thumbnail: internalUrl,
+    const result = await videoService.generateSceneImage({
+      userId,
+      type,
+      prompt,
       seriesId,
       episodeId,
       sceneId,
-      prompt: enhancedPrompt,
-      provider: imageResult.provider,
-      aspect: targetAspect === '9:16' ? 'aspect-[9/16]' : 'aspect-[16/9]',
-      synthIdVerified: true,
-      synthIdHash: synthIdResult.synthIdHash,
-      synthIdMetadata: synthIdResult.synthIdMetadata,
-      created_at: new Date().toISOString(),
+      aspectRatio,
+      style,
+      sceneIndex,
+      characters,
+      sceneData,
+      isEndFrame,
     });
 
-    // Auto-update episode scene's storyboardFrameUrl in Database
-    if (episodeId) {
-      try {
-        const ep = await db.getEpisodeById(episodeId);
-        if (ep && Array.isArray(ep.scenes)) {
-          const sIdx = typeof sceneIndex === 'number'
-            ? ep.scenes.findIndex((s: any) => s.index === sceneIndex || s.id === sceneId)
-            : ep.scenes.findIndex((s: any) => s.id === sceneId);
-          if (sIdx !== -1) {
-            ep.scenes[sIdx].storyboardFrameUrl = internalUrl;
-            await db.updateEpisode(ep.id, { scenes: ep.scenes });
-          }
-        }
-      } catch (err: any) {
-        Logger.warn(`[assetsRouter] Auto-update episode scene failed: ${err.message}`);
-      }
+    if (result.synthIdHeaders) {
+      res.set(result.synthIdHeaders);
     }
-
-    res.set(synthIdResult.headers);
 
     return res.status(201).json({
       code: 201,
       data: {
         jobId: `job_${nanoid(8)}`,
-        assetId: savedAsset.id,
-        s3Key: s3Result.key,
-        url: internalUrl,
-        imageUrl: internalUrl,
-        sizeBytes: s3Result.size,
-        provider: imageResult.provider,
-        synthId: synthIdResult.synthIdMetadata,
-        generationParams: { prompt: enhancedPrompt, type, episodeId, sceneId, style },
+        assetId: result.assetId,
+        s3Key: result.s3Key,
+        url: result.url,
+        imageUrl: result.imageUrl,
+        sizeBytes: result.sizeBytes,
+        provider: result.provider,
+        synthId: result.synthId,
+        generationParams: { prompt: result.enhancedPrompt, type, episodeId, sceneId, style },
         status: 'completed',
         message: 'AI scene background rendered and saved to database successfully with SynthID',
       },
@@ -310,99 +200,52 @@ assetsRouter.post('/image-generate', async (req: Request, res: Response) => {
 });
 
 // POST /api/assets/video-generate — Real Scene Image-to-Video Generation & S3 Storage
-assetsRouter.post('/video-generate', async (req, res: Response) => {
+assetsRouter.post('/video-generate', async (req: Request, res: Response) => {
   try {
-    const { backgroundImageId, characterImageIds, seriesId, episodeId, sceneId, duration, motion, cameraMovement, prompt } = req.body;
-    const db = await getDatabaseProvider();
+    const { startFrameUrl, endFrameUrl, characterImageIds, seriesId, episodeId, sceneId, duration, motion, cameraMovement, prompt, aspectRatio, language, sceneData } = req.body;
     const userId = getUserId(req);
 
     // Deduct credits for Video Generation
     await CreditService.deductUserCredits(userId, 'videoGeneration', 'Scene Video Generation', `Scene: ${sceneId || 'ep' + episodeId}`);
 
-    // Contextual enrichment from Series and Episode in Database
-    let seriesTone = 'cinematic';
-    let seriesGenre = 'micro-drama';
-    if (seriesId) {
-      const s = await db.getSeriesById(seriesId);
-      if (s) {
-        seriesTone = s.tone || seriesTone;
-        seriesGenre = s.genre || seriesGenre;
-      }
-    }
-
-    const targetDuration = Math.min(Math.max(Number(duration) || 5, 4), 8);
-    const cameraCue = cameraMovement || 'slow dolly push-in';
-    const motionIntensity = motion || 'subtle cinematic movement';
-
-    let videoPrompt = `9:16 vertical ${seriesGenre} micro-drama scene, camera: ${cameraCue}, movement: ${motionIntensity}, tone: ${seriesTone}, ultra photorealistic, cinematic high-contrast lighting.`;
-    if (prompt) {
-      videoPrompt += ` Scene action: ${prompt}.`;
-    }
-
-    const videoResult = await aiProviderRouter.generateVideo(videoPrompt, {
-      aspectRatio: '9:16',
-      characterReferences: Array.isArray(characterImageIds) ? characterImageIds : characterImageIds ? [characterImageIds] : [],
-      backgroundImageId,
-    });
-
-    if (!videoResult || !videoResult.url) {
-      throw new Error('Video generation failed across all providers (Google Flow Veo & Gemini).');
-    }
-
-    // Upload generated video to Storage
-    const s3Result = await StorageFactory.uploadMedia(videoResult.url, 'videos', 'mp4', 'video/mp4');
-    const internalUrl = `/api/assets/file/${s3Result.key}`;
-    const assetId = `ast_${nanoid(8)}`;
-    const assetName = `Scene_Video_${sceneId || 'ep' + episodeId}_${nanoid(4)}`;
-
-    // Embed SynthID Digital Watermark
-    const synthIdResult = await SynthIDService.embedSynthID({
-      assetType: 'video',
-      model: videoResult.provider || 'Veo-3.1',
-      seriesId: episodeId,
-      sceneId,
-    });
-
-    // Save Asset to Database
-    const savedAsset = await db.saveAsset({
-      id: assetId,
-      user_id: userId,
-      name: assetName,
-      type: 'scene_video',
-      ext: '.MP4',
-      size: `${(s3Result.size / (1024 * 1024)).toFixed(1)} MB`,
-      sizeBytes: s3Result.size,
-      categoryLabel: 'Scene Video',
-      categoryColor: 'text-blue-500 dark:text-blue-400',
-      s3Key: s3Result.key,
-      url: internalUrl,
-      thumbnail: internalUrl,
+    const result = await videoService.generateSceneVideo({
+      userId,
+      startFrameUrl: startFrameUrl,
+      endFrameUrl: endFrameUrl,
+      characterImageIds,
       seriesId,
       episodeId,
       sceneId,
-      prompt: videoPrompt,
-      provider: videoResult.provider,
-      isVideo: true,
-      aspect: 'aspect-[9/16]',
-      synthIdVerified: true,
-      synthIdHash: synthIdResult.synthIdHash,
-      synthIdMetadata: synthIdResult.synthIdMetadata,
-      created_at: new Date().toISOString(),
+      duration,
+      motion,
+      cameraMovement,
+      prompt,
+      aspectRatio,
+      language,
+      sceneData,
     });
 
-    res.set(synthIdResult.headers);
+    if (result.synthIdHeaders) {
+      res.set(result.synthIdHeaders);
+    }
 
     return res.status(201).json({
       code: 201,
       data: {
         jobId: `vid_${nanoid(10)}`,
-        assetId: savedAsset.id,
-        s3Key: s3Result.key,
-        url: internalUrl,
-        sizeBytes: s3Result.size,
-        provider: videoResult.provider,
-        synthId: synthIdResult.synthIdMetadata,
-        params: { backgroundImageId, characterImageIds, duration: targetDuration, motion: motionIntensity, cameraMovement: cameraCue },
+        assetId: result.assetId,
+        s3Key: result.s3Key,
+        url: result.url,
+        bgmUrl: (result as any).bgmUrl || '',
+        voiceoverUrl: (result as any).voiceoverUrl || '',
+        voiceId: (result as any).voiceId || '',
+        voiceStartUs: (result as any).voiceStartUs || 200_000,
+        voiceDurationUs: (result as any).voiceDurationUs || (Number(duration) || 6) * 1_000_000,
+        captionsData: (result as any).captionsData || [],
+        sizeBytes: result.sizeBytes,
+        provider: result.provider,
+        synthId: result.synthId,
+        params: { startFrameUrl: startFrameUrl, endFrameUrl: endFrameUrl || sceneData?.endFrameUrl, characterImageIds, duration: result.duration, motion: result.motion, cameraMovement: result.cameraMovement },
         status: 'completed',
         message: 'Scene video generated and saved to database successfully with SynthID',
       },
@@ -490,4 +333,368 @@ assetsRouter.post('/music-generate', async (req, res: Response) => {
   }
 });
 
+import { AssetService } from '@/services/AssetService.js';
+import { scriptAgent } from '@/agents/ScriptAgent.js';
+
+/**
+ * Helper: Automatically resolves country, language, and duration from Series & Episode in DB
+ */
+async function resolveProjectLanguageContext(
+  seriesId?: string,
+  episodeId?: string,
+  explicitCountry?: string,
+  explicitLanguage?: string
+): Promise<{
+  country?: string;
+  language?: string;
+  duration?: number;
+  existingCharacters?: any[];
+  existingLocations?: any[];
+  existingProps?: any[];
+}> {
+  let country = explicitCountry;
+  let language = explicitLanguage;
+  let duration: number | undefined;
+  let characters: any[] = [];
+  let locations: any[] = [];
+  let props: any[] = [];
+
+  if (seriesId || episodeId) {
+    try {
+      const db = await getDatabaseProvider();
+      if (seriesId) {
+        const series = await db.getSeriesById(seriesId);
+        if (series) {
+          country = country || series.country;
+          let masterPlanObj = series.master_plan;
+          if (typeof masterPlanObj === 'string') {
+            try {
+              masterPlanObj = JSON.parse(masterPlanObj);
+            } catch {}
+          }
+          language = language || series.language || (masterPlanObj as any)?.language;
+          if ((masterPlanObj as any)?.totalDurationSeconds) {
+            duration = Number((masterPlanObj as any).totalDurationSeconds);
+          }
+          if (Array.isArray(series.characters) && series.characters.length > 0) {
+            characters = series.characters;
+          } else if (Array.isArray((masterPlanObj as any)?.characters)) {
+            characters = (masterPlanObj as any).characters;
+          }
+          if (Array.isArray(series.locations) && series.locations.length > 0) {
+            locations = series.locations;
+          } else if (Array.isArray((masterPlanObj as any)?.locations)) {
+            locations = (masterPlanObj as any).locations;
+          }
+          if (Array.isArray(series.props) && series.props.length > 0) {
+            props = series.props;
+          } else if (Array.isArray((masterPlanObj as any)?.props)) {
+            props = (masterPlanObj as any).props;
+          }
+        }
+      }
+      if (episodeId) {
+        const ep = await db.getEpisodeById(episodeId);
+        if (ep) {
+          language = (ep as any).activeLanguageCode || (ep as any).language || language;
+          const epDur = Number(ep.duration);
+          if (epDur && epDur >= 30) {
+            duration = epDur;
+          }
+          if (Array.isArray(ep.characters) && ep.characters.length > 0) {
+            characters = ep.characters;
+          }
+          if (Array.isArray(ep.locations) && ep.locations.length > 0) {
+            locations = ep.locations;
+          }
+          if (Array.isArray(ep.props) && ep.props.length > 0) {
+            props = ep.props;
+          }
+        }
+      }
+    } catch (e: any) {
+      Logger.warn(`[resolveProjectLanguageContext] DB lookup error: ${e.message}`);
+    }
+  }
+
+  return {
+    country,
+    language,
+    duration: duration || 90,
+    existingCharacters: characters.length > 0 ? characters : undefined,
+    existingLocations: locations.length > 0 ? locations : undefined,
+    existingProps: props.length > 0 ? props : undefined,
+  };
+}
+
+// POST /api/assets/screenplay/extract — Extract Characters, Locations, and Props from screenplay
+assetsRouter.post('/screenplay/extract', async (req: Request, res: Response) => {
+  try {
+    const { screenplay, seriesId, episodeId, country, language } = req.body;
+    if (!screenplay || typeof screenplay !== 'string') {
+      return res.status(400).json({ code: 400, data: null, message: 'Screenplay text is required', error: 'INVALID_PAYLOAD' });
+    }
+
+    const ctx = await resolveProjectLanguageContext(seriesId, episodeId, country, language);
+    const result = await scriptAgent.extractAssets(screenplay, ctx.language || ctx.country);
+    return res.json({
+      code: 200,
+      data: result,
+      message: 'Screenplay assets extracted successfully',
+      error: null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ code: 500, data: null, message: err.message, error: 'EXTRACT_ASSETS_FAILED' });
+  }
+});
+
+// POST /api/assets/screenplay/describe-assets — Auto-fill detailed descriptions for characters, locations, and props
+assetsRouter.post('/screenplay/describe-assets', async (req: Request, res: Response) => {
+  try {
+    const { screenplay, characters, locations, props, seriesId, episodeId, country, language } = req.body;
+    if (!screenplay) {
+      return res.status(400).json({ code: 400, data: null, message: 'Screenplay text is required', error: 'INVALID_PAYLOAD' });
+    }
+
+    const ctx = await resolveProjectLanguageContext(seriesId, episodeId, country, language);
+    const targetLang = ctx.language || ctx.country;
+
+    const charDescriptions = Array.isArray(characters) && characters.length > 0
+      ? await scriptAgent.describeCharacters(screenplay, characters, targetLang)
+      : {};
+
+    const locDescriptions = Array.isArray(locations) && locations.length > 0
+      ? await scriptAgent.describeLocations(screenplay, locations, targetLang)
+      : {};
+
+    const propDescriptions = Array.isArray(props) && props.length > 0
+      ? await scriptAgent.describeProps(screenplay, props, targetLang)
+      : {};
+
+    return res.json({
+      code: 200,
+      data: {
+        characters: charDescriptions,
+        locations: locDescriptions,
+        props: propDescriptions,
+      },
+      message: 'Asset descriptions generated successfully',
+      error: null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ code: 500, data: null, message: err.message, error: 'DESCRIBE_ASSETS_FAILED' });
+  }
+});
+
+// POST /api/assets/screenplay/analyze — End-to-end Screenplay Analysis: Extract Assets, Describe in Native Language, and Breakdown into Scenes/Shots
+assetsRouter.post('/screenplay/analyze', async (req: Request, res: Response) => {
+  try {
+    const {
+      screenplay,
+      country,
+      language,
+      seriesId,
+      episodeId,
+      targetDurationSeconds,
+      existingCharacters,
+      existingLocations,
+      existingProps,
+    } = req.body;
+
+    if (!screenplay || typeof screenplay !== 'string') {
+      return res.status(400).json({ code: 400, data: null, message: 'Screenplay text is required', error: 'INVALID_PAYLOAD' });
+    }
+
+    // Automatically resolve country, language, duration, and existing assets from Series & Episode in DB
+    const ctx = await resolveProjectLanguageContext(seriesId, episodeId, country, language);
+    const effectiveDuration = Number(targetDurationSeconds) || ctx.duration || undefined;
+
+    const result = await scriptAgent.analyzeAndBreakdownScreenplay({
+      screenplay,
+      country: ctx.language || ctx.country,
+      targetDurationSeconds: effectiveDuration,
+      existingCharacters: (Array.isArray(existingCharacters) && existingCharacters.length > 0) ? existingCharacters : ctx.existingCharacters,
+      existingLocations: (Array.isArray(existingLocations) && existingLocations.length > 0) ? existingLocations : ctx.existingLocations,
+      existingProps: (Array.isArray(existingProps) && existingProps.length > 0) ? existingProps : ctx.existingProps,
+    });
+
+    // If seriesId & episodeId are provided, persist update to database
+    if (seriesId && episodeId) {
+      try {
+        const db = await getDatabaseProvider();
+        const ep = await db.getEpisodeById(episodeId);
+        if (ep) {
+          await db.updateEpisode(episodeId, {
+            screenplay,
+            scenes: result.scenes,
+            characters: result.characters,
+            locations: result.locations,
+            props: result.props,
+            duration: result.totalDurationSeconds,
+            script: JSON.stringify({
+              episode: ep.title,
+              episodeNumber: ep.episode_number,
+              title: ep.title,
+              screenplay,
+              scenes: result.scenes,
+              characters: result.characters,
+              locations: result.locations,
+              props: result.props,
+              totalDurationSeconds: result.totalDurationSeconds,
+            }),
+          });
+        }
+      } catch (dbErr: any) {
+        Logger.warn(`[assetsRouter.analyze] Failed to auto-persist to DB: ${dbErr.message}`);
+      }
+    }
+
+    return res.json({
+      code: 200,
+      data: result,
+      message: 'Screenplay analyzed, assets extracted, and scenes generated successfully',
+      error: null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ code: 500, data: null, message: err.message, error: 'ANALYZE_SCREENPLAY_FAILED' });
+  }
+});
+
+// POST /api/assets/character/sheet — Generate 2-in-1 Character Sheet (Head & shoulders left + Full body right)
+assetsRouter.post('/character/sheet', async (req: Request, res: Response) => {
+  try {
+    const { characterName, physicalCharacteristics, clothingAndAccessories, visualStyle, referenceImageUrl } = req.body;
+    if (!characterName) {
+      return res.status(400).json({ code: 400, data: null, message: 'Character name is required', error: 'INVALID_PAYLOAD' });
+    }
+
+    const result = await AssetService.generateCharacterSheet(
+      characterName,
+      physicalCharacteristics || '',
+      clothingAndAccessories || '',
+      visualStyle,
+      referenceImageUrl
+    );
+
+    return res.json({
+      code: 200,
+      data: result,
+      message: 'Character sheet generated successfully',
+      error: null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ code: 500, data: null, message: err.message, error: 'CHARACTER_SHEET_FAILED' });
+  }
+});
+
+// POST /api/assets/location/sheet — Generate 4-in-1 Location Sheet (1 establishing + 3 perspective views 16:9)
+assetsRouter.post('/location/sheet', async (req: Request, res: Response) => {
+  try {
+    const { locationName, physicalCharacteristics, timeOfDay, visualStyle } = req.body;
+    if (!locationName) {
+      return res.status(400).json({ code: 400, data: null, message: 'Location name is required', error: 'INVALID_PAYLOAD' });
+    }
+
+    const result = await AssetService.generateLocationSheet(
+      locationName,
+      physicalCharacteristics || '',
+      timeOfDay || 'Daytime',
+      visualStyle
+    );
+
+    return res.json({
+      code: 200,
+      data: result,
+      message: 'Location sheet generated successfully',
+      error: null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ code: 500, data: null, message: err.message, error: 'LOCATION_SHEET_FAILED' });
+  }
+});
+
+// POST /api/assets/prop/sheet — Generate Prop Product Shot (Isolated on seamless white background)
+assetsRouter.post('/prop/sheet', async (req: Request, res: Response) => {
+  try {
+    const { propName, physicalCharacteristics, visualStyle } = req.body;
+    if (!propName) {
+      return res.status(400).json({ code: 400, data: null, message: 'Prop name is required', error: 'INVALID_PAYLOAD' });
+    }
+
+    const result = await AssetService.generatePropProductShot(
+      propName,
+      physicalCharacteristics || '',
+      visualStyle
+    );
+
+    return res.json({
+      code: 200,
+      data: result,
+      message: 'Prop product shot generated successfully',
+      error: null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ code: 500, data: null, message: err.message, error: 'PROP_SHOT_FAILED' });
+  }
+});
+
+// POST /api/assets/screenplay/breakdown-shots — Break down Scene into Sequential Shots with Asset Linking
+assetsRouter.post('/screenplay/breakdown-shots', async (req: Request, res: Response) => {
+  try {
+    const { sceneTitle, sceneContent, availableAssets } = req.body;
+    if (!sceneTitle || !sceneContent) {
+      return res.status(400).json({ code: 400, data: null, message: 'Scene title and content are required', error: 'INVALID_PAYLOAD' });
+    }
+
+    const shots = await scriptAgent.breakdownSceneToShots(
+      sceneTitle,
+      sceneContent,
+      Array.isArray(availableAssets) ? availableAssets : []
+    );
+
+    return res.json({
+      code: 200,
+      data: { shots },
+      message: 'Scene broken down into shots successfully',
+      error: null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ code: 500, data: null, message: err.message, error: 'BREAKDOWN_SHOTS_FAILED' });
+  }
+});
+
+// POST /api/assets/storyboard/shot-image — Generate Shot Frame Image with linked assets
+assetsRouter.post('/storyboard/shot-image', async (req: Request, res: Response) => {
+  try {
+    const { shot, assets, visualStyle, aspectRatio } = req.body;
+    if (!shot || !shot.frameVisual) {
+      return res.status(400).json({ code: 400, data: null, message: 'Shot data is required', error: 'INVALID_PAYLOAD' });
+    }
+
+    const assetsMap = new Map<string, { name: string; type: string; imageUrl?: string; physicalCharacteristics?: string }>();
+    if (Array.isArray(assets)) {
+      for (const a of assets) {
+        if (a.id) assetsMap.set(a.id, a);
+      }
+    }
+
+    const result = await AssetService.generateShotImage(
+      shot,
+      assetsMap,
+      visualStyle,
+      aspectRatio || '16:9'
+    );
+
+    return res.json({
+      code: 200,
+      data: result,
+      message: 'Shot frame image generated successfully',
+      error: null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ code: 500, data: null, message: err.message, error: 'SHOT_IMAGE_FAILED' });
+  }
+});
+
 export default assetsRouter;
+

@@ -35,7 +35,20 @@ aiRouter.get('/trends/viral-topics', async (req, res) => {
 // POST /api/ai/generate-master-plan — Delegated to StorySkeletonAgent & script_skeleton skill
 aiRouter.post('/generate-master-plan', async (req, res) => {
   try {
-    const { title, genre, tone, synopsis, totalEpisodes, episodeDurationSeconds, country, region, ratio, viralTopic, referenceAssets } = req.body;
+    const {
+      title,
+      genre,
+      visualStyle,
+      visualStylePrompt,
+      synopsis,
+      totalEpisodes,
+      episodeDurationSeconds,
+      country,
+      language,
+      ratio,
+      viralTopic,
+      referenceAssets,
+    } = req.body;
 
     const userId = getUserId(req);
     const deduct = await CreditService.deductUserCredits(userId, 'scriptGeneration', 'Script Master Plan Generation', `Series: ${title || 'Untitled'}`);
@@ -46,11 +59,13 @@ aiRouter.post('/generate-master-plan', async (req, res) => {
     const plan = await storySkeletonAgent.execute({
       title: title || 'Untitled Series',
       genre: genre || 'Suspense / Mystery',
-      tone: tone || 'Cinematic Neon',
+      visualStyle: visualStyle || 'realistic',
+      visualStylePrompt: visualStylePrompt || '',
       synopsis: synopsis || 'A high-stakes conflict of ambition, betrayal, and power.',
       totalEpisodes: totalEpisodes || 24,
       episodeDurationSeconds: episodeDurationSeconds ? Number(episodeDurationSeconds) : undefined,
-      country: country || region || 'US',
+      country: country || 'Vietnam',
+      language: language || 'vi-VN',
       ratio: ratio || '9:16',
       viralTopic: viralTopic || '',
       referenceAssets,
@@ -75,7 +90,7 @@ aiRouter.post('/generate-master-plan', async (req, res) => {
 // POST /api/ai/generate-outline — Delegated to StorySkeletonAgent
 aiRouter.post('/generate-outline', async (req, res) => {
   try {
-    const { title, genre, tone, synopsis, totalEpisodes } = req.body;
+    const { title, genre, visualStyle, synopsis, totalEpisodes } = req.body;
     const userId = getUserId(req);
     const deduct = await CreditService.deductUserCredits(userId, 'scriptGeneration', 'Story Outline Generation', `Series: ${title || 'Untitled'}`);
     if (!deduct.success && deduct.error?.includes('Insufficient')) {
@@ -85,7 +100,7 @@ aiRouter.post('/generate-outline', async (req, res) => {
     const outline = await storySkeletonAgent.execute({
       title: title || 'Undercover Mastermind',
       genre: genre || 'Suspense',
-      tone: tone || 'Dark & Fast-Paced',
+      visualStyle: visualStyle || 'realistic',
       synopsis: synopsis || 'Betrayed heir undercover to dismantle corrupt board.',
       totalEpisodes: totalEpisodes || 20,
     });
@@ -140,7 +155,7 @@ aiRouter.post('/refine-master-plan', async (req, res) => {
 // POST /api/ai/generate-script — Delegated to DirectorAgent & multi-agent pipeline
 aiRouter.post('/generate-script', async (req, res) => {
   try {
-    const { title, genre, tone, synopsis, episodeNumber, totalEpisodes } = req.body;
+    const { title, genre, visualStyle, synopsis, episodeNumber, totalEpisodes } = req.body;
     const userId = getUserId(req);
     const deduct = await CreditService.deductUserCredits(userId, 'scriptGeneration', 'Screenplay Script Generation', `Series: ${title || 'Untitled'} (Ep ${episodeNumber || 1})`);
     if (!deduct.success && deduct.error?.includes('Insufficient')) {
@@ -150,7 +165,7 @@ aiRouter.post('/generate-script', async (req, res) => {
     const pipelineResult = await directorAgent.runPipeline({
       title: title || 'Undercover Mastermind',
       genre: genre || 'Suspense',
-      tone: tone || 'Dark & Fast-Paced',
+      visualStyle: visualStyle || 'realistic',
       synopsis: synopsis || 'Betrayed heir undercover to dismantle corrupt board.',
       episodeNumber: episodeNumber || 1,
       totalEpisodes: totalEpisodes || 20,

@@ -257,7 +257,7 @@ When swapping outfits or props for a character while preserving facial consisten
 ## 12. Dynamic Cliffhanger Engine — Transition & Caption Rules (Proposal 3)
 
 For the final 3 seconds of an episode:
-1. **Visual Transition:** Apply OpenVideo GLSL shader `transitionKey: "glitch"` or `"flash"` at the 3-second mark.
+1. **Visual Transition:** Apply OpenVideo GLSL shader `transitionKey: "glitchMemories"` or `"fade"` at the 3-second mark.
 2. **Keyframe Animation:** Apply stackable zoom animation `zoomIn` (scale 1.0 → 1.4 over 400ms) on the freeze-frame climax shot.
 3. **Cliffhanger Caption Prompt:** Overlay high-contrast CTA text using OpenVideo `Caption` clip with word-level highlight animation: `"EPISODE 2 UNLOCKED IN 3S - WHAT WILL MARA DECIDE?"`.
 

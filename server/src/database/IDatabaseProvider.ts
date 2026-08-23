@@ -9,6 +9,7 @@ export interface UserEntity {
   api_key_rotated_at?: string;
   two_factor_enabled?: boolean;
   integrations?: { id: string; name: string; icon: string; connected: boolean }[];
+  connected_channels?: { id: string; provider: string; channelId: string; channelName: string; channelAvatar?: string; connectedAt: string; status: string }[];
   tier: 'FREE' | 'PRO' | 'ENTERPRISE';
   credits: number;
   theme?: string;
@@ -16,22 +17,164 @@ export interface UserEntity {
   created_at?: string;
 }
 
+export interface CharacterAnchor {
+  id: string;
+  name: string;
+  landmarkType?: string;
+  matchScore?: number;
+  status?: 'locked' | 'pending';
+  imageUrl?: string;
+}
+
+export interface CharacterWardrobeItem {
+  id?: string;
+  name: string;
+  category?: string;
+  status?: string;
+  thumbnailUrl?: string;
+  imageUrl?: string;
+  tags?: string[];
+}
+
+export interface CharacterWardrobeVariant {
+  variantId: string;
+  name: string;
+  clothingAndAccessories?: string;
+  imageUrl?: string;
+  associatedScenes?: number[];
+}
+
+export interface CharacterEntity {
+  id: string;
+  seriesId?: string;
+  name: string;
+  role?: 'protagonist' | 'antagonist' | 'supporting' | 'supporter' | 'lead' | 'extra' | string;
+  age?: number;
+  gender?: string;
+  nationality?: string;
+  voiceId?: string;
+  identity?: string;
+  traits?: string;
+  visualTraits?: string;
+  physicalCharacteristics?: string;
+  appearance?: string;
+  clothingAndAccessories?: string;
+  speechStyle?: string;
+  imageUrl?: string;
+  avatarUrl?: string | null;
+  avatar?: string | null;
+  loraModel?: string;
+  description?: string;
+  created_at?: string;
+  wardrobeVariants?: CharacterWardrobeVariant[];
+}
+
+export interface LocationAsset {
+  id: string;
+  name: string;
+  physicalCharacteristics?: string;
+  timeOfDay?: string;
+  imageUrl?: string;
+  status?: 'draft' | 'ready';
+  created_at?: string;
+}
+
+export interface PropAsset {
+  id: string;
+  name: string;
+  physicalCharacteristics?: string;
+  imageUrl?: string;
+  status?: 'draft' | 'ready';
+  created_at?: string;
+}
+
+export interface ShotFrame {
+  id: string;
+  index: number;
+  title: string;
+  frameVisual: string;
+  frameAudio?: string;
+  frameMotion?: string;
+  dialogue?: {
+    speaker: string;
+    text: string;
+    tone?: string;
+  };
+  durationSeconds: number;
+  linkedAssetIds: string[];
+  imageUrl?: string;
+  videoUrl?: string;
+  status?: 'draft' | 'image_ready' | 'video_ready';
+  sceneContext?: string;
+  propDetails?: string;
+  endFramePrompt?: string;
+  transitionEffect?: string;
+  videoEffect?: string;
+  storyboardEndFrameUrl?: string;
+}
+
+export interface SceneEntity {
+  id?: string;
+  index: number;
+  sceneNumber?: number;
+  shotNumber?: number;
+  heading?: string; // e.g. "EXT. QUẢNG TRƯỜNG THÀNH PHỐ - NGÀY"
+  locationId?: string;
+  locationName?: string;
+  location?: string;
+  timeOfDay?: string;
+  description?: string;
+  durationSeconds?: number;
+  shots?: ShotFrame[];
+  // Backwards-compatibility fields
+  storyboardFrameUrl?: string;
+  storyboardEndFrameUrl?: string;
+  videoUrl?: string;
+  audioVoiceoverUrl?: string;
+  voiceoverUrl?: string;
+  sfxAudioUrl?: string;
+  bgmAudioUrl?: string;
+  bgmUrl?: string;
+  dialogue?: any;
+  characters?: CharacterEntity[] | string[];
+  props?: string[];
+  referenceAssets?: any;
+  action?: string;
+  lightingMood?: string;
+  bgmMood?: string;
+  cameraMovement?: string;
+  characterCostumes?: any[];
+  visualPrompt?: string;
+  endFramePrompt?: string;
+  sceneContext?: string;
+  propDetails?: string;
+  transitionEffect?: string;
+  videoEffect?: string;
+  sfxCues?: string[];
+  captionsData?: any[];
+  voiceDurationUs?: number;
+  voiceStartUs?: number;
+}
+
 export interface SeriesEntity {
   id: string;
   user_id: string;
   title: string;
   genre: string;
-  tone?: string;
   synopsis?: string;
   description?: string;
   visual_style?: string;
+  visual_style_prompt?: string;
   target_audience?: string;
   episode_count: number;
   country?: string;
+  language?: string;
   ratio?: string;
   viral_hook?: string;
   master_plan?: any;
-  characters?: any[];
+  characters?: CharacterEntity[];
+  locations?: LocationAsset[];
+  props?: PropAsset[];
   status: 'DRAFT' | 'ACTIVE' | 'PUBLISHED' | 'ARCHIVED';
   created_at?: string;
   updated_at?: string;
@@ -43,13 +186,19 @@ export interface EpisodeEntity {
   episode_number: number;
   title: string;
   synopsis?: string;
+  screenplay?: string;
   scene_core?: string;
   conflict_escalation?: string;
   cliffhanger_hook?: string;
   phase?: string;
-  scenes?: any[];
+  scenes?: SceneEntity[];
+  characters?: CharacterEntity[];
+  locations?: LocationAsset[];
+  props?: PropAsset[];
   script?: string;
-  duration: number;
+  thumbnail_url?: string;
+  cover_image?: string;
+  duration?: number;
   status: 'DRAFT' | 'RENDER' | 'READY_TO_PUBLISH' | 'PUBLISHED' | 'ARCHIVED';
   languageTracks?: any[];
   activeLanguageCode?: string;

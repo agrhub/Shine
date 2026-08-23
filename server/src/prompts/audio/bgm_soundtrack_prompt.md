@@ -1,0 +1,1 @@
+Cinematic dramatic micro-drama soundtrack, genre: {{genre}}, mood: {{mood}}, pacing: {{pacing}}, instrumentation: orchestral strings, deep sub-bass, atmospheric pads, high production value, immersive stereo mix.

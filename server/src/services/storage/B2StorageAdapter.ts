@@ -28,6 +28,12 @@ export class B2StorageAdapter implements IStorageAdapter {
     return this.instance;
   }
 
+  public static resetInstance(): void {
+    if (B2StorageAdapter.instance) {
+      B2StorageAdapter.instance.destroy();
+    }
+  }
+
   public destroy(): void {
     this.b2Client = null;
     this.s3Client = null;

@@ -110,7 +110,7 @@ The System Prompt instructs Gemini on the **OpenVideo Command Catalog**:
         "clip": {
           "id": "clip_trans_glitch_01",
           "type": "Transition",
-          "transitionKey": "glitch",
+          "transitionKey": "glitchMemories",
           "fromClipId": "clip_scene_03",
           "toClipId": "clip_scene_04",
           "timing": { "display": { "from": 17000000, "to": 18000000 } }

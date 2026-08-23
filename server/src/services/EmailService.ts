@@ -47,6 +47,53 @@ export class EmailService {
     await this.sendMail(mailOptions);
   }
 
+  public async sendOtpEmail(email: string, otp: string, purpose: 'enable_2fa' | 'disable_2fa' | 'login') {
+    const titles = {
+      'enable_2fa': 'Enable Two-Factor Authentication (2FA)',
+      'disable_2fa': 'Disable Two-Factor Authentication (2FA)',
+      'login': 'Two-Factor Authentication Sign In Verification',
+    };
+
+    const actionText = {
+      'enable_2fa': 'enable Two-Factor Authentication for your Shine Studio account',
+      'disable_2fa': 'disable Two-Factor Authentication for your Shine Studio account',
+      'login': 'sign in to your Shine Studio account',
+    };
+
+    const title = titles[purpose] || 'Security Verification Code';
+    const action = actionText[purpose] || 'verify your identity';
+
+    const mailOptions = {
+      from: this.fromEmail,
+      to: email,
+      subject: `${otp} is your verification code - Shine Studio`,
+      text: `Your Shine Studio verification code is: ${otp}. It will expire in 5 minutes.`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; background: #0f1015; color: #f3f4f6; border-radius: 16px; border: 1px solid #27272a;">
+          <div style="display: flex; align-items: center; margin-bottom: 24px;">
+            <div style="width: 36px; height: 36px; background: #00dc82; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; color: #000; font-size: 20px; line-height: 36px; text-align: center;">S</div>
+            <span style="font-size: 20px; font-weight: 800; margin-left: 12px; color: #fff; letter-spacing: -0.5px;">Shine<span style="color: #00dc82;">.</span></span>
+          </div>
+
+          <h2 style="color: #fff; font-size: 22px; font-weight: 700; margin: 0 0 12px 0;">${title}</h2>
+          <p style="color: #9ca3af; font-size: 14px; line-height: 1.5; margin: 0 0 24px 0;">
+            Use the 6-digit security code below to ${action}. This code will expire in <strong style="color: #fff;">5 minutes</strong>.
+          </p>
+
+          <div style="background: #18181b; border: 1px dashed #3f3f46; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
+            <span style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #00dc82;">${otp}</span>
+          </div>
+
+          <p style="color: #6b7280; font-size: 12px; line-height: 1.5; margin: 24px 0 0 0; border-top: 1px solid #27272a; padding-top: 16px;">
+            If you did not request this verification code, please ignore this email or update your password immediately to protect your studio account.
+          </p>
+        </div>
+      `
+    };
+
+    await this.sendMail(mailOptions);
+  }
+
   public async sendWelcomeEmail(email: string, name: string) {
     const mailOptions = {
       from: this.fromEmail,
