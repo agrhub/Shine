@@ -29,7 +29,7 @@ Shine is configured to compete primarily in **Track 1: Taskmaster** (Complete Au
 | **Gemini Model (3.5 or newer)** | **`gemini-3.5-flash`** (Primary Script/LLM Agent) via Vertex AI / Gemini API | ✅ 100% Compliant |
 
 | **Google Agent Framework** | **Google GenAI SDK (`@google/genai` v2.16.0)** & **Firebase GenKit (`@genkit-ai/core`)** | ✅ 100% Compliant |
-| **Google Cloud Infrastructure** | **GCP Cloud Run** (Headless `@openvideo/core` Compositor batch render workers), **Google Cloud Storage (GCS)** (Media assets), and **Cloud Pub/Sub** (Async video render job queue) | ✅ 100% Compliant |
+| **Google Cloud Infrastructure** | **Google Cloud Run** (`shine-app`, `shine-render-worker`, `demucs-worker` in `us-central1`), **Google Cloud Firestore Native** (`shine-db`), **Google Cloud Storage** (`gs://shine-studio-media`), **Cloud Pub/Sub** (Async video render queue), and **Google Cloud Scheduler** (Heartbeat token sync) | ✅ 100% Compliant |
 
 ### 3. Partner Technology Integrations
 - **Parallel Web Search MCP:** Real-time viral trend crawler analyzing TikTok/Douyin top charts for high-retention tropes.

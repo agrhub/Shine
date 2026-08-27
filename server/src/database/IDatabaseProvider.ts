@@ -1,345 +1,35 @@
-export interface UserEntity {
-  id: string;
-  email: string;
-  password_hash?: string;
-  name: string;
-  avatar?: string;
-  role?: 'admin' | 'owner' | 'creator' | 'user' | string;
-  api_key?: string;
-  api_key_rotated_at?: string;
-  two_factor_enabled?: boolean;
-  integrations?: { id: string; name: string; icon: string; connected: boolean }[];
-  connected_channels?: { id: string; provider: string; channelId: string; channelName: string; channelAvatar?: string; connectedAt: string; status: string }[];
-  tier: 'FREE' | 'PRO' | 'ENTERPRISE';
-  credits: number;
-  theme?: string;
-  language?: string;
-  created_at?: string;
-}
+import type {
+  UserEntity,
+  CharacterEntity,
+  CharacterEpisodeEntity,
+  CharacterWardrobeVariant,
+  LocationAsset,
+  PropAsset,
+  ShotFrame,
+  SceneEntity,
+  SeriesEntity,
+  EpisodeEntity,
+  EpisodeRenderVersion,
+  SystemSettingEntity,
+  ApiKeyEntity,
+  GenerationLogEntity,
+  SocialPlatform,
+  SocialAccountEntity,
+  AIModelType,
+  AIAccountStatus,
+  AIAccountType,
+  IAIAccount,
+  FlowAccountEntity,
+  TimelineSnapshotEntity,
+  CreditTransactionEntity,
+  AssetEntity,
+  WorkerHeartbeatEntity,
+  WorkerJobEntity,
+  ClusterMetricsSummary,
+} from '@/types.js';
 
-export interface CharacterAnchor {
-  id: string;
-  name: string;
-  landmarkType?: string;
-  matchScore?: number;
-  status?: 'locked' | 'pending';
-  imageUrl?: string;
-}
-
-export interface CharacterWardrobeItem {
-  id?: string;
-  name: string;
-  category?: string;
-  status?: string;
-  thumbnailUrl?: string;
-  imageUrl?: string;
-  tags?: string[];
-}
-
-export interface CharacterWardrobeVariant {
-  variantId: string;
-  name: string;
-  clothingAndAccessories?: string;
-  imageUrl?: string;
-  associatedScenes?: number[];
-}
-
-export interface CharacterEntity {
-  id: string;
-  seriesId?: string;
-  name: string;
-  role?: 'protagonist' | 'antagonist' | 'supporting' | 'supporter' | 'lead' | 'extra' | string;
-  age?: number;
-  gender?: string;
-  nationality?: string;
-  voiceId?: string;
-  identity?: string;
-  traits?: string;
-  visualTraits?: string;
-  physicalCharacteristics?: string;
-  appearance?: string;
-  clothingAndAccessories?: string;
-  speechStyle?: string;
-  imageUrl?: string;
-  avatarUrl?: string | null;
-  avatar?: string | null;
-  loraModel?: string;
-  description?: string;
-  created_at?: string;
-  wardrobeVariants?: CharacterWardrobeVariant[];
-}
-
-export interface LocationAsset {
-  id: string;
-  name: string;
-  physicalCharacteristics?: string;
-  timeOfDay?: string;
-  imageUrl?: string;
-  status?: 'draft' | 'ready';
-  created_at?: string;
-}
-
-export interface PropAsset {
-  id: string;
-  name: string;
-  physicalCharacteristics?: string;
-  imageUrl?: string;
-  status?: 'draft' | 'ready';
-  created_at?: string;
-}
-
-export interface ShotFrame {
-  id: string;
-  index: number;
-  title: string;
-  frameVisual: string;
-  frameAudio?: string;
-  frameMotion?: string;
-  dialogue?: {
-    speaker: string;
-    text: string;
-    tone?: string;
-  };
-  durationSeconds: number;
-  linkedAssetIds: string[];
-  imageUrl?: string;
-  videoUrl?: string;
-  status?: 'draft' | 'image_ready' | 'video_ready';
-  sceneContext?: string;
-  propDetails?: string;
-  endFramePrompt?: string;
-  transitionEffect?: string;
-  videoEffect?: string;
-  storyboardEndFrameUrl?: string;
-}
-
-export interface SceneEntity {
-  id?: string;
-  index: number;
-  sceneNumber?: number;
-  shotNumber?: number;
-  heading?: string; // e.g. "EXT. QUẢNG TRƯỜNG THÀNH PHỐ - NGÀY"
-  locationId?: string;
-  locationName?: string;
-  location?: string;
-  timeOfDay?: string;
-  description?: string;
-  durationSeconds?: number;
-  shots?: ShotFrame[];
-  // Backwards-compatibility fields
-  storyboardFrameUrl?: string;
-  storyboardEndFrameUrl?: string;
-  videoUrl?: string;
-  audioVoiceoverUrl?: string;
-  voiceoverUrl?: string;
-  sfxAudioUrl?: string;
-  bgmAudioUrl?: string;
-  bgmUrl?: string;
-  dialogue?: any;
-  characters?: CharacterEntity[] | string[];
-  props?: string[];
-  referenceAssets?: any;
-  action?: string;
-  lightingMood?: string;
-  bgmMood?: string;
-  cameraMovement?: string;
-  characterCostumes?: any[];
-  visualPrompt?: string;
-  endFramePrompt?: string;
-  sceneContext?: string;
-  propDetails?: string;
-  transitionEffect?: string;
-  videoEffect?: string;
-  sfxCues?: string[];
-  captionsData?: any[];
-  voiceDurationUs?: number;
-  voiceStartUs?: number;
-}
-
-export interface SeriesEntity {
-  id: string;
-  user_id: string;
-  title: string;
-  genre: string;
-  synopsis?: string;
-  description?: string;
-  visual_style?: string;
-  visual_style_prompt?: string;
-  target_audience?: string;
-  episode_count: number;
-  country?: string;
-  language?: string;
-  ratio?: string;
-  viral_hook?: string;
-  master_plan?: any;
-  characters?: CharacterEntity[];
-  locations?: LocationAsset[];
-  props?: PropAsset[];
-  status: 'DRAFT' | 'ACTIVE' | 'PUBLISHED' | 'ARCHIVED';
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface EpisodeEntity {
-  id: string;
-  series_id: string;
-  episode_number: number;
-  title: string;
-  synopsis?: string;
-  screenplay?: string;
-  scene_core?: string;
-  conflict_escalation?: string;
-  cliffhanger_hook?: string;
-  phase?: string;
-  scenes?: SceneEntity[];
-  characters?: CharacterEntity[];
-  locations?: LocationAsset[];
-  props?: PropAsset[];
-  script?: string;
-  thumbnail_url?: string;
-  cover_image?: string;
-  duration?: number;
-  status: 'DRAFT' | 'RENDER' | 'READY_TO_PUBLISH' | 'PUBLISHED' | 'ARCHIVED';
-  languageTracks?: any[];
-  activeLanguageCode?: string;
-  videoUrlsByLang?: Record<string, string>;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export enum SocialPlatform {
-  YOUTUBE = 'youtube',
-  FACEBOOK = 'facebook',
-  TIKTOK = 'tiktok',
-}
-
-export interface SocialAccountEntity {
-  id?: string;
-  userId: string;
-  platform: SocialPlatform | string;
-  channelId: string;
-  channelName: string;
-  channelAvatarUrl?: string;
-  accessToken: string;
-  refreshToken?: string;
-  tokenExpiresAt?: string | Date;
-  scopes?: string[];
-  isActive?: boolean;
-  createdAt?: string | Date;
-  updatedAt?: string | Date;
-}
-
-export enum AIModelType {
-  TEXT = 'text',
-  IMAGE = 'image',
-  VIDEO = 'video',
-  AUDIO = 'audio',
-  MUSIC = 'music',
-  VOICE = 'voice',
-}
-
-export enum AIAccountStatus {
-  READY = 'READY',
-  UNAUTHORIZED = 'UNAUTHORIZED',
-  ERROR = 'ERROR',
-  ACTIVE = 'ACTIVE',
-}
-
-export enum AIAccountType {
-  GOOGLE_FLOW = 'google-flow',
-  GOOGLE_VERTEX = 'google-vertex',
-  API_KEY = 'api-key',
-  ANTIGRAVITY = 'antigravity',
-  STANDARD = 'standard',
-  OPENAI = 'openai',
-  CUSTOM = 'custom',
-  GOOGLE_CLOUD = 'google-cloud',
-}
-
-export interface IAIAccount {
-  id?: string;
-  email: string;
-  name?: string;
-  avatarUrl?: string;
-  accountType: string;
-  status: AIAccountStatus | string;
-  flowST?: string;
-  flowAT?: string;
-  flowATExpiresAt?: Date;
-  projectId?: string;
-  credits?: number;
-  errorMessage?: string;
-  lastFingerprint?: Map<string, string>;
-  serviceKeys?: Map<string, string>;
-  isActive: boolean;
-  save(...args: any[]): Promise<any>;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
-export interface FlowAccountEntity {
-  id: string;
-  email: string;
-  session_token: string;
-  access_token?: string;
-  project_id?: string;
-  status: string;
-  credits_remaining: number;
-  last_synced_at?: string;
-}
-
-export interface TimelineSnapshotEntity {
-  id: string;
-  episode_id: string;
-  version_number: number;
-  label: string;
-  author_id: string;
-  author_name: string;
-  author_avatar?: string;
-  change_summary?: string;
-  timeline_data: string;
-  created_at?: string;
-}
-
-export interface CreditTransactionEntity {
-  id: string;
-  user_id: string;
-  activity: string;
-  details?: string;
-  amount: number;
-  balance_after: number;
-  status: 'Success' | 'Failed';
-  created_at?: string;
-}
-
-export interface AssetEntity {
-  id: string;
-  user_id?: string;
-  name: string;
-  type: 'image' | 'video' | 'audio' | 'voice' | 'text' | 'render' | string;
-  ext?: string;
-  size?: string;
-  sizeBytes?: number;
-  categoryLabel?: string;
-  categoryColor?: string;
-  s3Key?: string;
-  url: string;
-  thumbnail?: string;
-  seriesId?: string;
-  episodeId?: string;
-  sceneId?: string;
-  characterId?: string;
-  prompt?: string;
-  provider?: string;
-  aspect?: string;
-  isVideo?: boolean;
-  isAudio?: boolean;
-  synthIdVerified?: boolean;
-  synthIdHash?: string;
-  synthIdMetadata?: any;
-  metadata?: any;
-  created_at?: string;
-}
+// Re-export all centralized types for backwards-compatibility
+export * from '@/types.js';
 
 export interface IDatabaseProvider {
   initialize(): Promise<void>;
@@ -390,5 +80,11 @@ export interface IDatabaseProvider {
   // System Settings
   getSystemSetting<T = any>(key: string): Promise<T | null>;
   saveSystemSetting<T = any>(key: string, value: T): Promise<void>;
-}
 
+  // Worker Telemetry & Cluster Monitoring
+  recordWorkerHeartbeat(heartbeat: WorkerHeartbeatEntity): Promise<void>;
+  getWorkerNodes(): Promise<WorkerHeartbeatEntity[]>;
+  recordWorkerJob(job: WorkerJobEntity): Promise<void>;
+  getWorkerJobs(filter?: { status?: string; limit?: number }): Promise<WorkerJobEntity[]>;
+  getClusterMetrics(): Promise<ClusterMetricsSummary>;
+}

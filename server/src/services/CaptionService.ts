@@ -7,6 +7,7 @@ import os from 'os';
 import { geminiClient } from '@/integrations/ai/gemini/GeminiClient.js';
 import { ttsService } from '@/services/TtsService.js';
 import { DspAudioService } from '@/services/DspAudioService.js';
+import { DemucsAudioService } from '@/services/DemucsAudioService.js';
 import { StorageFactory } from '@/services/storage/StorageFactory.js';
 import { getDatabaseProvider } from '@/database/index.js';
 import { EnvConfig } from '@/config/env.js';
@@ -150,7 +151,7 @@ export class CaptionService {
   }
 
   /**
-   * Directly passes the audio/video buffer to Gemini Multimodal to extract exact Deepgram Nova-3 formatted word timestamps and speech onset.
+   * Directly passes the audio/video buffer to Gemini Multimodal to extract exact word timestamps and speech onset.
    */
   public static async extractWordLevelCaptionsFromVideo(params: {
     videoUrl: string;
@@ -158,7 +159,7 @@ export class CaptionService {
     language?: string;
     durationSeconds?: number;
   }): Promise<{ words: DeepgramWord[]; cues: CaptionCue[]; speechStartUs: number; speechEndUs: number; hasSpeechActivity: boolean }> {
-    const { videoUrl, dialogue = [], language = 'vi-VN', durationSeconds = 6 } = params;
+    const { videoUrl, dialogue = [], language = 'en-US', durationSeconds = 6 } = params;
 
     const fullText = Array.isArray(dialogue)
       ? dialogue.map((d: any) => `${d.character ? `${d.character}: ` : ''}${d.line || d.text || ''}`).join(' ')
@@ -171,7 +172,7 @@ export class CaptionService {
     }
 
     const promptText = `Listen carefully to the audio stream and transcribe the speech with exact word-level timestamps.
-Task: Output speech transcription in Deepgram Nova-3 format.
+Task: Output high-precision word-level speech transcription.
 Language: ${language}
 Expected Dialogue Reference (if present): "${fullText || 'Transcribe all spoken words in audio'}"
 
@@ -207,12 +208,12 @@ Respond with ONLY a JSON object matching this schema:
       },
     ];
 
-    Logger.info(`[CaptionService] Analyzing audio (${(buffer.length / 1024).toFixed(1)} KB, ${mimeType}) with Gemini Multimodal for Deepgram Nova-3 word timestamps...`);
+    Logger.info(`[CaptionService] Analyzing audio (${(buffer.length / 1024).toFixed(1)} KB, ${mimeType}) with Gemini Multimodal for precise word timestamps...`);
 
     let response: any;
     try {
       response = await geminiClient.generateContent(parts, EnvConfig.geminiModelText, {
-        systemPrompt: 'You are a high-precision audio speech-to-text transcription engine. Output valid JSON matching Deepgram Nova-3 word format with start and end in seconds.',
+        systemPrompt: 'You are a high-precision audio speech-to-text transcription engine. Output valid JSON matching word timestamp format with start and end in seconds.',
         generationConfig: { responseMimeType: 'application/json' },
       });
     } catch (apiErr: any) {
@@ -280,6 +281,7 @@ Respond with ONLY a JSON object matching this schema:
   public static async processSceneAudioAndCaptions(params: {
     videoUrl: string;
     episodeId?: string;
+    sceneId?: string;
     sceneIndex: number;
     dialogue?: any[];
     language?: string;
@@ -289,6 +291,7 @@ Respond with ONLY a JSON object matching this schema:
     const {
       videoUrl,
       episodeId,
+      sceneId,
       sceneIndex,
       dialogue: reqDialogue,
       language: reqLanguage,
@@ -297,7 +300,7 @@ Respond with ONLY a JSON object matching this schema:
     } = params;
 
     const db = await getDatabaseProvider();
-    let seriesLanguage = reqLanguage || 'vi-VN';
+    let seriesLanguage = reqLanguage || 'en-US';
     let targetVoiceId = reqVoiceId || 'Aoede';
     let dialogue = reqDialogue || [];
 
@@ -308,7 +311,7 @@ Respond with ONLY a JSON object matching this schema:
         if (ep) {
           const rawScenes: any = ep.scenes || (typeof ep.script === 'object' ? (ep.script as any)?.scenes : []);
           const scenes: any[] = Array.isArray(rawScenes) ? rawScenes : [];
-          const scene = scenes.find((s: any) => s.index === sceneIndex) || scenes[sceneIndex - 1];
+          const scene = scenes.find((s: any) => (sceneId && s.id === sceneId) || s.index === sceneIndex || s.id === `scene_${sceneIndex}`);
 
           if ((!dialogue || dialogue.length === 0) && scene?.dialogue && scene.dialogue.length > 0) {
             dialogue = scene.dialogue;
@@ -322,8 +325,8 @@ Respond with ONLY a JSON object matching this schema:
               const matchedChar = series.characters?.find(
                 (c: any) => c.name?.toLowerCase().trim() === String(firstChar || '').toLowerCase().trim()
               );
-              if (matchedChar?.voiceId) {
-                targetVoiceId = matchedChar.voiceId;
+              if (matchedChar?.voice_id) {
+                targetVoiceId = matchedChar.voice_id;
               }
             }
           }
@@ -339,8 +342,9 @@ Respond with ONLY a JSON object matching this schema:
 
     if (dialogue && dialogue.length > 0) {
       const dialogueText = dialogue
-        .map((d: any) => `${d.character ? `${d.character}: ` : ''}${d.line || d.text || ''}`)
-        .join('\n');
+        .map((d: any) => d.line || d.text || '')
+        .filter(Boolean)
+        .join(' ');
 
       try {
         const ttsRes = await ttsService.generateVoice({
@@ -371,14 +375,14 @@ Respond with ONLY a JSON object matching this schema:
       }
     }
 
-    // 3. Extract clean BGM via DSP
+    // 3. Extract clean BGM via Demucs AI (Cloud Run) / DSP Fallback
     let bgmUrl = '';
     if (videoUrl) {
       try {
-        const dspResult = await DspAudioService.separateVocalAndBgm(videoUrl);
-        bgmUrl = dspResult?.bgmUrl || '';
+        const separationResult = await DemucsAudioService.separateStem(videoUrl);
+        bgmUrl = separationResult?.bgmUrl || '';
       } catch (e: any) {
-        Logger.warn(`[CaptionService] DSP BGM separation notice: ${e.message}`);
+        Logger.warn(`[CaptionService] BGM stem separation notice: ${e.message}`);
       }
     }
 
@@ -410,13 +414,13 @@ Respond with ONLY a JSON object matching this schema:
       try {
         const ep = await db.getEpisodeById(episodeId);
         if (ep && Array.isArray(ep.scenes)) {
-          const sIdx = ep.scenes.findIndex((s: any) => s.index === sceneIndex || s.id === `scene_${sceneIndex}`);
+          const sIdx = ep.scenes.findIndex((s: any) => (sceneId && s.id === sceneId) || s.index === sceneIndex || s.id === `scene_${sceneIndex}`);
           if (sIdx !== -1) {
-            if (bgmUrl) ep.scenes[sIdx].bgmUrl = bgmUrl;
-            if (voiceoverUrl) ep.scenes[sIdx].voiceoverUrl = voiceoverUrl;
-            if (captionsData.length > 0) ep.scenes[sIdx].captionsData = captionsData;
-            ep.scenes[sIdx].voiceDurationUs = totalVoiceDurationUs;
-            ep.scenes[sIdx].voiceStartUs = speechStartUs;
+            if (bgmUrl) ep.scenes[sIdx].bgm_url = bgmUrl;
+            if (voiceoverUrl) ep.scenes[sIdx].voiceover_url = voiceoverUrl;
+            if (captionsData.length > 0) ep.scenes[sIdx].captions_data = captionsData;
+            ep.scenes[sIdx].voice_duration_us = totalVoiceDurationUs;
+            ep.scenes[sIdx].voice_start_us = speechStartUs;
             await db.updateEpisode(ep.id, { scenes: ep.scenes });
           }
         }

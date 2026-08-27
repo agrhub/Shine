@@ -19,7 +19,41 @@ export class AssetService {
   // ── Core Image Asset Generation ──────────────────────────────────────────
 
   /**
-   * 1. Generate 2-in-1 Character Sheet (Head & shoulders portrait left + Full body right on white background)
+   * 1. Generate Single Character Portrait / Avatar (9:16 vertical character portrait fitting the UI avatar frame)
+   */
+  public static async generateCharacterPortrait(
+    characterName: string,
+    physicalCharacteristics: string,
+    clothingAndAccessories?: string,
+    visualStyle?: string,
+    age?: number,
+    gender?: string,
+    aspectRatio: "9:16" | "16:9" | "4:3" | "1:1" = '9:16'
+  ): Promise<{ imageUrl: string }> {
+    const stylePrompt = getVisualStylePrompt(visualStyle);
+    const ageTag = age ? `${age}-year-old ` : '';
+    const genderTag = gender && gender !== 'neutral' ? `${gender} ` : '';
+    const traits = physicalCharacteristics || 'Cinematic character portrait';
+    const clothing = clothingAndAccessories ? `, wearing ${clothingAndAccessories}` : '';
+
+    const prompt = `${stylePrompt}, centered vertical single person portrait of ${ageTag}${genderTag}${characterName}, ${traits}${clothing}, cinematic lighting, 9:16 vertical framing, age-accurate facial features, character continuity reference, clear head and shoulders framed properly within bounds.`;
+
+    Logger.info(`[AssetService.generateCharacterPortrait] Prompt for ${characterName}: ${prompt}`);
+
+    const result = await aiProviderRouter.generateImage(prompt, {
+      aspectRatio,
+    });
+
+    if (!result?.url) {
+      throw new Error(`Failed to generate character portrait for ${characterName}`);
+    }
+
+    const s3 = await StorageFactory.uploadMedia(result.url, 'images', 'png', result.mimeType || 'image/png');
+    return { imageUrl: `/api/assets/file/${s3.key}` };
+  }
+
+  /**
+   * 2. Generate 2-in-1 Character Sheet (Head & shoulders portrait left + Full body right on white background)
    */
   public static async generateCharacterSheet(
     characterName: string,
@@ -120,7 +154,7 @@ export class AssetService {
    */
   public static async generateShotImage(
     shot: ShotFrame,
-    assetsMap: Map<string, { name: string; type: string; imageUrl?: string; physicalCharacteristics?: string }>,
+    assetsMap: Map<string, { name: string; type: string; imageUrl?: string; image_url?: string; physicalCharacteristics?: string; physical_characteristics?: string }>,
     visualStyle?: string,
     aspectRatio: string = '9:16'
   ): Promise<{ imageUrl: string }> {
@@ -130,23 +164,26 @@ export class AssetService {
     const referenceImageUrls: string[] = [];
     const contextDescriptions: string[] = [];
 
-    if (Array.isArray(shot.linkedAssetIds)) {
-      for (const assetId of shot.linkedAssetIds) {
+    const linkedIds = shot.linked_asset_ids || (shot as any).linkedAssetIds;
+    if (Array.isArray(linkedIds)) {
+      for (const assetId of linkedIds) {
         const asset = assetsMap.get(assetId);
         if (asset) {
-          if (asset.imageUrl) {
-            referenceImageUrls.push(asset.imageUrl);
+          const img = asset.image_url || asset.imageUrl;
+          if (img) {
+            referenceImageUrls.push(img);
           }
-          if (asset.physicalCharacteristics) {
-            contextDescriptions.push(`[${asset.type.toUpperCase()}: ${asset.name}] ${asset.physicalCharacteristics}`);
+          const charDesc = asset.physical_characteristics || asset.physicalCharacteristics;
+          if (charDesc) {
+            contextDescriptions.push(`[${(asset.type || 'ASSET').toUpperCase()}: ${asset.name}] ${charDesc}`);
           }
         }
       }
     }
 
     const prompt = PromptLoader.render('storyboard/shot_image', {
-      frameVisual: shot.frameVisual,
-      frameMotion: shot.frameMotion || 'Cinematic composition',
+      frameVisual: shot.frame_visual || (shot as any).frameVisual,
+      frameMotion: shot.frame_motion || (shot as any).frameMotion || 'Cinematic composition',
       contextDescriptions: contextDescriptions.join('\n'),
       visualStyle: stylePrompt,
     });

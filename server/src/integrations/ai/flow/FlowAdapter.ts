@@ -45,10 +45,10 @@ export class FlowAdapter {
      */
     public async uploadMedia(account: IAIAccount, buffer: Buffer, mimeType: string, projectId: string): Promise<string> {
         const url = `${this.apiBaseUrl}/flow/uploadImage`;
-        const userAgent = account.lastFingerprint?.get('user_agent') || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
+        const userAgent = account.last_fingerprint?.get('user_agent') || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
         
         const headers = {
-            'authorization': `Bearer ${account.flowAT}`,
+            'authorization': `Bearer ${account.flow_at}`,
             'Content-Type': 'application/json',
             'User-Agent': userAgent,
             'x-browser-channel': 'stable',
@@ -77,7 +77,7 @@ export class FlowAdapter {
             Logger.info(`[FlowAdapter] Uploading media to Flow... (${buffer.length} bytes, mime: ${mimeType})`);
             const response = await axios.post(url, payload, { headers });
             
-            Logger.info(`[FlowAdapter] Media uploaded successfully. Response: ${JSON.stringify(response.data)}`);
+            // Logger.info(`[FlowAdapter] Media uploaded successfully. Response: ${JSON.stringify(response.data)}`);
             const mediaName = response.data.media?.name || response.data.name || response.data.mediaId;
             if (!mediaName) {
                 Logger.info(`[FlowAdapter] No media name in response. Data: ${JSON.stringify(response.data)}`);
@@ -85,7 +85,7 @@ export class FlowAdapter {
             }
             
             const cleanMediaId = mediaName.includes('/media/') ? mediaName.split('/media/')[1] : mediaName;
-            Logger.info(`[FlowAdapter] Media uploaded successfully. MediaId: ${cleanMediaId}`);
+            // Logger.info(`[FlowAdapter] Media uploaded successfully. MediaId: ${cleanMediaId}`);
             return cleanMediaId;
         } catch (error: any) {
             const msg = error.response?.data?.error?.message || error.message;
@@ -128,7 +128,7 @@ export class FlowAdapter {
                     else if (input.endsWith('.mp4')) mimeType = 'video/mp4';
                 }
 
-                Logger.info(`[FlowAdapter] Resolved media reference ${input} to ${buffer.length} bytes, mime: ${mimeType}`);
+                // Logger.info(`[FlowAdapter] Resolved media reference ${input} to ${buffer.length} bytes, mime: ${mimeType}`);
 
                 return {
                     mediaBytes: buffer.toString('base64'),
@@ -140,7 +140,7 @@ export class FlowAdapter {
             }
         };
 
-        Logger.info(`[FlowAdapter] Resolving media input: ${input}`);
+        // Logger.info(`[FlowAdapter] Resolving media input: ${input}`);
 
         // If it's already a Flow mediaId string (projects/.../media/...)
         if (typeof input === 'string' && input.startsWith('projects/') && input.includes('/media/')) {
@@ -190,7 +190,8 @@ export class FlowAdapter {
             
             // Collect all potential images
             const images = config.imageInputs || config.referenceImages || [];
-            const hasStartEnd = !!(config.imageStart || config.imageEnd || config.image);
+            const hasStart = (config.imageStart || config.image);
+            const hasStartEnd = (hasStart && config.imageEnd);
             const hasCharacters = !!(config.characterImages && config.characterImages.length > 0);
 
             let prefix = 'veo_3_1';
@@ -211,13 +212,10 @@ export class FlowAdapter {
                 videoType = 'extend';
             } else if (config.mode === 'upsample' || config.videoType === 'upsample' || modelId.includes('upsample') || modelId.includes('upsampler')) {
                 videoType = 'upsample';
-            } else if(hasStartEnd && images.length > 1){
-                videoType = "i2v";
-            }
-            else if (hasCharacters || (images.length > 0)) {
+            } else if (hasStartEnd || (hasStart && !hasCharacters)) {
+                videoType = 'i2v';
+            } else if (hasCharacters || (images.length > 0)) {
                 videoType = 'r2v';
-            } else if (hasStartEnd || images.length >= 1) {
-                videoType = (config.mode === 'r2v') ? 'r2v' : 'i2v';
             }
 
             let videoModelKey = `${prefix}_t2v_fast_landscape`;
@@ -262,29 +260,29 @@ export class FlowAdapter {
             const freshAccounts = await db.getFlowAccounts();
             const freshAccount = freshAccounts.find(a => a.email === account.email || a.id === account.id);
             if (freshAccount && freshAccount.access_token) {
-                account.flowAT = freshAccount.access_token;
-                account.projectId = freshAccount.project_id;
+                account.flow_at = freshAccount.access_token;
+                account.project_id = freshAccount.project_id;
             }
 
-            if (!account.flowAT) {
+            if (!account.flow_at) {
                 await flowSyncService.refreshAccountTokens(account);
             }
 
-            let projectId = account.projectId || config.projectId;
+            let projectId = account.project_id || config.projectId || config.project_id;
             if (!projectId) {
                 Logger.info(`[FlowAdapter] Project ID missing for ${account.email}, attempting to resolve...`);
                 projectId = await flowSyncService.ensureProject(account);
             }
-            account.projectId = projectId;
+            account.project_id = projectId;
         } catch (refreshErr: any) {
             Logger.warn(`[FlowAdapter] Token refresh failed, using existing token: ${refreshErr.message}`);
         }
     }
 
     private getHeaders(account: IAIAccount){
-        const userAgent = account.lastFingerprint?.get('user_agent') || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
+        const userAgent = account.last_fingerprint?.get('user_agent') || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
         const headers: any = {
-            'authorization': `Bearer ${account.flowAT}`,
+            'authorization': `Bearer ${account.flow_at}`,
             'Content-Type': 'application/json',
             'User-Agent': userAgent,
             'x-browser-channel': 'stable',
@@ -292,8 +290,8 @@ export class FlowAdapter {
             'Origin': 'https://labs.google',
         };
 
-        if (account.lastFingerprint) {
-            const fp = account.lastFingerprint;
+        if (account.last_fingerprint) {
+            const fp = account.last_fingerprint;
             if (fp.get('sec_ch_ua')) headers['sec-ch-ua'] = fp.get('sec_ch_ua');
             if (fp.get('sec_ch_ua_mobile')) headers['sec-ch-ua-mobile'] = fp.get('sec_ch_ua_mobile');
             if (fp.get('sec_ch_ua_platform')) headers['sec-ch-ua-platform'] = fp.get('sec_ch_ua_platform');
@@ -307,7 +305,7 @@ export class FlowAdapter {
         Logger.warn(`[FlowAdapter] Project ${projectId} not found (404). Creating fresh project on Google Labs...`);
         try {
             const newProjectId = await flowSyncService.createNewProject(account);
-            account.projectId = newProjectId;
+            account.project_id = newProjectId;
             return newProjectId;
         } catch (pErr: any) {
             throw new Error(`Flow Video Generation Failed: ${pErr.message}`);
@@ -320,7 +318,7 @@ export class FlowAdapter {
      */
     public async generateImage(account: IAIAccount, prompt: string, modelName: string, config: any = {}) {
         await this.syncFlowAccount(account, config);
-        let projectId = account.projectId;
+        let projectId = account.project_id;
         if (!projectId) {
             throw new Error('Flow Project ID not found');
         }
@@ -467,7 +465,7 @@ export class FlowAdapter {
      */
     public async generateVideo(account: IAIAccount, prompt: string, modelName: string, config: any = {}) {
         await this.syncFlowAccount(account, config);
-        let projectId = account.projectId;
+        let projectId = account.project_id;
         if (!projectId) {
             throw new Error('Flow Project ID not found');
         }
@@ -670,8 +668,8 @@ export class FlowAdapter {
             : `${this.apiBaseUrl}/projects/${projectId}/${mediaName}`;
 
         const headers = {
-            'Authorization': `Bearer ${account.flowAT}`,
-            'User-Agent': account.lastFingerprint?.get('user_agent') || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+            'Authorization': `Bearer ${account.flow_at}`,
+            'User-Agent': account.last_fingerprint?.get('user_agent') || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
             'Content-Type': 'application/json',
             'Origin': 'https://labs.google',
             'Referer': 'https://labs.google/fx/tools/flow',
@@ -770,12 +768,12 @@ export class FlowAdapter {
      * Resolve actual video access URL via Google Labs trpc getMediaUrlRedirect
      */
     public async getMediaUrlRedirect(account: IAIAccount, mediaName: string): Promise<string | null> {
-        const st = account.flowST || (account as any).session_token || (account as any).st || '';
+        const st = account.flow_st || (account as any).session_token || '';
         const normalizedMediaName = (mediaName || '').trim();
         if (!normalizedMediaName) return null;
 
         const url = `https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=${encodeURIComponent(normalizedMediaName)}&mediaUrlType=MEDIA_URL_TYPE_FULL_MEDIA`;
-        const userAgent = account.lastFingerprint?.get('user_agent') || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
+        const userAgent = account.last_fingerprint?.get('user_agent') || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
 
         const headers: any = {
             'Cookie': `__Secure-next-auth.session-token=${st}`,
@@ -785,8 +783,8 @@ export class FlowAdapter {
             'Accept': '*/*',
         };
 
-        if (account.lastFingerprint) {
-            const fp = account.lastFingerprint;
+        if (account.last_fingerprint) {
+            const fp = account.last_fingerprint;
             if (fp.get('sec_ch_ua')) headers['sec-ch-ua'] = fp.get('sec_ch_ua');
             if (fp.get('sec_ch_ua_mobile')) headers['sec-ch-ua-mobile'] = fp.get('sec_ch_ua_mobile');
             if (fp.get('sec_ch_ua_platform')) headers['sec-ch-ua-platform'] = fp.get('sec_ch_ua_platform');

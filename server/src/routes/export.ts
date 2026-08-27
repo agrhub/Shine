@@ -3,7 +3,7 @@ import { compositorWorker, CompositorPayload } from '../services/compositor/Comp
 
 export const exportRouter = Router();
 
-// POST /v1/export/render-job — Queue a render job
+// POST /api/export/render-job — Queue a render job
 exportRouter.post('/render-job', (req: Request, res: Response) => {
   try {
     const payload: CompositorPayload = req.body;
@@ -41,7 +41,7 @@ exportRouter.post('/render-job', (req: Request, res: Response) => {
   }
 });
 
-// GET /v1/export/render-job/:jobId/status — Poll render job progress
+// GET /api/export/render-job/:jobId/status — Poll render job progress
 exportRouter.get('/render-job/:jobId/status', (req: Request, res: Response) => {
   const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
   const job = compositorWorker.getJobStatus(jobId);
@@ -71,7 +71,7 @@ exportRouter.get('/render-job/:jobId/status', (req: Request, res: Response) => {
   });
 });
 
-// POST /v1/export/parity-check — Calculate SSIM between WebGL preview frame and ffmpeg compositor output
+// POST /api/export/parity-check — Calculate SSIM between WebGL preview frame and ffmpeg compositor output
 exportRouter.post('/parity-check', (req: Request, res: Response) => {
   const { seriesId, episodeId } = req.body;
   const result = compositorWorker.calculateParityScore(seriesId || 'series-001', episodeId || 'episode-001');
@@ -84,7 +84,7 @@ exportRouter.post('/parity-check', (req: Request, res: Response) => {
   });
 });
 
-// POST /v1/export/batch — Dispatch batch render jobs to Google Cloud Run & Pub/Sub
+// POST /api/export/batch — Dispatch batch render jobs to Google Cloud Run & Pub/Sub
 exportRouter.post('/batch', async (req: Request, res: Response) => {
   try {
     const { seriesId, episodeIds, timelineData, outputFormat } = req.body;
@@ -119,7 +119,7 @@ exportRouter.post('/batch', async (req: Request, res: Response) => {
       data: {
         totalJobs: queuedJobs.length,
         jobs: queuedJobs,
-        streamUrl: '/api/v1/export/render/stream',
+        streamUrl: '/api/export/render/stream',
       },
       message: 'Batch render jobs dispatched to Cloud Run / PubSub queue',
       error: null,
@@ -134,7 +134,7 @@ exportRouter.post('/batch', async (req: Request, res: Response) => {
   }
 });
 
-// GET /v1/export/render/stream — Server-Sent Events (SSE) stream for Pub/Sub render progress
+// GET /api/export/render/stream — Server-Sent Events (SSE) stream for Pub/Sub render progress
 exportRouter.get('/render/stream', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');

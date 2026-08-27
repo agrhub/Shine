@@ -1,7 +1,10 @@
 User Instruction: "{{userInstruction}}"
-Target Country: {{country}} ({{languageName}} - {{languageNativeName}})
+Story Setting & Character Heritage: {{country}}
+Script Output Language: {{languageName}} ({{languageNativeName}})
 
-LANGUAGE REQUIREMENT:
+SETTING & LANGUAGE DIRECTIVES:
+- Story Setting & Character Names: Cultural backdrop, social context, and character naming heritage belong to {{country}}.
+- Script Output Language: All narrative text, dialogue, and descriptions MUST be in {{languageName}} ({{languageNativeName}}).
 {{languageInstruction}}
 
 Current Master Plan:

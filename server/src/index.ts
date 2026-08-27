@@ -16,7 +16,7 @@ import captionsRoutes from './routes/captions';
 import audioRoutes from './routes/audio';
 import cliffhangerRoutes from './routes/cliffhanger';
 import { aiAssistantRouter } from './routes/ai-assistant';
-import { copilotRouter } from './routes/copilot';
+import { aiAgenticRouter } from './routes/ai-agentic';
 import { costGuardrailsRouter } from './routes/cost-guardrails';
 import { publishRouter } from './routes/publish';
 import { billingRouter } from './routes/billing';
@@ -48,42 +48,39 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// ─── API Routes ──────────────────────────────────────────────────────────────
+import { requireAuth, requireAdmin } from './middleware/RequireAuth.js';
+
+// ─── Public API Routes ───────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
-app.use('/api/series', seriesRoutes);
-app.use('/api/episodes', episodesRouter);
-app.use('/api/visual-styles', visualStylesRouter);
-app.use('/api/admin/flow-accounts', flowAccountsRoutes);
-app.use('/api/contact', contactRoutes);   // FR-008: Contact & Support
-app.use('/api/ai', aiRouter);              // FR-009 to FR-015, FR-074: AI Script & Trends
-app.use('/api/characters', characterRouter); // FR-081: Persona Studio & Anchors
-app.use('/api/export', exportRouter);       // FR-016 to FR-021: Export & Compositor
-app.use('/api/voices', voicesRoutes);
-app.use('/api/captions', captionsRoutes);
-app.use('/api/audio', audioRoutes);
-app.use('/api/ai/cliffhanger', cliffhangerRoutes);
+app.use('/api/contact', contactRoutes);
 
-// Sprint 5 Routes
-app.use('/api/ai/assistant', aiAssistantRouter);
-app.use('/api/ai/copilot', copilotRouter);
-app.use('/api/admin/cost-guardrails', costGuardrailsRouter);
-
-// Sprint 6 Routes
-app.use('/api/publish', publishRouter);
-app.use('/api/projects', publishRouter);
-app.use('/api/social', socialAuthRouter);
-app.use('/api/engagement', engagementRouter);
-app.use('/api/billing', billingRouter);
-app.use('/api/admin', adminRouter);
-app.use('/api/marketplace', marketplaceRouter);
-app.use('/api/ai', novelConverterRouter);
-app.use('/api/live', liveDramaRouter);
-app.use('/api/ai', culturalAdaptRouter);
-app.use('/api/analytics', analyticsPaywallRouter);
-app.use('/api/audio', copyrightRouter);
-app.use('/api/ai', viralCoverRouter);
+// ─── Authenticated API Routes (Requires Valid JWT Token) ──────────────────────
+app.use('/api/series', requireAuth, seriesRoutes);
+app.use('/api/episodes', requireAuth, episodesRouter);
+app.use('/api/visual-styles', requireAuth, visualStylesRouter);
+app.use('/api/ai', requireAuth, aiRouter);
+app.use('/api/characters', requireAuth, characterRouter);
+app.use('/api/export', requireAuth, exportRouter);
+app.use('/api/voices', requireAuth, voicesRoutes);
+app.use('/api/captions', requireAuth, captionsRoutes);
+app.use('/api/audio', requireAuth, audioRoutes);
+app.use('/api/ai/cliffhanger', requireAuth, cliffhangerRoutes);
+app.use('/api/ai/assistant', requireAuth, aiAssistantRouter);
+app.use('/api/ai/agentic', requireAuth, aiAgenticRouter);
+app.use('/api/publish', requireAuth, publishRouter);
+app.use('/api/projects', requireAuth, publishRouter);
+app.use('/api/social', requireAuth, socialAuthRouter);
+app.use('/api/engagement', requireAuth, engagementRouter);
+app.use('/api/billing', requireAuth, billingRouter);
+app.use('/api/marketplace', requireAuth, marketplaceRouter);
+app.use('/api/live', requireAuth, liveDramaRouter);
+app.use('/api/analytics', requireAuth, analyticsPaywallRouter);
 app.use('/api/assets', assetsRouter);
-app.use('/api', publishRouter);
+
+// ─── Admin Protected Routes (Requires Admin/Owner Role) ──────────────────────
+app.use('/api/admin/flow-accounts', requireAuth, requireAdmin, flowAccountsRoutes);
+app.use('/api/admin/cost-guardrails', requireAuth, requireAdmin, costGuardrailsRouter);
+app.use('/api/admin', requireAuth, requireAdmin, adminRouter);
 
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
@@ -96,6 +93,41 @@ app.get('/api/health', (req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// ─── Static Client Hosting (SPA) ─────────────────────────────────────────────
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const clientDistCandidates = [
+  path.resolve(process.cwd(), 'client', 'dist'),
+  path.resolve(process.cwd(), '../client', 'dist'),
+  path.resolve(__dirname, '../../client/dist'),
+  path.resolve(__dirname, '../../../client/dist'),
+];
+
+let clientDistPath: string | null = null;
+for (const p of clientDistCandidates) {
+  if (fs.existsSync(p) && fs.existsSync(path.join(p, 'index.html'))) {
+    clientDistPath = p;
+    break;
+  }
+}
+
+if (clientDistPath) {
+  console.log(`[Shine Server] Serving static client SPA from: ${clientDistPath}`);
+  app.use(express.static(clientDistPath));
+
+  app.get('*', (req: Request, res: Response, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
+      return next();
+    }
+    res.sendFile(path.join(clientDistPath!, 'index.html'));
+  });
+}
 
 // ─── Start Services & WebSocket HTTP Server ──────────────────────────────────
 flowSyncService.start();

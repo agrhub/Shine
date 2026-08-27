@@ -27,10 +27,10 @@ export class MasterPlanRefineAgent {
       throw new Error('Script Refine Master Plan skill definition "script_refine_master_plan.md" could not be loaded.');
     }
 
-    const country = currentPlan.country || 'US';
-    const langInfo = getLanguageForCountry(country);
+    const country = currentPlan.country || 'United States';
+    const langInfo = currentPlan.language ? getLanguageForCountry(currentPlan.language) : getLanguageForCountry(country);
 
-    Logger.info(`[MasterPlanRefineAgent] Refining master plan with user instruction in ${langInfo.name}: "${userInstruction}"`);
+    Logger.info(`[MasterPlanRefineAgent] Refining master plan for setting "${country}" in script language "${langInfo.name}": "${userInstruction}"`);
 
     const prompt = PromptLoader.render('screenplay/master_plan_refine', {
       userInstruction,

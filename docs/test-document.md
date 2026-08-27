@@ -36,11 +36,13 @@ A hybrid testing approach will be utilized, combining automated testing (Unit, I
 - **Accessibility Testing:** Screen reader compatibility, contrast, keyboard navigation (axe-core).
 
 ### 1.5 Test Environment
-- **Frontend:** Vue 3 + TypeScript + Vite. Browsers: Chrome 114+, Firefox 113+, Safari 16+, Edge 114+.
-- **Backend:** Node.js (v18+).
-- **Database:** MongoDB / SQLite (for local/cache).
-- **AI Services:** Google Vertex AI, Veo, Neural TTS.
-- **OS:** Windows 11, macOS Ventura.
+- **Frontend:** Vue 3 (Composition API) + TypeScript + Vite 7. Browsers: Chrome 114+, Firefox 113+, Safari 16+, Edge 114+.
+- **Backend:** Node.js (v20+), Express, Socket.io.
+- **Database:** Google Cloud Firestore Native (`shine-db`), MongoDB, SQLite, MapDB.
+- **Microservices:** Google Cloud Run (`us-central1`) for `demucs-worker` and `shine-render-worker`.
+- **Cloud Infrastructure:** Google Cloud Storage (`gs://shine-studio-media`), Backblaze B2, Google Cloud Pub/Sub, Cloud Scheduler.
+- **AI Services:** Google Vertex AI, Gemini 3.5 & 3.1 Flash, Veo 3.1, Imagen 3, Google Neural Cloud TTS.
+- **OS:** Windows 11, macOS, Linux / Ubuntu.
 
 ### 1.6 Entry/Exit Criteria
 **Entry Criteria:**

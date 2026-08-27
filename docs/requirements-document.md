@@ -277,27 +277,30 @@ Shine operates as a cloud-hosted web application utilizing a Vue 3 + Vite fronte
 * **Google Veo**: For high-fidelity video generation via `generateVideo()`.
 * **Neural TTS API**: Google Cloud Text-to-Speech via `generateAudio()`.
 
-### 5.4 Storage Interfaces
-* **S3-Compatible API** (e.g., AWS S3, Cloudflare R2): Used for uploading raw media, storing generated video clips, and housing final rendered MP4s.
+### 5.4 Storage & Database Interfaces
+* **Storage Provider Interfaces**: Google Cloud Storage (`gs://shine-studio-media`), Backblaze B2, S3-compatible endpoints, or local disk for uploading raw media, audio stems, and final rendered MP4s.
+* **Database Provider Interfaces**: Google Cloud Firestore Native (`shine-db`), MongoDB, SQLite, and MapDB (in-memory Map + JSON disk).
 
 ---
 
 ## 6. System Constraints & Dependencies
-* **Browser Compatibility**: Application officially supports the latest versions of Google Chrome, Edge, and Firefox. Safari support is best-effort regarding WebAudio APIs.
-* **Cloud Infrastructure**: Heavy reliance on GCP for Kubernetes (GKE), Vertex AI, and specialized GPU instances.
-* **Compliance**: Must comply with GDPR and CCPA regarding user data and analytics tracking.
+* **Browser Compatibility**: Application officially supports modern evergreen browsers (Google Chrome 114+, Edge, Safari 16+, Firefox 113+).
+* **Cloud Infrastructure**: Serverless microservices hosted on Google Cloud Run (`us-central1`), Cloud Pub/Sub, Cloud Scheduler, and Google Vertex AI.
+* **Compliance**: Complies with GDPR, CCPA, and C2PA Content Credentials standards.
 
 ---
 
 ## 7. Data Requirements
 
 ### Core Data Models
-* **Project**: `_id`, `name`, `ownerId`, `teamId`, `genre`, `status`, `createdAt`, `updatedAt`
-* **Episode**: `_id`, `projectId`, `episodeNumber`, `title`, `scriptContent`, `videoRenderUrl`, `duration`, `status`
-* **Scene**: `_id`, `episodeId`, `sceneOrder`, `location`, `characters[]`, `timeOfDay`, `dialogue[]`, `prompt`, `generatedVideoId`
-* **Character**: `_id`, `projectId`, `name`, `personaDesc`, `loraId`, `referenceImages[]`
-* **Asset**: `_id`, `teamId`, `type` (video/audio/image), `s3Key`, `metadata`, `tags[]`
-* **Analytics Event**: `_id`, `episodeId`, `platform`, `views`, `likes`, `shares`, `retentionData[]`, `timestamp`
+* **User**: `id`, `email`, `role`, `tier`, `credits`, `created_at`
+* **Series**: `id`, `title`, `genre`, `synopsis`, `target_episodes`, `status`, `characters[]`, `locations[]`, `props[]`
+* **Episode**: `id`, `seriesId`, `number`, `title`, `synopsis`, `scenes[]`, `timeline`, `status`, `dubbing_settings`, `caption_settings`
+* **Scene**: `id`, `heading`, `visual_prompt`, `camera_direction`, `duration_seconds`, `dialogue[]`, `storyboardFrameUrl`, `videoUrl`
+* **Character**: `id`, `name`, `role`, `avatar_url`, `visual_dna`, `voice_id`
+* **FlowAccount**: `id`, `email`, `sessionToken`, `accessToken`, `projectId`, `credits`, `status`, `updated_at`
+* **CreditTransaction**: `id`, `userId`, `amount`, `action`, `timestamp`
+* **Asset**: `id`, `name`, `type` (video/audio/image), `url`, `size`, `tags[]`, `metadata`
 
 ---
 

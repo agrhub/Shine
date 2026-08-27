@@ -7,6 +7,7 @@ export interface TTSRequest {
   voiceId: string;
   language?: string;
   speed?: number;
+  tone?: string;
 }
 
 /**
@@ -55,7 +56,8 @@ export function extractAudioDurationSeconds(bufferOrDataUri: Buffer | string, fa
   }
 
   // Fallback: Word-rate calculation based on standard speech rate (~140 words/min = 2.33 words/sec)
-  const wordCount = (fallbackText || '').trim().split(/\s+/).filter(Boolean).length;
+  const textStr = typeof fallbackText === 'string' ? fallbackText : (typeof fallbackText === 'object' ? JSON.stringify(fallbackText) : String(fallbackText || ''));
+  const wordCount = textStr.trim().split(/\s+/).filter(Boolean).length;
   const estimated = (Math.max(1, wordCount) / 2.33) / (speed || 1.0);
   return Math.max(1, Number(estimated.toFixed(2)));
 }

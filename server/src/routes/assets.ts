@@ -12,6 +12,8 @@ import { Logger } from '@/utils/logger.js';
 import { getVisualStylePrompt } from '../constants/VisualStyles.js';
 import { geminiClient } from '@/integrations/ai/gemini/GeminiClient.js';
 import { videoService } from '@/services/VideoService.js';
+import { normalizeSceneEntity, normalizeLocationAsset, normalizePropAsset, normalizeCharacterEpisodeEntity } from '@/utils/sceneNormalizer.js';
+import type { CharacterEpisodeEntity, LocationAsset, PropAsset } from '@/types.js';
 
 export const assetsRouter = Router();
 
@@ -101,18 +103,18 @@ assetsRouter.post('/', async (req: Request, res: Response) => {
       type,
       ext: ext || (type === 'image' ? '.PNG' : type === 'video' ? '.MP4' : '.WAV'),
       size: size || '2.4 MB',
-      sizeBytes: sizeBytes || 2516582,
-      categoryLabel: categoryLabel || (type === 'image' ? 'Image' : type === 'video' ? 'Video' : 'Audio'),
-      categoryColor: type === 'image' ? 'text-pink-500 dark:text-pink-400' : type === 'video' ? 'text-blue-500 dark:text-blue-400' : 'text-amber-500 dark:text-amber-400',
-      s3Key: key,
+      size_bytes: sizeBytes || 2516582,
+      category_label: categoryLabel || (type === 'image' ? 'Image' : type === 'video' ? 'Video' : 'Audio'),
+      category_color: type === 'image' ? 'text-pink-500 dark:text-pink-400' : type === 'video' ? 'text-blue-500 dark:text-blue-400' : 'text-amber-500 dark:text-amber-400',
+      s3_key: key,
       url: proxyUrl,
       thumbnail: thumbnail || proxyUrl,
-      seriesId,
-      episodeId,
-      sceneId,
+      series_id: seriesId,
+      episode_id: episodeId,
+      scene_id: sceneId,
       prompt,
-      isVideo: type === 'video',
-      isAudio: type === 'audio',
+      is_video: type === 'video',
+      is_audio: type === 'audio',
       aspect: 'aspect-[9/16]',
       created_at: new Date().toISOString(),
     });
@@ -294,17 +296,17 @@ assetsRouter.post('/music-generate', async (req, res: Response) => {
       type: 'audio',
       ext: '.MP3',
       size: `${(s3Size / (1024 * 1024)).toFixed(1)} MB`,
-      sizeBytes: s3Size,
-      categoryLabel: 'BGM Audio',
-      categoryColor: 'text-amber-500 dark:text-amber-400',
-      s3Key,
+      size_bytes: s3Size,
+      category_label: 'BGM Audio',
+      category_color: 'text-amber-500 dark:text-amber-400',
+      s3_key: s3Key,
       url: finalUrl,
       thumbnail: finalUrl,
-      seriesId,
-      episodeId,
+      series_id: seriesId,
+      episode_id: episodeId,
       prompt: musicPrompt,
       provider: musicResult?.provider || 'Sound Effects Engine',
-      isAudio: true,
+      is_audio: true,
       created_at: new Date().toISOString(),
     });
 
@@ -373,8 +375,9 @@ async function resolveProjectLanguageContext(
             } catch {}
           }
           language = language || series.language || (masterPlanObj as any)?.language;
-          if ((masterPlanObj as any)?.totalDurationSeconds) {
-            duration = Number((masterPlanObj as any).totalDurationSeconds);
+          const planDuration = Number((masterPlanObj as any)?.totalDurationSeconds) || Number((masterPlanObj as any)?.episodeDurationSeconds) || Number((series as any).episode_duration);
+          if (planDuration && planDuration >= 30) {
+            duration = planDuration;
           }
           if (Array.isArray(series.characters) && series.characters.length > 0) {
             characters = series.characters;
@@ -396,10 +399,11 @@ async function resolveProjectLanguageContext(
       if (episodeId) {
         const ep = await db.getEpisodeById(episodeId);
         if (ep) {
-          language = (ep as any).activeLanguageCode || (ep as any).language || language;
-          const epDur = Number(ep.duration);
-          if (epDur && epDur >= 30) {
-            duration = epDur;
+          if (!duration) {
+            const epDur = Number(ep.duration);
+            if (epDur && epDur >= 30) {
+              duration = epDur;
+            }
           }
           if (Array.isArray(ep.characters) && ep.characters.length > 0) {
             characters = ep.characters;
@@ -524,23 +528,29 @@ assetsRouter.post('/screenplay/analyze', async (req: Request, res: Response) => 
         const db = await getDatabaseProvider();
         const ep = await db.getEpisodeById(episodeId);
         if (ep) {
+          const episodeCharacters: CharacterEpisodeEntity[] = (result.characters || []).map((c: any, idx: number) => normalizeCharacterEpisodeEntity(c, idx + 1));
+          const episodeLocations: LocationAsset[] = (result.locations || []).map((l: any, idx: number) => normalizeLocationAsset(l, idx + 1));
+          const episodeProps: PropAsset[] = (result.props || []).map((p: any, idx: number) => normalizePropAsset(p, idx + 1));
+          const normalizedScenes = (result.scenes || []).map((s: any, idx: number) => normalizeSceneEntity(s, idx + 1));
+          const totalDuration = result.total_duration_seconds || 60;
+
           await db.updateEpisode(episodeId, {
             screenplay,
-            scenes: result.scenes,
-            characters: result.characters,
-            locations: result.locations,
-            props: result.props,
-            duration: result.totalDurationSeconds,
+            scenes: normalizedScenes,
+            characters: episodeCharacters,
+            locations: episodeLocations,
+            props: episodeProps,
+            duration: totalDuration,
             script: JSON.stringify({
               episode: ep.title,
-              episodeNumber: ep.episode_number,
+              episode_number: ep.episode_number,
               title: ep.title,
               screenplay,
-              scenes: result.scenes,
-              characters: result.characters,
-              locations: result.locations,
-              props: result.props,
-              totalDurationSeconds: result.totalDurationSeconds,
+              scenes: normalizedScenes,
+              characters: episodeCharacters,
+              locations: episodeLocations,
+              props: episodeProps,
+              total_duration_seconds: totalDuration,
             }),
           });
         }
@@ -549,9 +559,20 @@ assetsRouter.post('/screenplay/analyze', async (req: Request, res: Response) => 
       }
     }
 
+    const normalizedScenes = (result.scenes || []).map((s: any, idx: number) => normalizeSceneEntity(s, idx + 1));
+    const normalizedCharacters = (result.characters || []).map((c: any, idx: number) => normalizeCharacterEpisodeEntity(c, idx + 1));
+    const normalizedLocations = (result.locations || []).map((l: any, idx: number) => normalizeLocationAsset(l, idx + 1));
+    const normalizedProps = (result.props || []).map((p: any, idx: number) => normalizePropAsset(p, idx + 1));
+
     return res.json({
       code: 200,
-      data: result,
+      data: {
+        ...result,
+        scenes: normalizedScenes,
+        characters: normalizedCharacters,
+        locations: normalizedLocations,
+        props: normalizedProps,
+      },
       message: 'Screenplay analyzed, assets extracted, and scenes generated successfully',
       error: null,
     });
@@ -563,22 +584,30 @@ assetsRouter.post('/screenplay/analyze', async (req: Request, res: Response) => 
 // POST /api/assets/character/sheet — Generate 2-in-1 Character Sheet (Head & shoulders left + Full body right)
 assetsRouter.post('/character/sheet', async (req: Request, res: Response) => {
   try {
-    const { characterName, physicalCharacteristics, clothingAndAccessories, visualStyle, referenceImageUrl } = req.body;
-    if (!characterName) {
+    const character_name = req.body.character_name || req.body.characterName;
+    const physical_characteristics = req.body.physical_characteristics || req.body.physicalCharacteristics || '';
+    const clothing_and_accessories = req.body.clothing_and_accessories || req.body.clothingAndAccessories || '';
+    const visual_style = req.body.visual_style || req.body.visualStyle;
+    const reference_image_url = req.body.reference_image_url || req.body.referenceImageUrl;
+
+    if (!character_name) {
       return res.status(400).json({ code: 400, data: null, message: 'Character name is required', error: 'INVALID_PAYLOAD' });
     }
 
     const result = await AssetService.generateCharacterSheet(
-      characterName,
-      physicalCharacteristics || '',
-      clothingAndAccessories || '',
-      visualStyle,
-      referenceImageUrl
+      character_name,
+      physical_characteristics,
+      clothing_and_accessories,
+      visual_style,
+      reference_image_url
     );
 
     return res.json({
       code: 200,
-      data: result,
+      data: {
+        image_url: result.imageUrl || (result as any).image_url,
+        ...result,
+      },
       message: 'Character sheet generated successfully',
       error: null,
     });
@@ -590,21 +619,28 @@ assetsRouter.post('/character/sheet', async (req: Request, res: Response) => {
 // POST /api/assets/location/sheet — Generate 4-in-1 Location Sheet (1 establishing + 3 perspective views 16:9)
 assetsRouter.post('/location/sheet', async (req: Request, res: Response) => {
   try {
-    const { locationName, physicalCharacteristics, timeOfDay, visualStyle } = req.body;
-    if (!locationName) {
+    const location_name = req.body.location_name || req.body.locationName;
+    const physical_characteristics = req.body.physical_characteristics || req.body.physicalCharacteristics || '';
+    const time_of_day = req.body.time_of_day || req.body.timeOfDay || 'Daytime';
+    const visual_style = req.body.visual_style || req.body.visualStyle;
+
+    if (!location_name) {
       return res.status(400).json({ code: 400, data: null, message: 'Location name is required', error: 'INVALID_PAYLOAD' });
     }
 
     const result = await AssetService.generateLocationSheet(
-      locationName,
-      physicalCharacteristics || '',
-      timeOfDay || 'Daytime',
-      visualStyle
+      location_name,
+      physical_characteristics,
+      time_of_day,
+      visual_style
     );
 
     return res.json({
       code: 200,
-      data: result,
+      data: {
+        image_url: result.imageUrl || (result as any).image_url,
+        ...result,
+      },
       message: 'Location sheet generated successfully',
       error: null,
     });
@@ -616,20 +652,26 @@ assetsRouter.post('/location/sheet', async (req: Request, res: Response) => {
 // POST /api/assets/prop/sheet — Generate Prop Product Shot (Isolated on seamless white background)
 assetsRouter.post('/prop/sheet', async (req: Request, res: Response) => {
   try {
-    const { propName, physicalCharacteristics, visualStyle } = req.body;
-    if (!propName) {
+    const prop_name = req.body.prop_name || req.body.propName;
+    const physical_characteristics = req.body.physical_characteristics || req.body.physicalCharacteristics || '';
+    const visual_style = req.body.visual_style || req.body.visualStyle;
+
+    if (!prop_name) {
       return res.status(400).json({ code: 400, data: null, message: 'Prop name is required', error: 'INVALID_PAYLOAD' });
     }
 
     const result = await AssetService.generatePropProductShot(
-      propName,
-      physicalCharacteristics || '',
-      visualStyle
+      prop_name,
+      physical_characteristics,
+      visual_style
     );
 
     return res.json({
       code: 200,
-      data: result,
+      data: {
+        image_url: result.imageUrl || (result as any).image_url,
+        ...result,
+      },
       message: 'Prop product shot generated successfully',
       error: null,
     });
@@ -641,15 +683,18 @@ assetsRouter.post('/prop/sheet', async (req: Request, res: Response) => {
 // POST /api/assets/screenplay/breakdown-shots — Break down Scene into Sequential Shots with Asset Linking
 assetsRouter.post('/screenplay/breakdown-shots', async (req: Request, res: Response) => {
   try {
-    const { sceneTitle, sceneContent, availableAssets } = req.body;
-    if (!sceneTitle || !sceneContent) {
+    const scene_title = req.body.scene_title || req.body.sceneTitle;
+    const scene_content = req.body.scene_content || req.body.sceneContent;
+    const available_assets = req.body.available_assets || req.body.availableAssets;
+
+    if (!scene_title || !scene_content) {
       return res.status(400).json({ code: 400, data: null, message: 'Scene title and content are required', error: 'INVALID_PAYLOAD' });
     }
 
     const shots = await scriptAgent.breakdownSceneToShots(
-      sceneTitle,
-      sceneContent,
-      Array.isArray(availableAssets) ? availableAssets : []
+      scene_title,
+      scene_content,
+      Array.isArray(available_assets) ? available_assets : []
     );
 
     return res.json({
@@ -666,8 +711,9 @@ assetsRouter.post('/screenplay/breakdown-shots', async (req: Request, res: Respo
 // POST /api/assets/storyboard/shot-image — Generate Shot Frame Image with linked assets
 assetsRouter.post('/storyboard/shot-image', async (req: Request, res: Response) => {
   try {
-    const { shot, assets, visualStyle, aspectRatio } = req.body;
-    if (!shot || !shot.frameVisual) {
+    const { shot, assets, visual_style, visualStyle, aspect_ratio, aspectRatio } = req.body;
+    const frameVisual = shot?.frame_visual || shot?.frameVisual;
+    if (!shot || !frameVisual) {
       return res.status(400).json({ code: 400, data: null, message: 'Shot data is required', error: 'INVALID_PAYLOAD' });
     }
 
@@ -681,13 +727,16 @@ assetsRouter.post('/storyboard/shot-image', async (req: Request, res: Response) 
     const result = await AssetService.generateShotImage(
       shot,
       assetsMap,
-      visualStyle,
-      aspectRatio || '16:9'
+      visual_style || visualStyle,
+      aspect_ratio || aspectRatio || '16:9'
     );
 
     return res.json({
       code: 200,
-      data: result,
+      data: {
+        image_url: result.imageUrl || (result as any).image_url,
+        ...result,
+      },
       message: 'Shot frame image generated successfully',
       error: null,
     });

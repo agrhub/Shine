@@ -44,39 +44,47 @@ export class FlowSyncService {
     }
 
     public start() {
-        setInterval(() => this.syncAllAccounts(), 30 * 1000);
-        this.syncAllAccounts();
+        if (process.env.DISABLE_LOCAL_FLOW_SYNC === '1') {
+            Logger.info('[FlowSyncService] Background sync disabled via environment.');
+            return;
+        }
+        // Run sync every 5 minutes in standalone mode
+        setInterval(() => this.syncAllAccounts(), 1 * 60 * 1000);
+        // Initial delayed sync to allow DB connections to settle
+        setTimeout(() => this.syncAllAccounts(), 5000);
     }
 
     public async syncAllAccounts() {
         if (this.isSyncing) return;
         this.isSyncing = true;
-        Logger.info('[FlowSyncService] Starting background sync for Google Flow accounts...');
 
         try {
             const db = await getDatabaseProvider();
             const accounts = await db.getFlowAccounts();
-            for (const account of accounts) {
+            if (accounts && accounts.length > 0) {
+                Logger.info(`[FlowSyncService] Syncing ${accounts.length} Google Flow accounts...`);
+            }
+            for (const account of accounts || []) {
                 try {
                     if (account.session_token) {
                         await this.refreshAccountTokens({
                             id: account.id,
                             email: account.email,
-                            flowST: account.session_token,
-                            flowAT: account.access_token,
-                            projectId: account.project_id,
+                            flow_st: account.session_token,
+                            flow_at: account.access_token,
+                            project_id: account.project_id,
                             status: account.status,
                             credits: account.credits_remaining,
-                            accountType: AIAccountType.GOOGLE_FLOW,
-                            isActive: true,
+                            account_type: AIAccountType.GOOGLE_FLOW,
+                            is_active: true,
                         } as any);
                     }
                 } catch (err: any) {
-                    Logger.error(`[FlowSyncService] Failed to sync account ${account.email}:`, err.message);
+                    Logger.warn(`[FlowSyncService] Failed to sync account ${account.email}: ${err.message}`);
                 }
             }
         } catch (err: any) {
-            Logger.error('[FlowSyncService] Background sync error:', err.message);
+            Logger.warn(`[FlowSyncService] Background sync notice (DB unavailable or credentials not set): ${err.message}`);
         } finally {
             this.isSyncing = false;
             Logger.info('[FlowSyncService] Background sync completed.');
@@ -84,21 +92,18 @@ export class FlowSyncService {
     }
 
     public async refreshAccountTokens(account: IAIAccount): Promise<void> {
-        if (!account.flowST) {
+        if (!account.flow_st) {
             Logger.warn(`[FlowSyncService] No Session Token (ST) for ${account.email}. Skipping refresh.`);
             return;
         }
 
-        Logger.info(`[FlowSyncService] Refreshing tokens for ${account.email}...`);
-
         try {
-            const session = await this.stToAt(account.flowST);
+            const session = await this.stToAt(account.flow_st);
             
             if (session && (session.access_token || session.user)) {
                 const newAT = session.access_token;
                 if (newAT) {
-                    account.flowAT = newAT;
-                    Logger.info(`[FlowSyncService] New access token obtained for ${account.email}`);
+                    account.flow_at = newAT;
                 } else {
                     Logger.warn(`[FlowSyncService] Session returned no access_token for ${account.email}, keeping existing AT`);
                 }
@@ -106,46 +111,45 @@ export class FlowSyncService {
                 if (session.expires) {
                     const expiresAt = new Date(session.expires).getTime();
                     if (expiresAt < Date.now()) {
-                        Logger.warn(`[FlowSyncService] Session for ${account.email} returned an expired token (${session.expires}). The flowST needs to be updated.`);
+                        Logger.warn(`[FlowSyncService] Session for ${account.email} returned an expired token (${session.expires}). The flow_st needs to be updated.`);
                         account.status = AIAccountStatus.UNAUTHORIZED;
-                        account.flowAT = undefined;
-                        account.flowATExpiresAt = undefined;
+                        account.flow_at = undefined;
+                        account.flow_at_expires_at = undefined;
                         await this.saveAccount(account);
                         throw new Error('Session token has expired. Please update it in the UI.');
                     }
-                    account.flowATExpiresAt = new Date(session.expires);
+                    account.flow_at_expires_at = new Date(session.expires);
                 }
                 
                 if (session.user) {
                     account.email = session.user.email || account.email;
                     account.name = session.user.name || account.name;
-                    account.avatarUrl = session.user.image || account.avatarUrl;
+                    account.avatar_url = session.user.image || account.avatar_url;
                 }
 
                 account.status = AIAccountStatus.READY;
-                account.errorMessage = undefined;
+                account.error_message = undefined;
                 await this.saveAccount(account);
                 
                 await this.ensureProject(account, session);
 
-                if (account.flowAT) {
+                if (account.flow_at) {
                     let creditsFetched = false;
                     try {
                         const GOOGLE_FLOW_API_KEY = 'AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY';
                         const creditsRes = await axios.get(`https://aisandbox-pa.googleapis.com/v1/credits?key=${GOOGLE_FLOW_API_KEY}`, {
-                            headers: this.getHeaders(undefined, account.flowAT)
+                            headers: this.getHeaders(undefined, account.flow_at)
                         });
                         if (creditsRes.data?.credits !== undefined) {
                             account.credits = creditsRes.data.credits;
                             creditsFetched = true;
-                            Logger.info(`[FlowSyncService] Credits (REST) for ${account.email}: ${account.credits}`);
                         }
                     } catch (e1: any) {
                         const status = e1.response?.status;
                         if (status === 401) {
-                            Logger.warn(`[FlowSyncService] CRITICAL: New access token was immediately rejected (401). The session cookie (flowST) for ${account.email} has expired.`);
+                            Logger.warn(`[FlowSyncService] CRITICAL: New access token was immediately rejected (401). The session cookie (flow_st) for ${account.email} has expired.`);
                             account.status = AIAccountStatus.UNAUTHORIZED;
-                            account.flowAT = undefined;
+                            account.flow_at = undefined;
                             await this.saveAccount(account);
                             throw new Error('Session token has expired. Please update it in the UI.');
                         }
@@ -153,10 +157,10 @@ export class FlowSyncService {
                         Logger.info(`[FlowSyncService] Credits REST failed (${status}): ${errBody}`);
                     }
 
-                    if (!creditsFetched && account.flowST) {
+                    if (!creditsFetched && account.flow_st) {
                         try {
                             const trpcRes = await axios.post('https://labs.google/fx/api/trpc/videoFx.credits', { json: null }, {
-                                headers: this.getHeaders(account.flowST, account.flowAT, {
+                                headers: this.getHeaders(account.flow_st, account.flow_at, {
                                     'Referer': 'https://labs.google/fx/tools/flow'
                                 })
                             });
@@ -164,9 +168,6 @@ export class FlowSyncService {
                             if (trpcData?.credits !== undefined) {
                                 account.credits = trpcData.credits;
                                 creditsFetched = true;
-                                Logger.info(`[FlowSyncService] Credits (tRPC/cookie) for ${account.email}: ${account.credits}`);
-                            } else {
-                                Logger.info(`[FlowSyncService] Credits tRPC response: ${JSON.stringify(trpcRes.data)}`);
                             }
                         } catch (e2: any) {
                             const errBody = JSON.stringify(e2.response?.data || e2.message);
@@ -187,9 +188,9 @@ export class FlowSyncService {
                     await db.upsertFlowAccount({
                         id: account.id || `flow_${Date.now()}`,
                         email: account.email,
-                        session_token: account.flowST || '',
-                        access_token: account.flowAT,
-                        project_id: account.projectId,
+                        session_token: account.flow_st || '',
+                        access_token: account.flow_at,
+                        project_id: account.project_id,
                         status: account.status === AIAccountStatus.READY ? 'ACTIVE' : (account.status || 'ACTIVE'),
                         credits_remaining: account.credits !== undefined ? account.credits : 100,
                         last_synced_at: new Date().toISOString(),
@@ -197,8 +198,6 @@ export class FlowSyncService {
                 } catch (dbErr: any) {
                     Logger.warn(`[FlowSyncService] Failed to upsertFlowAccount to DB: ${dbErr.message}`);
                 }
-
-                Logger.info(`[FlowSyncService] Tokens refreshed successfully for ${account.email} (Credits: ${account.credits || 0}, Project: ${account.projectId || 'None'})`);
             } else {
                 throw new Error('Invalid session response: No access token or user info found');
             }
@@ -213,8 +212,8 @@ export class FlowSyncService {
     }
 
     public async ensureProject(account: IAIAccount, session?: any, forceNew: boolean = false): Promise<string> {
-        if (account.projectId && !forceNew) {
-            return account.projectId;
+        if (account.project_id && !forceNew) {
+            return account.project_id;
         }
 
         Logger.info(`[FlowSyncService] Project ID missing or renewing for ${account.email}. Attempting to resolve...`);
@@ -222,10 +221,10 @@ export class FlowSyncService {
         if (session && !forceNew) {
             const workspace = session.workspace || session.user?.workspace;
             if (workspace?.id) {
-                account.projectId = workspace.id;
+                account.project_id = workspace.id;
                 await this.saveAccount(account);
-                Logger.info(`[FlowSyncService] Resolved projectId from session for ${account.email}: ${account.projectId}`);
-                return account.projectId as string;
+                Logger.info(`[FlowSyncService] Resolved projectId from session for ${account.email}: ${account.project_id}`);
+                return account.project_id as string;
             }
         }
 
@@ -238,9 +237,9 @@ export class FlowSyncService {
             await db.upsertFlowAccount({
                 id: account.id || `flow_${Date.now()}`,
                 email: account.email,
-                session_token: account.flowST || '',
-                access_token: account.flowAT,
-                project_id: account.projectId,
+                session_token: account.flow_st || '',
+                access_token: account.flow_at,
+                project_id: account.project_id,
                 status: account.status,
                 credits_remaining: account.credits !== undefined ? account.credits : 0,
                 last_synced_at: new Date().toISOString(),
@@ -251,8 +250,8 @@ export class FlowSyncService {
     }
 
     public async createNewProject(account: IAIAccount): Promise<string> {
-        if (!account.flowST) {
-            throw new Error(`Cannot create project for ${account.email}: missing flowST session cookie`);
+        if (!account.flow_st) {
+            throw new Error(`Cannot create project for ${account.email}: missing flow_st session cookie`);
         }
 
         Logger.info(`[FlowSyncService] Creating fresh project for ${account.email}...`);
@@ -263,16 +262,16 @@ export class FlowSyncService {
                 toolName: "PINHOLE"
             }
         }, {
-            headers: this.getHeaders(account.flowST, undefined, {
+            headers: this.getHeaders(account.flow_st, undefined, {
                 'Referer': 'https://labs.google/fx/tools/flow'
             })
         });
 
         const projectId = createRes.data?.result?.data?.json?.result?.projectId;
         if (projectId) {
-            account.projectId = projectId;
+            account.project_id = projectId;
             await this.saveAccount(account);
-            Logger.info(`[FlowSyncService] Successfully created and saved project for ${account.email}: ${account.projectId}`);
+            Logger.info(`[FlowSyncService] Successfully created and saved project for ${account.email}: ${account.project_id}`);
             return projectId;
         }
 
@@ -324,7 +323,7 @@ export class FlowSyncService {
             const sessionCookie = cookies.find(c => c.name === '__Secure-next-auth.session-token');
 
             if (sessionCookie) {
-                Logger.info(`[FlowSyncService] Successfully extracted ST from browser`);
+                // Logger.info(`[FlowSyncService] Successfully extracted ST from browser`);
                 return sessionCookie.value;
             }
 

@@ -3,7 +3,7 @@ import { mcpClient } from '../integrations/mcp/ParallelMCPClient.js';
 
 export const copyrightRouter = Router();
 
-// POST /v1/audio/copyright-verify — Fingerprint audio track for copyright clearance
+// POST /api/audio/copyright-verify — Fingerprint audio track for copyright clearance
 copyrightRouter.post('/copyright-verify', async (req: Request, res: Response) => {
   const { audioUrl, text } = req.body;
 

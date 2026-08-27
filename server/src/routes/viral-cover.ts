@@ -1,23 +1,18 @@
 import { Router, Request, Response } from 'express';
 import { geminiClient } from '../integrations/ai/gemini/GeminiClient.js';
+import { PromptLoader } from '../utils/PromptLoader.js';
 
 export const viralCoverRouter = Router();
 
-// POST /v1/ai/viral-cover/generate — AI scanning video frames to produce 3 viral cover thumbnails
+// POST /api/ai/viral-cover/generate — AI scanning video frames to produce 3 viral cover thumbnails
 viralCoverRouter.post('/viral-cover/generate', async (req: Request, res: Response) => {
   const { episodeId = 'episode-001', seriesTitle = 'The Neon Betrayal' } = req.body;
 
   try {
-    const prompt = `Generate 3 high-CTR clickbait viral cover titles and predicted CTR scores (80-99) for a micro-drama episode:
-Series: ${seriesTitle}
-Episode: ${episodeId}
-
-Respond in strict JSON:
-[
-  { "id": "c-01", "url": "https://picsum.photos/seed/cover1/400/600", "title": "The Betrayal Reveal", "score": 96 },
-  { "id": "c-02", "url": "https://picsum.photos/seed/cover2/400/600", "title": "Climax Showdown", "score": 91 },
-  { "id": "c-03", "url": "https://picsum.photos/seed/cover3/400/600", "title": "Emotional Confrontation", "score": 88 }
-]`;
+    const prompt = PromptLoader.render('scene/viral_cover_generate', {
+      seriesTitle,
+      episodeId,
+    });
 
     const raw = await geminiClient.generateText({
       prompt,

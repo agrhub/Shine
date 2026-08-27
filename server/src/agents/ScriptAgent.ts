@@ -1,11 +1,11 @@
-import { geminiClient } from '../integrations/ai/gemini/GeminiClient.js';
+import { geminiClient, GEMINI_SUPPORTED_VOICES } from '../integrations/ai/gemini/GeminiClient.js';
 import { aiProviderRouter } from '../integrations/ai/router/AIProviderRouter.js';
 import { renderSkill, loadSkill } from '../utils/SkillLoader.js';
 import { PromptLoader } from '../utils/PromptLoader.js';
 import { Logger } from '../utils/logger.js';
 import { getLanguageForCountry } from '../utils/LanguageMapping.js';
 import { getVisualStylePrompt } from '../constants/VisualStyles.js';
-import { ShotFrame } from '../database/IDatabaseProvider.js';
+import { ShotFrame, SceneEntity, CharacterEpisodeEntity, LocationAsset, PropAsset } from '../types.js';
 import { nanoid } from 'nanoid';
 
 export interface ScriptAgentInput {
@@ -19,14 +19,9 @@ export interface ScriptAgentInput {
   sceneCore?: string;
   conflictEscalation?: string;
   cliffhangerHook?: string;
-  characters?: Array<{
-    name: string;
-    role?: string;
-    identity?: string;
-    traits?: string;
-    speechStyle?: string;
-    loraAnchor?: string;
-  }>;
+  characters?: any[];
+  locations?: any[];
+  props?: any[];
   storyCore?: {
     coreAttraction?: string;
     psychologicalPleasure?: string;
@@ -37,109 +32,37 @@ export interface ScriptAgentInput {
   targetDurationSeconds?: number;
 }
 
-export interface ScriptShot {
-  index: number;
-  sceneNumber: number;
-  shotNumber: number;
-  title?: string;
-  heading: string;
-  location: string;
-  timeOfDay: string;
-  lightingMood?: string;
-  frameDescription?: string;
-  cameraMovement?: string;
-  action: string;
-  characterCostumes?: Array<{
-    character: string;
-    wardrobe: string;
-    variantId: string;
-  }>;
-  props?: string[];
-  dialogue: Array<{
-    character: string;
-    line: string;
-    emotion?: string;
-    speechTone?: string;
-  }>;
-  durationSeconds: number; // Strictly <= 8s per AI video generation constraints
-  bgmMood?: string;
-  sfxCues?: string[];
-  referenceAssets?: {
-    characters?: string[];
-    locations?: string[];
-    props?: string[];
-  };
-  visualPrompt?: string;
-  endFramePrompt?: string;
-  sceneContext?: string;
-  propDetails?: string;
-  transitionEffect?: string;
-  storyboardFrameUrl?: string;
-  storyboardEndFrameUrl?: string;
-}
+export type ScriptShot = SceneEntity;
+export type ScriptScene = SceneEntity;
 
 export interface ScriptSceneGroup {
-  sceneNumber: number;
+  scene_number: number;
   heading: string;
   location: string;
-  timeOfDay: string;
-  lightingMood?: string;
+  time_of_day: string;
+  lighting_mood?: string;
   shots: ScriptShot[];
 }
 
-export type ScriptScene = ScriptShot; // Alias for backward compatibility with timeline clips
-
-export interface CharacterAssetDef {
-  id: string;
-  name: string;
-  role?: string;
-  frameDescription?: string;
-  physicalCharacteristics?: string;
-  clothingAndAccessories?: string;
-  wardrobeVariants?: Array<{
-    variantId: string;
-    name: string;
-    clothingAndAccessories: string;
-    associatedScenes?: number[];
-  }>;
-  backstory?: string;
-  voiceId?: string;
-  imageUrl?: string;
-}
-
-export interface LocationAssetDef {
-  id: string;
-  name: string;
-  timeOfDay?: string;
-  frameDescription?: string;
-  physicalCharacteristics?: string;
-  imageUrl?: string;
-}
-
-export interface PropAssetDef {
-  id: string;
-  name: string;
-  owner?: string;
-  frameDescription?: string;
-  physicalCharacteristics?: string;
-  imageUrl?: string;
-}
+export type CharacterAssetDef = CharacterEpisodeEntity & { role?: string; physical_characteristics?: string; appearance?: string; backstory?: string; voice_id?: string; avatar?: string };
+export type LocationAssetDef = LocationAsset;
+export type PropAssetDef = PropAsset & { owner?: string };
 
 export interface ScriptItem {
   episode: string;
-  episodeNumber: number;
+  episode_number: number;
   title: string;
   synopsis: string;
   screenplay?: string;
-  sceneCore?: string;
-  conflictEscalation?: string;
-  cliffhangerHook?: string;
-  totalDurationSeconds: number;
-  scenes: ScriptScene[]; // Flat list of shots for timeline clips
-  sceneGroups?: ScriptSceneGroup[]; // Hierarchical scenes
-  characters?: CharacterAssetDef[];
-  locations?: LocationAssetDef[];
-  props?: PropAssetDef[];
+  scene_core?: string;
+  conflict_escalation?: string;
+  cliffhanger_hook?: string;
+  total_duration_seconds: number;
+  scenes: SceneEntity[];
+  scene_groups?: ScriptSceneGroup[];
+  characters?: CharacterEpisodeEntity[];
+  locations?: LocationAsset[];
+  props?: PropAsset[];
 }
 
 export class ScriptAgent {
@@ -147,13 +70,17 @@ export class ScriptAgent {
 
   public calculateDurationTiers(durationSec?: number) {
     const targetDuration = Math.min(Math.max(Number(durationSec) || 90, 30), 600);
-    // An average shot is 6-7s. Ensure minShots is high enough to reach targetDuration
-    const minShots = Math.max(8, Math.ceil(targetDuration / 7));
-    const maxShots = Math.max(minShots + 6, Math.ceil(targetDuration / 5));
-    const minShotsPerScene = targetDuration <= 120 ? 3 : targetDuration <= 300 ? 4 : 5;
-    const maxShotsPerScene = targetDuration <= 120 ? 6 : targetDuration <= 300 ? 8 : 10;
-    const minScenes = targetDuration <= 120 ? 2 : targetDuration <= 300 ? 4 : 6;
-    const maxScenes = targetDuration <= 120 ? 4 : targetDuration <= 300 ? 8 : 12;
+    // Each video shot is strictly 4s to 8s (average ~5.5s - 6.5s for dynamic vertical micro-drama pacing).
+    // minShots: Minimum shots needed assuming shots average ~6.5s (so episode reaches target duration naturally)
+    const minShots = Math.max(3, Math.ceil(targetDuration / 6.5));
+    // maxShots: Maximum shots if scenes are fast-paced (~4.5s per shot)
+    const maxShots = Math.max(minShots + 2, Math.ceil(targetDuration / 4.5));
+
+    // Scaling scenes and shots per scene:
+    const minShotsPerScene = targetDuration <= 60 ? 2 : targetDuration <= 180 ? 3 : 4;
+    const maxShotsPerScene = targetDuration <= 60 ? 4 : targetDuration <= 180 ? 6 : 8;
+    const minScenes = Math.max(1, Math.ceil(minShots / maxShotsPerScene));
+    const maxScenes = Math.max(minScenes + 1, Math.ceil(maxShots / minShotsPerScene));
     const useBatchGeneration = targetDuration > 240;
 
     return {
@@ -173,7 +100,7 @@ export class ScriptAgent {
   public normalizeCharacters(
     raw: Array<any | string>,
     existing: any[] = [],
-    descriptions: Record<string, { physicalCharacteristics?: string; clothingAndAccessories?: string; backstory?: string; wardrobeVariants?: any[] }> = {}
+    descriptions: Record<string, { physical_characteristics?: string; clothing_and_accessories?: string; backstory?: string; wardrobe_variants?: any[] }> = {}
   ): CharacterAssetDef[] {
     const existingMap = new Map(existing.map((c: any) => [c.name?.toLowerCase().trim(), c]));
     return (raw || []).map((item, i) => {
@@ -181,43 +108,73 @@ export class ScriptAgent {
       const existingObj = existingMap.get(name.toLowerCase().trim());
       const desc = descriptions[name] || {};
 
-      const rawVariants = (typeof item === 'object' && Array.isArray(item.wardrobeVariants) && item.wardrobeVariants.length > 0)
-        ? item.wardrobeVariants
-        : (desc.wardrobeVariants && desc.wardrobeVariants.length > 0)
-        ? desc.wardrobeVariants
-        : existingObj?.wardrobeVariants || [];
+      const rawVariants = (typeof item === 'object' && Array.isArray(item.wardrobe_variants || item.wardrobeVariants) && (item.wardrobe_variants || item.wardrobeVariants).length > 0)
+        ? (item.wardrobe_variants || item.wardrobeVariants)
+        : (desc.wardrobe_variants && desc.wardrobe_variants.length > 0)
+        ? desc.wardrobe_variants
+        : existingObj?.wardrobe_variants || existingObj?.wardrobeVariants || [];
 
       const slug = (typeof item === 'object' && item.id) || existingObj?.id || `char_${i + 1}`;
-      const defaultCloth = (typeof item === 'object' && (item.clothingAndAccessories || item.wardrobe)) || desc.clothingAndAccessories || existingObj?.clothingAndAccessories || '';
+      const defaultCloth = (typeof item === 'object' && (item.clothing_and_accessories || item.clothingAndAccessories || item.wardrobe || item.costume_style || item.costumeStyle))
+        || desc.clothing_and_accessories
+        || existingObj?.clothing_and_accessories
+        || existingObj?.clothingAndAccessories
+        || existingObj?.costume_style
+        || existingObj?.wardrobe
+        || '';
 
-      const wardrobeVariants = (rawVariants.length > 0
+      const wardrobe_variants = (rawVariants.length > 0
         ? rawVariants.map((v: any, vi: number) => ({
-            variantId: v.variantId || `${slug}_variant_${vi + 1}`,
+            variant_id: v.variant_id || v.variantId || `${slug}_variant_${vi + 1}`,
             name: v.name || `Outfit ${vi + 1}`,
-            clothingAndAccessories: v.clothingAndAccessories || defaultCloth || '',
-            associatedScenes: Array.isArray(v.associatedScenes) ? v.associatedScenes : [],
-            imageUrl: v.imageUrl || undefined,
+            clothing_and_accessories: v.clothing_and_accessories || v.clothingAndAccessories || defaultCloth || '',
+            associated_scenes: Array.isArray(v.associated_scenes || v.associatedScenes) && (v.associated_scenes || v.associatedScenes).length > 0 ? (v.associated_scenes || v.associatedScenes) : [1],
+            image_url: v.image_url || v.imageUrl || undefined,
           }))
         : (defaultCloth
           ? [{
-              variantId: `${slug}_default`,
-              name: 'Default',
-              clothingAndAccessories: defaultCloth,
-              associatedScenes: [1],
+              variant_id: `${slug}_default`,
+              name: 'Default Attire',
+              clothing_and_accessories: defaultCloth,
+              associated_scenes: [1],
             }]
           : []));
+
+      const physical = (typeof item === 'object' && (item.physical_characteristics || item.physicalCharacteristics || item.appearance || item.visual_traits || item.visualTraits || item.description))
+        || desc.physical_characteristics
+        || existingObj?.physical_characteristics
+        || existingObj?.physicalCharacteristics
+        || existingObj?.appearance
+        || existingObj?.visual_traits
+        || existingObj?.visualTraits
+        || existingObj?.description
+        || '';
+
+      const existingVoice = existingObj?.voice_id || existingObj?.voiceId;
+      const rawItemVoice = (typeof item === 'object' && (item.voice_id || item.voiceId)) ? (item.voice_id || item.voiceId) : null;
+      const gender = (typeof item === 'object' && item.gender) || existingObj?.gender || (i % 2 === 0 ? 'Male' : 'Female');
+      const isFemale = String(gender).toLowerCase() === 'female';
+
+      let resolvedVoiceId = isFemale ? 'Kore' : 'Fenrir';
+      if (existingVoice && GEMINI_SUPPORTED_VOICES.includes(existingVoice)) {
+        resolvedVoiceId = existingVoice;
+      } else if (rawItemVoice && GEMINI_SUPPORTED_VOICES.includes(rawItemVoice)) {
+        resolvedVoiceId = rawItemVoice;
+      } else if (existingVoice) {
+        resolvedVoiceId = existingVoice;
+      }
 
       return {
         id: slug,
         name,
         role: (typeof item === 'object' && item.role) || existingObj?.role || (i === 0 ? 'protagonist' : 'supporting'),
-        frameDescription: (typeof item === 'object' && item.frameDescription) || existingObj?.frameDescription || 'A character sheet with a head and shoulders shot showing the characters face on the left and a full body shot of the character on the right wearing the same clothing and accessories against a seamless white background.',
-        physicalCharacteristics: (typeof item === 'object' && (item.physicalCharacteristics || item.appearance)) || desc.physicalCharacteristics || existingObj?.physicalCharacteristics || '',
-        clothingAndAccessories: defaultCloth,
-        wardrobeVariants,
+        frame_description: (typeof item === 'object' && (item.frame_description || item.frameDescription)) || existingObj?.frame_description || existingObj?.frameDescription || 'A character sheet with a head and shoulders shot showing the characters face on the left and a full body shot of the character on the right wearing the same clothing and accessories against a seamless white background.',
+        physical_characteristics: physical,
+        clothing_and_accessories: defaultCloth,
+        wardrobe_variants,
         backstory: (typeof item === 'object' && item.backstory) || desc.backstory || existingObj?.backstory || '',
-        voiceId: (typeof item === 'object' && item.voiceId) || existingObj?.voiceId || (existingObj?.gender === 'female' ? 'Kore' : 'Fenrir'),
-        imageUrl: (typeof item === 'object' && item.imageUrl) || existingObj?.imageUrl || '',
+        voice_id: resolvedVoiceId,
+        avatar: (typeof item === 'object' && (item.avatar || item.image_url || item.imageUrl)) || existingObj?.avatar || existingObj?.image_url || existingObj?.imageUrl || '',
       };
     });
   }
@@ -225,21 +182,28 @@ export class ScriptAgent {
   public normalizeLocations(
     raw: Array<any | string>,
     existing: any[] = [],
-    descriptions: Record<string, { physicalCharacteristics?: string; timeOfDay?: string }> = {}
+    descriptions: Record<string, { physical_characteristics?: string; time_of_day?: string }> = {}
   ): LocationAssetDef[] {
     const existingMap = new Map(existing.map((l: any) => [l.name?.toLowerCase().trim(), l]));
     return (raw || []).map((item, i) => {
       const name = typeof item === 'string' ? item : item.name || `Location ${i + 1}`;
       const existingObj = existingMap.get(name.toLowerCase().trim());
       const desc = descriptions[name] || {};
+      const physical = (typeof item === 'object' && (item.physical_characteristics || item.physicalCharacteristics || item.appearance || item.description))
+        || desc.physical_characteristics
+        || existingObj?.physical_characteristics
+        || existingObj?.physicalCharacteristics
+        || existingObj?.description
+        || '';
 
       return {
         id: (typeof item === 'object' && item.id) || existingObj?.id || `loc_${i + 1}`,
         name,
-        timeOfDay: (typeof item === 'object' && item.timeOfDay) || desc.timeOfDay || existingObj?.timeOfDay || 'NIGHT',
-        frameDescription: (typeof item === 'object' && item.frameDescription) || existingObj?.frameDescription || 'Make a single image with 4 different 16:9 views of this same location with perfect continuity.',
-        physicalCharacteristics: (typeof item === 'object' && item.physicalCharacteristics) || desc.physicalCharacteristics || existingObj?.physicalCharacteristics || '',
-        imageUrl: (typeof item === 'object' && item.imageUrl) || existingObj?.imageUrl || '',
+        time_of_day: (typeof item === 'object' && (item.time_of_day || item.timeOfDay)) || desc.time_of_day || existingObj?.time_of_day || existingObj?.timeOfDay || 'DAY',
+        frame_description: (typeof item === 'object' && (item.frame_description || item.frameDescription)) || existingObj?.frame_description || existingObj?.frameDescription || 'Make a single image with 4 different 16:9 views of this same location with perfect continuity.',
+        physical_characteristics: physical,
+        image_url: (typeof item === 'object' && (item.image_url || item.imageUrl)) || existingObj?.image_url || existingObj?.imageUrl || '',
+        status: (typeof item === 'object' && item.status) || existingObj?.status || 'draft',
       };
     });
   }
@@ -247,21 +211,28 @@ export class ScriptAgent {
   public normalizeProps(
     raw: Array<any | string>,
     existing: any[] = [],
-    descriptions: Record<string, { physicalCharacteristics?: string }> = {}
+    descriptions: Record<string, { physical_characteristics?: string }> = {}
   ): PropAssetDef[] {
     const existingMap = new Map(existing.map((p: any) => [p.name?.toLowerCase().trim(), p]));
     return (raw || []).map((item, i) => {
       const name = typeof item === 'string' ? item : item.name || `Prop ${i + 1}`;
       const existingObj = existingMap.get(name.toLowerCase().trim());
       const desc = descriptions[name] || {};
+      const physical = (typeof item === 'object' && (item.physical_characteristics || item.physicalCharacteristics || item.appearance || item.description))
+        || desc.physical_characteristics
+        || existingObj?.physical_characteristics
+        || existingObj?.physicalCharacteristics
+        || existingObj?.description
+        || '';
 
       return {
         id: (typeof item === 'object' && item.id) || existingObj?.id || `prop_${i + 1}`,
         name,
         owner: (typeof item === 'object' && item.owner) || existingObj?.owner || '',
-        frameDescription: (typeof item === 'object' && item.frameDescription) || existingObj?.frameDescription || 'A product image of just the item described against a white background.',
-        physicalCharacteristics: (typeof item === 'object' && item.physicalCharacteristics) || desc.physicalCharacteristics || existingObj?.physicalCharacteristics || '',
-        imageUrl: (typeof item === 'object' && item.imageUrl) || existingObj?.imageUrl || '',
+        frame_description: (typeof item === 'object' && (item.frame_description || item.frameDescription)) || existingObj?.frame_description || existingObj?.frameDescription || 'A product image of just the item described against a white background.',
+        physical_characteristics: physical,
+        image_url: (typeof item === 'object' && (item.image_url || item.imageUrl)) || existingObj?.image_url || existingObj?.imageUrl || '',
+        status: (typeof item === 'object' && item.status) || existingObj?.status || 'draft',
       };
     });
   }
@@ -277,10 +248,10 @@ export class ScriptAgent {
   public formatCharactersContext(characters: CharacterAssetDef[]): string {
     return (characters || [])
       .map(c => {
-        let text = `- ${c.name} (${c.role || 'character'}): ${c.physicalCharacteristics || 'Authentic'} | Wardrobe: ${c.clothingAndAccessories || 'Signature styling'}`;
-        if (Array.isArray(c.wardrobeVariants) && c.wardrobeVariants.length > 0) {
-          const variantsStr = c.wardrobeVariants
-            .map(v => `[variantId: "${v.variantId}", name: "${v.name}", outfit: "${v.clothingAndAccessories || ''}", scenes: ${JSON.stringify(v.associatedScenes || [])}]`)
+        let text = `- ${c.name} (${c.role || 'character'}): ${c.physical_characteristics || 'Authentic'} | Wardrobe: ${c.clothing_and_accessories || 'Signature styling'}`;
+        if (Array.isArray(c.wardrobe_variants) && c.wardrobe_variants.length > 0) {
+          const variantsStr = c.wardrobe_variants
+            .map(v => `[variant_id: "${v.variant_id}", name: "${v.name}", outfit: "${v.clothing_and_accessories || ''}", scenes: ${JSON.stringify(v.associated_scenes || [])}]`)
             .join(', ');
           text += ` | Wardrobe Variants: ${variantsStr}`;
         }
@@ -291,13 +262,13 @@ export class ScriptAgent {
 
   public formatLocationsContext(locations: LocationAssetDef[]): string {
     return (locations || [])
-      .map(l => `- ${l.name} (${l.timeOfDay || 'DAY'}): ${l.physicalCharacteristics || 'Standard cinematic environment'}`)
+      .map(l => `- ${l.name} (${l.time_of_day || 'DAY'}): ${l.physical_characteristics || 'Standard cinematic environment'}`)
       .join('\n');
   }
 
   public formatPropsContext(props: PropAssetDef[]): string {
     return (props || [])
-      .map(p => `- ${p.name}: ${p.physicalCharacteristics || 'Key cinematic item'}`)
+      .map(p => `- ${p.name}: ${p.physical_characteristics || 'Key cinematic item'}`)
       .join('\n');
   }
 
@@ -311,19 +282,20 @@ export class ScriptAgent {
     propNames: string[],
     localLocations: LocationAssetDef[] = [],
     localCharacters: CharacterAssetDef[] = [],
-    localProps: PropAssetDef[] = []
+    localProps: PropAssetDef[] = [],
+    speechTimingPrompt?: string
   ): string {
     let vp = `FrameDescription: ${frameDesc || 'Cinematic shot'}\n`;
     if (locName) {
       const locObj = localLocations.find(l => l.name?.toLowerCase() === locName.toLowerCase());
-      vp += `Locations: ${locName}: ${locObj?.physicalCharacteristics || locName}\n`;
+      vp += `Locations: ${locName}: ${locObj?.physical_characteristics || locName}\n`;
     }
     if (charNames.length > 0) {
       const charDescList = charNames.map(cName => {
         const cObj = localCharacters.find(c => c.name?.toLowerCase() === cName.toLowerCase());
         const costObj = (costumes || []).find((cc: any) => cc.character?.toLowerCase() === cName.toLowerCase());
-        const wardrobe = costObj?.wardrobe || cObj?.clothingAndAccessories || 'Signature wardrobe';
-        const phys = cObj?.physicalCharacteristics || 'Authentic facial traits';
+        const wardrobe = costObj?.wardrobe || cObj?.clothing_and_accessories || 'Signature wardrobe';
+        const phys = cObj?.physical_characteristics || 'Authentic facial traits';
         return `${cName}: ${phys}, wearing ${wardrobe}`;
       });
       vp += `Characters: ${charDescList.join('. ')}\n`;
@@ -331,11 +303,130 @@ export class ScriptAgent {
     if (propNames.length > 0) {
       const propDescList = propNames.map(pName => {
         const pObj = localProps.find(p => p.name?.toLowerCase() === pName.toLowerCase());
-        return `${pName}: ${pObj?.physicalCharacteristics || 'Detailed prop'}`;
+        return `${pName}: ${pObj?.physical_characteristics || 'Detailed prop'}`;
       });
-      vp += `Props: ${propDescList.join('. ')}`;
+      vp += `Props: ${propDescList.join('. ')}\n`;
+    }
+    if (speechTimingPrompt) {
+      vp += `${speechTimingPrompt}`;
     }
     return vp.trim();
+  }
+
+  // ── 3B. WORD-LEVEL CAPTIONS & DIALOGUE TIMING GENERATOR ──────────────────
+
+  public buildWordLevelCaptionsForShot(
+    dialogue: any[],
+    durSec: number,
+    localCharacters: CharacterAssetDef[] = []
+  ): {
+    voice_start_us: number;
+    voice_duration_us: number;
+    voice_id: string;
+    captions_data: any[];
+    words: any[];
+    speechTimingPrompt: string;
+  } {
+    if (!Array.isArray(dialogue) || dialogue.length === 0) {
+      return {
+        voice_start_us: 0,
+        voice_duration_us: 0,
+        voice_id: '',
+        captions_data: [],
+        words: [],
+        speechTimingPrompt: '',
+      };
+    }
+
+    const firstDlg = dialogue[0];
+    const rawCharName = (firstDlg.character || firstDlg.speaker || '').trim();
+    const cleanCharName = rawCharName.replace(/\s*\([^)]*\)\s*/g, '').trim().toLowerCase();
+    const charDef = localCharacters.find(c =>
+      c.name?.toLowerCase().trim() === cleanCharName ||
+      c.name?.toLowerCase().trim() === rawCharName.toLowerCase()
+    );
+    const voice_id = charDef?.voice_id || (charDef?.role === 'antagonist' ? 'Fenrir' : 'Kore');
+
+    const rawLine = (firstDlg.line || firstDlg.text || '').trim();
+    if (!rawLine) {
+      return {
+        voice_start_us: 0,
+        voice_duration_us: 0,
+        voice_id,
+        captions_data: [],
+        words: [],
+        speechTimingPrompt: '',
+      };
+    }
+
+    const lineWords = rawLine.split(/\s+/).filter(Boolean);
+    const startSec = Number(firstDlg.speech_start_sec !== undefined ? firstDlg.speech_start_sec : (firstDlg.speechStartSec !== undefined ? firstDlg.speechStartSec : 0.5));
+    const charEstimatedDurSec = Math.max(1.0, Math.min(durSec - startSec - 0.2, lineWords.length * 0.32));
+    const endSec = Number(firstDlg.speech_end_sec !== undefined ? firstDlg.speech_end_sec : (firstDlg.speechEndSec !== undefined ? firstDlg.speechEndSec : (startSec + charEstimatedDurSec)));
+    const voiceDurSec = Math.max(0.8, endSec - startSec);
+
+    const voice_start_us = Math.round(startSec * 1_000_000);
+    const voice_duration_us = Math.round(voiceDurSec * 1_000_000);
+
+    // Build word-by-word timestamps
+    const totalChars = lineWords.reduce((sum, w) => sum + w.length, 0) || 1;
+    let curSec = startSec;
+    const words: any[] = lineWords.map((wordStr) => {
+      const wWeight = Math.max(0.08, wordStr.length / totalChars);
+      const wDur = Math.max(0.15, voiceDurSec * wWeight);
+      const wStart = Math.round(curSec * 1000) / 1000;
+      const wEnd = Math.round(Math.min(endSec, wStart + wDur) * 1000) / 1000;
+      curSec = wEnd;
+      return {
+        word: wordStr.toLowerCase().replace(/[.,!?]/g, ''),
+        punctuated_word: wordStr,
+        start: wStart,
+        end: wEnd,
+        confidence: 0.99,
+      };
+    });
+
+    // Group words into natural subtitle chunks (max 5 words per cue)
+    const CHUNK_SIZE = 5;
+    const cues: any[] = [];
+    for (let i = 0; i < words.length; i += CHUNK_SIZE) {
+      const chunk = words.slice(i, i + CHUNK_SIZE);
+      const firstW = chunk[0];
+      const lastW = chunk[chunk.length - 1];
+      const cueText = chunk.map(w => w.punctuated_word).join(' ');
+      const cueStartMs = Math.round(firstW.start * 1000);
+      const cueEndMs = Math.round(lastW.end * 1000);
+      const fromUs = Math.round(firstW.start * 1_000_000);
+      const toUs = Math.round(lastW.end * 1_000_000);
+
+      cues.push({
+        id: `cue_${cues.length + 1}`,
+        text: cueText,
+        start_ms: cueStartMs,
+        end_ms: cueEndMs,
+        from_us: fromUs,
+        to_us: toUs,
+        duration_us: toUs - fromUs,
+        duration_ms: cueEndMs - cueStartMs,
+        words: chunk.map((w, cIdx) => ({
+          text: w.punctuated_word,
+          from: Math.round((w.start - firstW.start) * 1000),
+          to: Math.round((w.end - firstW.start) * 1000),
+          is_key_word: cIdx === 0 || cIdx === chunk.length - 1 || w.word.length > 4,
+        })),
+      });
+    }
+
+    const speechTimingPrompt = `[Speech & Vocal Profile]: At ${startSec.toFixed(1)}s to ${endSec.toFixed(1)}s, ${rawCharName || 'Character'} (Voice Model: ${voice_id}, Emotion: ${firstDlg.emotion || 'Dramatic'}) speaks: "${rawLine}". Lip movements, facial expressions, and vocal cadence synchronize naturally between ${startSec.toFixed(1)}s and ${endSec.toFixed(1)}s.`;
+
+    return {
+      voice_start_us,
+      voice_duration_us,
+      voice_id,
+      captions_data: cues,
+      words,
+      speechTimingPrompt,
+    };
   }
 
   // ── 4. SCENE & SHOT FLATTENING AND NORMALIZATION ─────────────────────────
@@ -345,8 +436,8 @@ export class ScriptAgent {
     charNames: string[],
     sceneNumber: number,
     localCharacters: CharacterAssetDef[]
-  ): Array<{ character: string; wardrobe: string; variantId: string }> {
-    const result: Array<{ character: string; wardrobe: string; variantId: string }> = [];
+  ): Array<{ character: string; wardrobe: string; variant_id: string }> {
+    const result: Array<{ character: string; wardrobe: string; variant_id: string }> = [];
     const processedChars = new Set<string>();
     const costumesArr = Array.isArray(rawCostumes) ? rawCostumes : [];
 
@@ -357,20 +448,21 @@ export class ScriptAgent {
       processedChars.add(charNameLower);
 
       const charDef = localCharacters.find(c => c.name?.toLowerCase().trim() === charNameLower);
-      const variants = Array.isArray(charDef?.wardrobeVariants) ? charDef.wardrobeVariants : [];
+      const variants = Array.isArray(charDef?.wardrobe_variants) ? charDef.wardrobe_variants : [];
 
       let matchedVariant: any = null;
-      if (cost.variantId && variants.length > 0) {
-        matchedVariant = variants.find(v => v.variantId?.toLowerCase() === String(cost.variantId).toLowerCase());
+      const costVariantId = cost.variant_id || cost.variantId;
+      if (costVariantId && variants.length > 0) {
+        matchedVariant = variants.find(v => v.variant_id?.toLowerCase() === String(costVariantId).toLowerCase());
       }
       if (!matchedVariant && sceneNumber && variants.length > 0) {
-        matchedVariant = variants.find(v => Array.isArray(v.associatedScenes) && v.associatedScenes.includes(sceneNumber));
+        matchedVariant = variants.find(v => Array.isArray(v.associated_scenes) && v.associated_scenes.includes(sceneNumber));
       }
       if (!matchedVariant && cost.wardrobe && variants.length > 0) {
         const wLower = String(cost.wardrobe).toLowerCase();
         matchedVariant = variants.find(v =>
           (v.name && wLower.includes(v.name.toLowerCase())) ||
-          (v.clothingAndAccessories && wLower.includes(v.clothingAndAccessories.toLowerCase()))
+          (v.clothing_and_accessories && wLower.includes(v.clothing_and_accessories.toLowerCase()))
         );
       }
       if (!matchedVariant && variants.length > 0) {
@@ -378,13 +470,14 @@ export class ScriptAgent {
       }
 
       const slug = charDef?.id || charName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
-      const resolvedVariantId = matchedVariant?.variantId || cost.variantId || `${slug}_default`;
-      const resolvedWardrobe = matchedVariant?.clothingAndAccessories || cost.wardrobe || charDef?.clothingAndAccessories || 'Signature attire';
+      const fallbackVariantId = variants.length > 0 ? variants[0].variant_id : `${slug}_default`;
+      const resolvedVariantId = matchedVariant?.variant_id || (variants.some(v => v.variant_id === costVariantId) ? costVariantId : fallbackVariantId);
+      const resolvedWardrobe = matchedVariant?.clothing_and_accessories || (matchedVariant?.name ? matchedVariant.name : (cost.wardrobe || charDef?.clothing_and_accessories || 'Signature attire'));
 
       result.push({
         character: charDef?.name || charName,
         wardrobe: resolvedWardrobe,
-        variantId: resolvedVariantId,
+        variant_id: resolvedVariantId,
       });
     }
 
@@ -395,24 +488,25 @@ export class ScriptAgent {
       processedChars.add(cNameLower);
 
       const charDef = localCharacters.find(c => c.name?.toLowerCase().trim() === cNameLower);
-      const variants = Array.isArray(charDef?.wardrobeVariants) ? charDef.wardrobeVariants : [];
+      const variants = Array.isArray(charDef?.wardrobe_variants) ? charDef.wardrobe_variants : [];
 
       let matchedVariant: any = null;
       if (sceneNumber && variants.length > 0) {
-        matchedVariant = variants.find(v => Array.isArray(v.associatedScenes) && v.associatedScenes.includes(sceneNumber));
+        matchedVariant = variants.find(v => Array.isArray(v.associated_scenes) && v.associated_scenes.includes(sceneNumber));
       }
       if (!matchedVariant && variants.length > 0) {
         matchedVariant = variants[0];
       }
 
       const slug = charDef?.id || cName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
-      const resolvedVariantId = matchedVariant?.variantId || `${slug}_default`;
-      const resolvedWardrobe = matchedVariant?.clothingAndAccessories || charDef?.clothingAndAccessories || 'Signature attire';
+      const fallbackVariantId = variants.length > 0 ? variants[0].variant_id : `${slug}_default`;
+      const resolvedVariantId = matchedVariant?.variant_id || fallbackVariantId;
+      const resolvedWardrobe = matchedVariant?.clothing_and_accessories || (matchedVariant?.name ? matchedVariant.name : (charDef?.clothing_and_accessories || 'Signature attire'));
 
       result.push({
         character: charDef?.name || cName,
         wardrobe: resolvedWardrobe,
-        variantId: resolvedVariantId,
+        variant_id: resolvedVariantId,
       });
     }
 
@@ -435,54 +529,81 @@ export class ScriptAgent {
 
     if (hasNested) {
       rawScenes.forEach((sc: any, scIdx: number) => {
-        const scNum = sc.sceneNumber || scIdx + 1;
+        const scNum = sc.scene_number || sc.sceneNumber || scIdx + 1;
         const scHeading = sc.heading || `INT. SCENE ${scNum} - NIGHT`;
-        const scLoc = sc.location || 'Scene Location';
-        const scTime = sc.timeOfDay || 'NIGHT';
-        const scLighting = sc.lightingMood || 'Atmospheric cinematic';
+        const scLoc = sc.location || sc.location_name || 'Scene Location';
+        const scTime = sc.time_of_day || sc.timeOfDay || 'NIGHT';
+        const scLighting = sc.lighting_mood || sc.lightingMood || 'Atmospheric cinematic';
+        const scCore = sc.scene_core || sc.sceneCore || '';
+        const scConflict = sc.conflict_escalation || sc.conflictEscalation || '';
+        const scCliffhanger = sc.cliffhanger_hook || sc.cliffhangerHook || '';
+        const scContext = sc.scene_context || sc.sceneContext || '';
+        const scPropsDetail = sc.prop_details || sc.propDetails || '';
+
         (Array.isArray(sc.shots) ? sc.shots : []).forEach((sh: any, shIdx: number) => {
-          const dur = Math.min(Math.max(Number(sh.durationSeconds) || 6, 4), 8);
+          const dur = Math.min(Math.max(Number(sh.duration_seconds || sh.durationSeconds) || 6, 4), 8);
           const rawProps = Array.isArray(sh.props) ? sh.props : [];
-          const rawDialogue = Array.isArray(sh.dialogue)
+          const rawDialogue = (Array.isArray(sh.dialogue)
             ? sh.dialogue
-            : (sh.dialogue?.speaker && sh.dialogue?.text ? [sh.dialogue] : (sh.dialogue?.character && sh.dialogue?.line ? [sh.dialogue] : []));
-          const rawCostumes = Array.isArray(sh.characterCostumes) ? sh.characterCostumes : [];
+            : (sh.dialogue?.speaker && sh.dialogue?.text ? [sh.dialogue] : (sh.dialogue?.character && sh.dialogue?.line ? [sh.dialogue] : []))).slice(0, 1);
+          const rawCostumes = Array.isArray(sh.character_costumes || sh.characterCostumes) ? (sh.character_costumes || sh.characterCostumes) : [];
           const charNames = Array.from(new Set([
             ...rawCostumes.map((c: any) => c.character),
             ...rawDialogue.map((d: any) => d.character || d.speaker),
-            ...(Array.isArray(sh.referenceAssets?.characters) ? sh.referenceAssets.characters : []),
+            ...(Array.isArray(sh.reference_assets?.characters || sh.referenceAssets?.characters) ? (sh.reference_assets?.characters || sh.referenceAssets?.characters) : []),
           ])).filter(Boolean) as string[];
 
           const charCostumes = this.normalizeCharacterCostumes(rawCostumes, charNames, scNum, localCharacters);
           const shotProps = Array.from(new Set([
             ...rawProps,
-            ...(Array.isArray(sh.referenceAssets?.props) ? sh.referenceAssets.props : []),
+            ...(Array.isArray(sh.reference_assets?.props || sh.referenceAssets?.props) ? (sh.reference_assets?.props || sh.referenceAssets?.props) : []),
           ])).filter(Boolean) as string[];
-          const frameDesc = sh.frameDescription || sh.action || '';
+          const frameDesc = sh.frame_description || sh.frameDescription || sh.action || '';
+
+          const audioMeta = this.buildWordLevelCaptionsForShot(rawDialogue, dur, localCharacters);
+          const endFramePrompt = sh.end_frame_prompt || sh.endFramePrompt || '';
+          const videoEffect = sh.video_effect || sh.videoEffect || (scLighting.toLowerCase().includes('candle') || scLighting.toLowerCase().includes('moody') ? 'vignette' : 'glowFilter');
+
           shots.push({
+            id: sh.id || `scene_${nanoid(8)}`,
             index: globalIdx++,
-            sceneNumber: scNum,
-            shotNumber: shIdx + 1,
+            scene_number: scNum,
+            shot_number: sh.shot_number || sh.shotNumber || shIdx + 1,
             title: sh.title || `Shot ${shIdx + 1}`,
             heading: scHeading,
             location: scLoc,
-            timeOfDay: scTime,
-            lightingMood: scLighting,
-            sceneContext: sh.sceneContext || sc.sceneContext || '',
-            propDetails: sh.propDetails || sc.propDetails || '',
-            frameDescription: frameDesc,
-            cameraMovement: sh.cameraMovement || 'Slow push-in',
+            time_of_day: scTime,
+            lighting_mood: scLighting,
+            scene_core: scCore,
+            conflict_escalation: scConflict,
+            cliffhanger_hook: scCliffhanger,
+            scene_context: sh.scene_context || sh.sceneContext || scContext,
+            prop_details: sh.prop_details || sh.propDetails || scPropsDetail,
+            frame_description: frameDesc,
+            camera_movement: sh.camera_movement || sh.cameraMovement || 'Slow push-in',
             action: sh.action || '',
-            characterCostumes: charCostumes,
+            character_costumes: charCostumes,
             props: shotProps,
             dialogue: rawDialogue,
-            durationSeconds: dur,
-            bgmMood: sh.bgmMood || sc.bgmMood || 'Atmospheric suspense',
-            sfxCues: Array.isArray(sh.sfxCues) ? sh.sfxCues : [],
-            referenceAssets: { characters: charNames, locations: [scLoc], props: shotProps },
-            visualPrompt: sh.visualPrompt || this.buildVisualPrompt(frameDesc, scLoc, charNames, charCostumes, shotProps, localLocations, localCharacters, localProps),
-            endFramePrompt: sh.endFramePrompt || '',
-            transitionEffect: sh.transitionEffect || 'cut',
+            duration_seconds: dur,
+            bgm_mood: sh.bgm_mood || sh.bgmMood || sc.bgm_mood || sc.bgmMood || 'Atmospheric suspense',
+            sfx_cues: Array.isArray(sh.sfx_cues || sh.sfxCues) ? (sh.sfx_cues || sh.sfxCues) : [],
+            reference_assets: { characters: charNames, locations: [scLoc], props: shotProps },
+            visual_prompt: sh.visual_prompt || sh.visualPrompt || this.buildVisualPrompt(frameDesc, scLoc, charNames, charCostumes, shotProps, localLocations, localCharacters, localProps, audioMeta.speechTimingPrompt),
+            end_frame_prompt: endFramePrompt,
+            transition_effect: sh.transition_effect || sh.transitionEffect || 'cut',
+            voice_start_us: audioMeta.voice_start_us,
+            voice_duration_us: audioMeta.voice_duration_us,
+            captions_data: audioMeta.captions_data,
+            words: audioMeta.words,
+            video_effect: videoEffect,
+            image_url: sh.image_url || sh.imageUrl || sh.storyboard_frame_url || sh.storyboardFrameUrl,
+            storyboard_frame_url: sh.storyboard_frame_url || sh.storyboardFrameUrl || sh.image_url || sh.imageUrl,
+            storyboard_end_frame_url: sh.storyboard_end_frame_url || sh.storyboardEndFrameUrl,
+            video_url: sh.video_url || sh.videoUrl,
+            voiceover_url: sh.voiceover_url || sh.voiceoverUrl,
+            bgm_url: sh.bgm_url || sh.bgmUrl,
+            status: sh.status || (sh.video_url || sh.videoUrl ? 'video_ready' : ((sh.storyboard_frame_url || sh.storyboardFrameUrl || sh.image_url) ? 'image_ready' : 'draft')),
           });
         });
       });
@@ -490,52 +611,74 @@ export class ScriptAgent {
       // Flat scenes
       const perSceneShotCounter: Record<number, number> = {};
       rawScenes.forEach((s: any, idx: number) => {
-        const dur = Math.min(Math.max(Number(s.durationSeconds) || 6, 4), 8);
-        const scLoc = s.location || (localLocations[0]?.name || 'Interior Setting');
-        const rawCostumes = Array.isArray(s.characterCostumes) ? s.characterCostumes : [];
-        const rawProps = Array.isArray(s.props) ? s.props : [];
-        const rawDialogue = Array.isArray(s.dialogue)
+        const dur = Math.min(Math.max(Number(s.duration_seconds || s.durationSeconds) || 6, 4), 8);
+        const rawDialogue = (Array.isArray(s.dialogue)
           ? s.dialogue
-          : (s.dialogue?.speaker && s.dialogue?.text ? [s.dialogue] : (s.dialogue?.character && s.dialogue?.line ? [s.dialogue] : []));
+          : (s.dialogue?.speaker && s.dialogue?.text ? [s.dialogue] : (s.dialogue?.character && s.dialogue?.line ? [s.dialogue] : []))).slice(0, 1);
+
+        const scLoc = s.location || s.location_name || (localLocations[0]?.name || 'Interior Setting');
+        const rawCostumes = Array.isArray(s.character_costumes || s.characterCostumes) ? (s.character_costumes || s.characterCostumes) : [];
+        const rawProps = Array.isArray(s.props) ? s.props : [];
         const charNames = Array.from(new Set([
           ...rawCostumes.map((c: any) => c.character),
           ...rawDialogue.map((d: any) => d.character || d.speaker),
-          ...(Array.isArray(s.referenceAssets?.characters) ? s.referenceAssets.characters : []),
+          ...(Array.isArray(s.reference_assets?.characters || s.referenceAssets?.characters) ? (s.reference_assets?.characters || s.referenceAssets?.characters) : []),
         ])).filter(Boolean) as string[];
-        const sceneNum = s.sceneNumber || 1;
+        const sceneNum = s.scene_number || s.sceneNumber || 1;
         if (!perSceneShotCounter[sceneNum]) perSceneShotCounter[sceneNum] = 0;
         perSceneShotCounter[sceneNum]++;
-        const localShotNum = s.shotNumber || perSceneShotCounter[sceneNum];
+        const localShotNum = s.shot_number || s.shotNumber || perSceneShotCounter[sceneNum];
         const charCostumes = this.normalizeCharacterCostumes(rawCostumes, charNames, sceneNum, localCharacters);
         const shotProps = Array.from(new Set([
           ...rawProps,
-          ...(Array.isArray(s.referenceAssets?.props) ? s.referenceAssets.props : []),
+          ...(Array.isArray(s.reference_assets?.props || s.referenceAssets?.props) ? (s.reference_assets?.props || s.referenceAssets?.props) : []),
         ])).filter(Boolean) as string[];
-        const frameDesc = s.frameDescription || s.action || '';
+        const frameDesc = s.frame_description || s.frameDescription || s.action || '';
+
+        const audioMeta = this.buildWordLevelCaptionsForShot(rawDialogue, dur, localCharacters);
+        const endFramePrompt = s.end_frame_prompt || s.endFramePrompt || '';
+        const videoEffect = s.video_effect || s.videoEffect || '';
+
         shots.push({
+          id: s.id || `scene_${nanoid(8)}`,
           index: s.index || globalIdx++,
-          sceneNumber: sceneNum,
-          shotNumber: localShotNum,
+          scene_number: sceneNum,
+          shot_number: localShotNum,
           title: s.title || `Shot ${localShotNum}`,
           heading: s.heading || `INT. SCENE ${sceneNum} - NIGHT`,
           location: scLoc,
-          timeOfDay: s.timeOfDay || 'NIGHT',
-          lightingMood: s.lightingMood || 'Cinematic lighting',
-          sceneContext: s.sceneContext || '',
-          propDetails: s.propDetails || '',
-          frameDescription: frameDesc,
-          cameraMovement: s.cameraMovement || 'Slow push-in',
+          time_of_day: s.time_of_day || s.timeOfDay || 'NIGHT',
+          lighting_mood: s.lighting_mood || s.lightingMood || 'Cinematic lighting',
+          scene_core: s.scene_core || s.sceneCore || '',
+          conflict_escalation: s.conflict_escalation || s.conflictEscalation || '',
+          cliffhanger_hook: s.cliffhanger_hook || s.cliffhangerHook || '',
+          scene_context: s.scene_context || s.sceneContext || '',
+          prop_details: s.prop_details || s.propDetails || '',
+          frame_description: frameDesc,
+          camera_movement: s.camera_movement || s.cameraMovement || 'Slow push-in',
           action: s.action || '',
-          characterCostumes: charCostumes,
+          character_costumes: charCostumes,
           props: shotProps,
           dialogue: rawDialogue,
-          durationSeconds: dur,
-          bgmMood: s.bgmMood || 'Atmospheric suspense',
-          sfxCues: Array.isArray(s.sfxCues) ? s.sfxCues : [],
-          referenceAssets: { characters: charNames, locations: [scLoc], props: shotProps },
-          visualPrompt: s.visualPrompt || this.buildVisualPrompt(frameDesc, scLoc, charNames, charCostumes, shotProps, localLocations, localCharacters, localProps),
-          endFramePrompt: s.endFramePrompt || '',
-          transitionEffect: s.transitionEffect || 'cut',
+          duration_seconds: dur,
+          bgm_mood: s.bgm_mood || s.bgmMood || 'Atmospheric suspense',
+          sfx_cues: Array.isArray(s.sfx_cues || s.sfxCues) ? (s.sfx_cues || s.sfxCues) : [],
+          reference_assets: { characters: charNames, locations: [scLoc], props: shotProps },
+          visual_prompt: s.visual_prompt || s.visualPrompt || this.buildVisualPrompt(frameDesc, scLoc, charNames, charCostumes, shotProps, localLocations, localCharacters, localProps, audioMeta.speechTimingPrompt),
+          end_frame_prompt: endFramePrompt,
+          transition_effect: s.transition_effect || s.transitionEffect || 'cut',
+          voice_start_us: audioMeta.voice_start_us,
+          voice_duration_us: audioMeta.voice_duration_us,
+          captions_data: audioMeta.captions_data,
+          words: audioMeta.words,
+          video_effect: videoEffect,
+          image_url: s.image_url || s.imageUrl || s.storyboard_frame_url || s.storyboardFrameUrl,
+          storyboard_frame_url: s.storyboard_frame_url || s.storyboardFrameUrl || s.image_url || s.imageUrl,
+          storyboard_end_frame_url: s.storyboard_end_frame_url || s.storyboardEndFrameUrl,
+          video_url: s.video_url || s.videoUrl,
+          voiceover_url: s.voiceover_url || s.voiceoverUrl,
+          bgm_url: s.bgm_url || s.bgmUrl,
+          status: s.status || (s.video_url || s.videoUrl ? 'video_ready' : ((s.storyboard_frame_url || s.storyboardFrameUrl || s.image_url) ? 'image_ready' : 'draft')),
         });
       });
     }
@@ -543,48 +686,14 @@ export class ScriptAgent {
     return shots;
   }
 
-  // ── 5. SHOT EXPANSION & SCREENPLAY FORMATTING ────────────────────────────
-
-  public expandShotsToMinimum(shots: ScriptShot[], target: number): ScriptShot[] {
-    if (!shots || shots.length >= target) return shots;
-    const result = [...shots];
-    const cameraAngles = ['Tight close-up', 'Cutaway wide shot', 'Over-the-shoulder reaction', 'Low-angle medium shot', 'Static establishing shot'];
-    let angleIdx = 0;
-    let insertAt = 0;
-    while (result.length < target) {
-      const src = result[insertAt % result.length];
-      const bRoll: ScriptShot = {
-        ...src,
-        index: 0,
-        shotNumber: src.shotNumber + 1,
-        title: `${src.title} — Cutaway`,
-        frameDescription: `${cameraAngles[angleIdx % cameraAngles.length]}: reaction shot after previous action in ${src.location}.`,
-        cameraMovement: cameraAngles[angleIdx % cameraAngles.length],
-        action: `Reaction to: ${src.action}`,
-        dialogue: [],
-        durationSeconds: 5,
-        bgmMood: src.bgmMood,
-        sfxCues: [],
-        visualPrompt: src.visualPrompt,
-        endFramePrompt: src.endFramePrompt,
-        sceneContext: src.sceneContext,
-        propDetails: src.propDetails,
-        transitionEffect: src.transitionEffect || 'cut',
-      };
-      result.splice(insertAt + 1, 0, bRoll);
-      insertAt += 2;
-      angleIdx++;
-    }
-    result.forEach((s, i) => { s.index = i + 1; });
-    return result;
-  }
+  // ── 5. SCREENPLAY FORMATTING ─────────────────────────────────────────────
 
   public assembleMarkdownScreenplay(shots: ScriptShot[], title?: string): string {
     let currentHeading = '';
     let markdownScreenplay = title ? `# ${title.toUpperCase()}\n\n` : '';
     markdownScreenplay += shots.map((s) => {
       let prefix = '';
-      if (s.heading !== currentHeading) {
+      if (s.heading && s.heading !== currentHeading) {
         currentHeading = s.heading;
         prefix = `### ${s.heading.toUpperCase()}\n\n`;
       }
@@ -615,27 +724,24 @@ export class ScriptAgent {
     const langInfo = getLanguageForCountry(country);
 
     const tiers = this.calculateDurationTiers(input.targetDurationSeconds);
-    const { targetDuration, minShots, maxShots, minShotsPerScene, maxShotsPerScene, minScenes, maxScenes, useBatchGeneration } = tiers;
+    const { targetDuration, minShots, maxShots, minScenes, maxScenes } = tiers;
 
     const skillVars = {
       languageInstruction: langInfo.dialogueInstruction,
       targetDuration,
       minShots,
       maxShots,
-      minShotsPerScene,
-      maxShotsPerScene,
       minScenes,
       maxScenes,
     };
 
     Logger.info(
       `[ScriptAgent] Generating screenplay for "${epTitle}" (${epStr}, target ${targetDuration}s, ` +
-      `~${minShots}-${maxShots} shots across ${minScenes}-${maxScenes} scenes, ` +
-      `${useBatchGeneration ? 'BATCH' : 'SINGLE'} mode) in ${langInfo.name}...`
+      `~${minShots}-${maxShots} shots across ${minScenes}-${maxScenes} scenes) in ${langInfo.name}...`
     );
 
     const charactersList = (input.characters || [])
-      .map((c: any) => `- ${c.name} (${c.role || 'protagonist'}): ${c.identity || ''} | Physical: ${c.physicalCharacteristics || c.appearance || 'Authentic'} | Clothing: ${c.clothingAndAccessories || c.costumeStyle || 'Signature styling'}`)
+      .map((c: any) => `- ${c.name} (${c.role || 'protagonist'}, Voice: ${c.voice_id || c.voiceId || (c.gender === 'female' ? 'Kore' : 'Fenrir')}): ${c.identity || ''} | Physical: ${c.physical_characteristics || c.physicalCharacteristics || c.appearance || 'Authentic'} | Clothing: ${c.clothing_and_accessories || c.clothingAndAccessories || c.costume_style || c.costumeStyle || 'Signature styling'}`)
       .join('\n');
 
     const prompt = PromptLoader.render('screenplay/script_scene_writer', {
@@ -665,198 +771,92 @@ export class ScriptAgent {
       goldFingerRule: input.storyCore?.goldFingerRule || 'Hidden family empire and corporate authority',
     });
 
-    const buildSystemInstruction = (retryWarning?: string): string =>
-      renderSkill('screenplay_system', { ...skillVars, retryWarning });
-
-    const buildSceneShotInstruction = (sceneOutline: any, sceneIdx: number, totalScenes: number, assetContext: string): string =>
-      renderSkill('scene_shot_system', {
-        ...skillVars,
-        sceneIndex: sceneIdx + 1,
-        totalScenes,
-        sceneHeading: sceneOutline.heading || `INT. SCENE ${sceneIdx + 1} - NIGHT`,
-        sceneLocation: sceneOutline.location || 'Scene Location',
-        sceneTimeOfDay: sceneOutline.timeOfDay || 'NIGHT',
-        sceneLightingMood: sceneOutline.lightingMood || 'Atmospheric cinematic',
-        sceneBgmMood: sceneOutline.bgmMood || 'Atmospheric suspense',
-        sceneSummary: sceneOutline.summary || sceneOutline.action || '',
-        assetContext,
-      });
+    const buildSystemInstruction = (): string =>
+      renderSkill('screenplay_system', skillVars);
 
     try {
-      let parsed: any = null;
-      let parsedCharacters: CharacterAssetDef[] = [];
-      let parsedLocations: LocationAssetDef[] = [];
-      let parsedProps: PropAssetDef[] = [];
-      let flattenedShots: ScriptShot[] = [];
+      // 1. Generate full screenplay text using Gemini
+      const rawText = await geminiClient.generateText({
+        prompt,
+        systemInstruction: buildSystemInstruction(),
+        jsonMode: true,
+      });
 
-      if (useBatchGeneration) {
-        // PASS 1: Generate scene outlines & asset definitions
-        Logger.info(`[ScriptAgent] BATCH PASS 1: Generating scene outlines for target ${targetDuration}s...`);
-        const outlineSystem = renderSkill('screenplay_outline_system', skillVars);
-        const rawOutline = await geminiClient.generateText({
-          prompt,
-          systemInstruction: outlineSystem,
-          jsonMode: true,
-        });
-
-        parsed = JSON.parse(rawOutline);
-        const assets = this.extractCanonicalAssets(parsed);
-        parsedCharacters = assets.characters;
-        parsedLocations = assets.locations;
-        parsedProps = assets.props;
-
-        const assetContext = [
-          'Characters:\n' + this.formatCharactersContext(parsedCharacters),
-          'Locations:\n' + this.formatLocationsContext(parsedLocations),
-          'Props:\n' + this.formatPropsContext(parsedProps),
-        ].join('\n\n');
-
-        const sceneOutlines: any[] = Array.isArray(parsed.scenes) ? parsed.scenes : [];
-        Logger.info(`[ScriptAgent] BATCH PASS 1 complete: ${sceneOutlines.length} scene outlines generated.`);
-
-        // PASS 2: Generate shots per scene sequentially
-        let globalShotIdx = 1;
-        for (let si = 0; si < sceneOutlines.length; si++) {
-          const sc = sceneOutlines[si];
-          const sceneShotSystem = buildSceneShotInstruction(sc, si, sceneOutlines.length, assetContext);
-          const scenePrompt =
-            `Generate ${minShotsPerScene} to ${maxShotsPerScene} cinematic shots for Scene ${si + 1}/${sceneOutlines.length}: ` +
-            `"${sc.heading || sc.location}". Context: ${sc.summary || sc.action || 'Key drama moment'}.`;
-
-          try {
-            const rawSceneShots = await geminiClient.generateText({
-              prompt: scenePrompt,
-              systemInstruction: sceneShotSystem,
-              jsonMode: true,
-            });
-            const parsedScene = JSON.parse(rawSceneShots);
-            const rawShots = Array.isArray(parsedScene.shots) ? parsedScene.shots : [];
-
-            sc.shots = rawShots;
-            rawShots.forEach((sh: any, shIdx: number) => {
-              const dur = Math.min(Math.max(Number(sh.durationSeconds) || 6, 4), 8);
-              const shotPropsArr = Array.isArray(sh.props) ? sh.props : [];
-              const rawDialogue = Array.isArray(sh.dialogue) ? sh.dialogue : [];
-              const rawCostumes = Array.isArray(sh.characterCostumes) ? sh.characterCostumes : [];
-              const charNames = Array.from(new Set([
-                ...rawCostumes.map((c: any) => c.character),
-                ...rawDialogue.map((d: any) => d.character),
-                ...(Array.isArray(sh.referenceAssets?.characters) ? sh.referenceAssets.characters : []),
-              ])).filter(Boolean) as string[];
-              const charCostumes = this.normalizeCharacterCostumes(rawCostumes, charNames, sc.sceneNumber || si + 1, parsedCharacters);
-              const frameDesc = sh.frameDescription || sh.action || '';
-
-              flattenedShots.push({
-                index: globalShotIdx++,
-                sceneNumber: sc.sceneNumber || si + 1,
-                shotNumber: shIdx + 1,
-                title: sh.title || `Shot ${shIdx + 1}`,
-                heading: sc.heading || `INT. SCENE ${si + 1} - NIGHT`,
-                location: sc.location || 'Scene Location',
-                timeOfDay: sc.timeOfDay || 'NIGHT',
-                lightingMood: sc.lightingMood || 'Atmospheric cinematic',
-                sceneContext: sh.sceneContext || sc.sceneContext || '',
-                propDetails: sh.propDetails || sc.propDetails || '',
-                frameDescription: frameDesc,
-                cameraMovement: sh.cameraMovement || 'Slow push-in',
-                action: sh.action || '',
-                characterCostumes: charCostumes,
-                props: shotPropsArr,
-                dialogue: rawDialogue,
-                durationSeconds: dur,
-                bgmMood: sh.bgmMood || sc.bgmMood || 'Atmospheric suspense',
-                sfxCues: Array.isArray(sh.sfxCues) ? sh.sfxCues : [],
-                referenceAssets: { characters: charNames, locations: [sc.location || ''], props: shotPropsArr },
-                visualPrompt: sh.visualPrompt || frameDesc,
-                endFramePrompt: sh.endFramePrompt || '',
-                transitionEffect: sh.transitionEffect || 'cut',
-              });
-            });
-          } catch (sceneErr: any) {
-            Logger.warn(`[ScriptAgent] Scene ${si + 1} shot generation failed: ${sceneErr.message}`);
-          }
-        }
-        parsed.scenes = sceneOutlines;
-      } else {
-        // SINGLE CALL MODE: short/medium episodes (≤240s)
-        const rawText = await geminiClient.generateText({
-          prompt,
-          systemInstruction: buildSystemInstruction(),
-          jsonMode: true,
-        });
-
-        parsed = JSON.parse(rawText);
-        if (!parsed || !Array.isArray(parsed.scenes) || parsed.scenes.length === 0) {
-          throw new Error('Single-call generation returned no scenes');
-        }
-
-        const assets = this.extractCanonicalAssets(parsed);
-        parsedCharacters = assets.characters;
-        parsedLocations = assets.locations;
-        parsedProps = assets.props;
-
-        flattenedShots = this.flattenAndEnrichShots(parsed.scenes, {
-          characters: parsedCharacters,
-          locations: parsedLocations,
-          props: parsedProps,
-        });
-
-        // Retry if shots below threshold
-        if (flattenedShots.length < minShots) {
-          Logger.warn(`[ScriptAgent] Only ${flattenedShots.length} shots (need ≥ ${minShots}). Retrying with stricter constraint...`);
-          try {
-            const retryWarning =
-              `⚠ CRITICAL RETRY: Previous attempt generated only ${flattenedShots.length} shots — UNACCEPTABLE. ` +
-              `You MUST produce ${minShots} to ${maxShots} shots total. ` +
-              `Give EVERY scene ${minShotsPerScene}-${maxShotsPerScene} shots in its nested "shots" array. Do NOT return flat scenes.`;
-            const rawRetry = await geminiClient.generateText({
-              prompt,
-              systemInstruction: buildSystemInstruction(retryWarning),
-              jsonMode: true,
-            });
-            const parsedRetry = JSON.parse(rawRetry);
-            if (parsedRetry && Array.isArray(parsedRetry.scenes) && parsedRetry.scenes.length > 0) {
-              const retryAssets = this.extractCanonicalAssets(parsedRetry);
-              const retryShots = this.flattenAndEnrichShots(parsedRetry.scenes, retryAssets);
-              if (retryShots.length > flattenedShots.length) {
-                Logger.info(`[ScriptAgent] Retry produced ${retryShots.length} shots — using retry result.`);
-                parsed = parsedRetry;
-                parsedCharacters = retryAssets.characters.length > 0 ? retryAssets.characters : parsedCharacters;
-                parsedLocations = retryAssets.locations.length > 0 ? retryAssets.locations : parsedLocations;
-                parsedProps = retryAssets.props.length > 0 ? retryAssets.props : parsedProps;
-                flattenedShots = retryShots;
-              }
-            }
-          } catch (retryErr: any) {
-            Logger.warn(`[ScriptAgent] Retry failed: ${retryErr.message}`);
-          }
-        }
+      let generatedScreenplay = '';
+      let parsedJson: any = null;
+      try {
+        parsedJson = JSON.parse(rawText);
+        generatedScreenplay = parsedJson.screenplay || '';
+      } catch {
+        generatedScreenplay = rawText;
       }
 
-      // Programmatic expansion fallback
-      if (flattenedShots.length < minShots) {
-        Logger.warn(`[ScriptAgent] Expanding shots programmatically from ${flattenedShots.length} to ${minShots}.`);
-        flattenedShots = this.expandShotsToMinimum(flattenedShots, minShots);
+      if (parsedJson?.scenes && Array.isArray(parsedJson.scenes) && parsedJson.scenes.length > 0) {
+        const rawChars = Array.isArray(parsedJson.characters) && parsedJson.characters.length > 0
+          ? parsedJson.characters
+          : (input.characters || []);
+        const rawLocs = Array.isArray(parsedJson.locations) && parsedJson.locations.length > 0
+          ? parsedJson.locations
+          : (input.locations || []);
+        const rawProps = Array.isArray(parsedJson.props) && parsedJson.props.length > 0
+          ? parsedJson.props
+          : (input.props || []);
+
+        const characters = this.normalizeCharacters(rawChars, input.characters || []);
+        const locations = this.normalizeLocations(rawLocs, input.locations || []);
+        const props = this.normalizeProps(rawProps, input.props || []);
+
+        const shots = this.flattenAndEnrichShots(parsedJson.scenes, {
+          characters,
+          locations,
+          props,
+        });
+
+        const screenplay = parsedJson.screenplay || this.assembleMarkdownScreenplay(shots, epTitle);
+        const totalDuration = shots.reduce((sum: number, s: any) => sum + (s.duration_seconds || s.durationSeconds || 6), 0);
+
+        return {
+          episode: epStr,
+          episode_number: epNum,
+          title: parsedJson?.title || epTitle,
+          synopsis: parsedJson?.synopsis || input.synopsis || '',
+          screenplay,
+          scene_core: parsedJson?.scene_core || parsedJson?.sceneCore || input.sceneCore,
+          conflict_escalation: parsedJson?.conflict_escalation || parsedJson?.conflictEscalation || input.conflictEscalation,
+          cliffhanger_hook: parsedJson?.cliffhanger_hook || parsedJson?.cliffhangerHook || input.cliffhangerHook,
+          total_duration_seconds: totalDuration,
+          scenes: shots,
+          characters,
+          locations,
+          props,
+        };
       }
 
-      Logger.info(`[ScriptAgent] Final shot count: ${flattenedShots.length} (target ${minShots}-${maxShots})`);
-      const totalDuration = flattenedShots.reduce((sum: number, s) => sum + s.durationSeconds, 0);
-      const markdownScreenplay = this.assembleMarkdownScreenplay(flattenedShots, parsed.title || epTitle);
+      // 2. Delegate raw screenplay text to analyzeAndBreakdownScreenplay if scenes were not provided
+      const breakdown = await this.analyzeAndBreakdownScreenplay({
+        screenplay: generatedScreenplay,
+        country,
+        language: langInfo.code,
+        targetDurationSeconds: targetDuration,
+        existingCharacters: input.characters || [],
+        existingLocations: input.locations || [],
+        existingProps: input.props || [],
+      });
 
       return {
-        episode: parsed.episode || epStr,
-        episodeNumber: parsed.episodeNumber || epNum,
-        title: parsed.title || epTitle,
-        synopsis: parsed.synopsis || input.synopsis || '',
-        screenplay: parsed.screenplay || markdownScreenplay,
-        sceneCore: parsed.sceneCore || input.sceneCore,
-        conflictEscalation: parsed.conflictEscalation || input.conflictEscalation,
-        cliffhangerHook: parsed.cliffhangerHook || input.cliffhangerHook,
-        totalDurationSeconds: totalDuration,
-        scenes: flattenedShots,
-        characters: parsedCharacters,
-        locations: parsedLocations,
-        props: parsedProps,
+        episode: epStr,
+        episode_number: epNum,
+        title: parsedJson?.title || epTitle,
+        synopsis: parsedJson?.synopsis || input.synopsis || '',
+        screenplay: breakdown.screenplay,
+        scene_core: parsedJson?.scene_core || parsedJson?.sceneCore || input.sceneCore,
+        conflict_escalation: parsedJson?.conflict_escalation || parsedJson?.conflictEscalation || input.conflictEscalation,
+        cliffhanger_hook: parsedJson?.cliffhanger_hook || parsedJson?.cliffhangerHook || input.cliffhangerHook,
+        total_duration_seconds: breakdown.total_duration_seconds,
+        scenes: breakdown.scenes,
+        characters: breakdown.characters,
+        locations: breakdown.locations,
+        props: breakdown.props,
       };
     } catch (e: any) {
       Logger.warn(`[ScriptAgent] AI Screenplay generation failed (${e.message})`);
@@ -876,7 +876,7 @@ export class ScriptAgent {
       screenplay,
       languageInstruction: langInfo.dialogueInstruction,
     });
-    const skill = loadSkill('screenplay_asset_extraction');
+    const skill = loadSkill('asset_extractor');
 
     try {
       const response = await aiProviderRouter.generateJSON<{
@@ -900,9 +900,9 @@ export class ScriptAgent {
     screenplay: string,
     characterNames: string[],
     countryOrLanguage?: string
-  ): Promise<Record<string, { physicalCharacteristics: string; clothingAndAccessories: string; backstory: string; wardrobeVariants?: any[] }>> {
+  ): Promise<Record<string, { physical_characteristics: string; clothing_and_accessories: string; backstory: string; wardrobe_variants?: any[] }>> {
     const langInfo = getLanguageForCountry(countryOrLanguage);
-    const result: Record<string, { physicalCharacteristics: string; clothingAndAccessories: string; backstory: string; wardrobeVariants?: any[] }> = {};
+    const result: Record<string, { physical_characteristics: string; clothing_and_accessories: string; backstory: string; wardrobe_variants?: any[] }> = {};
 
     await Promise.all(
       characterNames.map(async (name) => {
@@ -911,38 +911,43 @@ export class ScriptAgent {
           screenplay,
           languageInstruction: langInfo.dialogueInstruction,
         });
-        const skill = loadSkill('screenplay_character_description');
+        const skill = loadSkill('character_writer');
 
         try {
           const res = await aiProviderRouter.generateJSON<{
+            physical_characteristics?: string;
             physicalCharacteristics?: string;
+            clothing_and_accessories?: string;
             clothingAndAccessories?: string;
             backstory?: string;
+            wardrobe_variants?: any[];
             wardrobeVariants?: any[];
           }>(
             prompt,
-            { physicalCharacteristics: '', clothingAndAccessories: '', backstory: '', wardrobeVariants: [] },
+            { physical_characteristics: '', clothing_and_accessories: '', backstory: '', wardrobe_variants: [] },
             skill ? { systemInstruction: `${skill}\n${langInfo.dialogueInstruction}` } : { systemInstruction: langInfo.dialogueInstruction }
           );
 
-          const rawVariants = Array.isArray(res?.wardrobeVariants) ? res.wardrobeVariants : [];
+          const rawVariants: any[] = Array.isArray(res?.wardrobe_variants)
+            ? res.wardrobe_variants
+            : (Array.isArray(res?.wardrobeVariants) ? res.wardrobeVariants : []);
           const slug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_');
           const cleanVariants = rawVariants.map((v: any, vi: number) => ({
-            variantId: v.variantId || `${slug}_variant_${vi + 1}`,
+            variant_id: v.variant_id || v.variantId || `${slug}_variant_${vi + 1}`,
             name: v.name || `Outfit ${vi + 1}`,
-            clothingAndAccessories: v.clothingAndAccessories || res?.clothingAndAccessories || '',
-            associatedScenes: Array.isArray(v.associatedScenes) ? v.associatedScenes : [],
+            clothing_and_accessories: v.clothing_and_accessories || v.clothingAndAccessories || res?.clothing_and_accessories || res?.clothingAndAccessories || '',
+            associated_scenes: Array.isArray(v.associated_scenes || v.associatedScenes) ? (v.associated_scenes || v.associatedScenes) : [],
           }));
 
           result[name] = {
-            physicalCharacteristics: res?.physicalCharacteristics || '',
-            clothingAndAccessories: res?.clothingAndAccessories || '',
+            physical_characteristics: res?.physical_characteristics || res?.physicalCharacteristics || '',
+            clothing_and_accessories: res?.clothing_and_accessories || res?.clothingAndAccessories || '',
             backstory: res?.backstory || '',
-            wardrobeVariants: cleanVariants,
+            wardrobe_variants: cleanVariants,
           };
         } catch (err: any) {
           Logger.error(`[ScriptAgent.describeCharacters] Failed for ${name}: ${err.message}`);
-          result[name] = { physicalCharacteristics: '', clothingAndAccessories: '', backstory: '', wardrobeVariants: [] };
+          result[name] = { physical_characteristics: '', clothing_and_accessories: '', backstory: '', wardrobe_variants: [] };
         }
       })
     );
@@ -954,9 +959,9 @@ export class ScriptAgent {
     screenplay: string,
     locationNames: string[],
     countryOrLanguage?: string
-  ): Promise<Record<string, { physicalCharacteristics: string; timeOfDay: string }>> {
+  ): Promise<Record<string, { physical_characteristics: string; time_of_day: string }>> {
     const langInfo = getLanguageForCountry(countryOrLanguage);
-    const result: Record<string, { physicalCharacteristics: string; timeOfDay: string }> = {};
+    const result: Record<string, { physical_characteristics: string; time_of_day: string }> = {};
 
     await Promise.all(
       locationNames.map(async (name) => {
@@ -965,25 +970,27 @@ export class ScriptAgent {
           screenplay,
           languageInstruction: langInfo.dialogueInstruction,
         });
-        const skill = loadSkill('screenplay_location_description');
+        const skill = loadSkill('location_writer');
 
         try {
           const res = await aiProviderRouter.generateJSON<{
+            physical_characteristics?: string;
             physicalCharacteristics?: string;
+            time_of_day?: string;
             timeOfDay?: string;
           }>(
             prompt,
-            { physicalCharacteristics: '', timeOfDay: 'DAY' },
+            { physical_characteristics: '', time_of_day: 'DAY' },
             skill ? { systemInstruction: `${skill}\n${langInfo.dialogueInstruction}` } : { systemInstruction: langInfo.dialogueInstruction }
           );
 
           result[name] = {
-            physicalCharacteristics: res?.physicalCharacteristics || '',
-            timeOfDay: res?.timeOfDay || 'DAY',
+            physical_characteristics: res?.physical_characteristics || res?.physicalCharacteristics || '',
+            time_of_day: res?.time_of_day || res?.timeOfDay || 'DAY',
           };
         } catch (err: any) {
           Logger.error(`[ScriptAgent.describeLocations] Failed for ${name}: ${err.message}`);
-          result[name] = { physicalCharacteristics: '', timeOfDay: 'DAY' };
+          result[name] = { physical_characteristics: '', time_of_day: 'DAY' };
         }
       })
     );
@@ -995,9 +1002,9 @@ export class ScriptAgent {
     screenplay: string,
     propNames: string[],
     countryOrLanguage?: string
-  ): Promise<Record<string, { physicalCharacteristics: string }>> {
+  ): Promise<Record<string, { physical_characteristics: string }>> {
     const langInfo = getLanguageForCountry(countryOrLanguage);
-    const result: Record<string, { physicalCharacteristics: string }> = {};
+    const result: Record<string, { physical_characteristics: string }> = {};
 
     await Promise.all(
       propNames.map(async (name) => {
@@ -1006,21 +1013,21 @@ export class ScriptAgent {
           screenplay,
           languageInstruction: langInfo.dialogueInstruction,
         });
-        const skill = loadSkill('screenplay_prop_description');
+        const skill = loadSkill('prop_writer');
 
         try {
-          const res = await aiProviderRouter.generateJSON<{ physicalCharacteristics?: string }>(
+          const res = await aiProviderRouter.generateJSON<{ physical_characteristics?: string; physicalCharacteristics?: string }>(
             prompt,
-            { physicalCharacteristics: '' },
+            { physical_characteristics: '' },
             skill ? { systemInstruction: `${skill}\n${langInfo.dialogueInstruction}` } : { systemInstruction: langInfo.dialogueInstruction }
           );
 
           result[name] = {
-            physicalCharacteristics: res?.physicalCharacteristics || '',
+            physical_characteristics: res?.physical_characteristics || res?.physicalCharacteristics || '',
           };
         } catch (err: any) {
           Logger.error(`[ScriptAgent.describeProps] Failed for ${name}: ${err.message}`);
-          result[name] = { physicalCharacteristics: '' };
+          result[name] = { physical_characteristics: '' };
         }
       })
     );
@@ -1055,16 +1062,16 @@ export class ScriptAgent {
       );
 
       const frames = response?.frames || [];
-      return frames.map((f: any, idx: number) => ({
+      return frames.map((f: any, idx: number): ShotFrame => ({
         id: `shot_${nanoid(8)}`,
         index: idx + 1,
         title: f.title || `Shot ${idx + 1}`,
-        frameVisual: f.frameVisual || '',
-        frameAudio: f.frameAudio || '',
-        frameMotion: f.frameMotion || '',
+        frame_visual: f.frame_visual || f.frameVisual || '',
+        frame_audio: f.frame_audio || f.frameAudio || '',
+        frame_motion: f.frame_motion || f.frameMotion || '',
         dialogue: f.dialogue?.speaker && f.dialogue?.text ? f.dialogue : undefined,
-        durationSeconds: Math.min(Math.max(Number(f.durationSeconds) || 5, 3), 8),
-        linkedAssetIds: Array.isArray(f.linkedAssetIds) ? f.linkedAssetIds : [],
+        duration_seconds: Math.min(Math.max(Number(f.duration_seconds || f.durationSeconds) || 5, 3), 8),
+        linked_asset_ids: Array.isArray(f.linked_asset_ids || f.linkedAssetIds) ? (f.linked_asset_ids || f.linkedAssetIds) : [],
         status: 'draft',
       }));
     } catch (err: any) {
@@ -1089,7 +1096,7 @@ export class ScriptAgent {
     locations: LocationAssetDef[];
     props: PropAssetDef[];
     scenes: ScriptShot[];
-    totalDurationSeconds: number;
+    total_duration_seconds: number;
   }> {
     const {
       screenplay,
@@ -1166,42 +1173,48 @@ export class ScriptAgent {
         props,
       });
 
-      if (parsedShots.length < minShots) {
-        parsedShots = this.expandShotsToMinimum(parsedShots, minShots);
-      }
+      // LLM Iterative Expansion: If shots are below minShots, feed previous draft back into LLM to enrich and expand scenes authentically
+      let iteration = 0;
+      while (parsedShots.length < minShots && iteration < 2) {
+        iteration++;
+        Logger.warn(`[ScriptAgent.analyzeAndBreakdownScreenplay] Generated ${parsedShots.length} shots (need ≥ ${minShots}). Prompting LLM to enrich and expand existing breakdown (Attempt ${iteration})...`);
+        try {
+          const enrichPrompt = PromptLoader.render('screenplay/breakdown_screenplay_expand', {
+            currentShotsCount: parsedShots.length,
+            targetDuration,
+            minShots,
+            maxShots,
+            previousDraftJson: JSON.stringify(rawScenes, null, 2),
+            screenplay,
+            charactersList: this.formatCharactersContext(characters) || 'None specified',
+            locationsList: this.formatLocationsContext(locations) || 'None specified',
+            propsList: this.formatPropsContext(props) || 'None specified',
+            languageInstruction: langInfo.dialogueInstruction,
+          });
 
-      // Balance shot durations to accurately hit targetDuration
-      let currentTotal = parsedShots.reduce((sum: number, s: any) => sum + (s.durationSeconds || 6), 0);
-      if (currentTotal < targetDuration && parsedShots.length > 0) {
-        let deficit = targetDuration - currentTotal;
-        for (let i = 0; i < parsedShots.length && deficit > 0; i++) {
-          const s = parsedShots[i];
-          const canAdd = Math.min(8 - (s.durationSeconds || 6), deficit);
-          if (canAdd > 0) {
-            s.durationSeconds = (s.durationSeconds || 6) + canAdd;
-            deficit -= canAdd;
+          const rawRetry = await aiProviderRouter.generateJSON<{ scenes: any[] }>(
+            enrichPrompt,
+            { scenes: [] },
+            breakdownSkill
+              ? { systemInstruction: `${breakdownSkill}\n${langInfo.dialogueInstruction}\nCRITICAL: Must generate ${minShots}-${maxShots} shots.` }
+              : { systemInstruction: `${langInfo.dialogueInstruction}\nCRITICAL: Must generate ${minShots}-${maxShots} shots.` }
+          );
+          if (rawRetry && Array.isArray(rawRetry.scenes) && rawRetry.scenes.length > 0) {
+            const retryShots = this.flattenAndEnrichShots(rawRetry.scenes, { characters, locations, props });
+            if (retryShots.length > parsedShots.length) {
+              Logger.info(`[ScriptAgent.analyzeAndBreakdownScreenplay] LLM expansion produced ${retryShots.length} shots (was ${parsedShots.length}).`);
+              parsedShots = retryShots;
+            }
           }
-        }
-        if (deficit > 3) {
-          const extraNeeded = Math.ceil(deficit / 6);
-          parsedShots = this.expandShotsToMinimum(parsedShots, parsedShots.length + extraNeeded);
-        }
-      } else if (currentTotal > targetDuration + 8 && parsedShots.length > 0) {
-        let excess = currentTotal - targetDuration;
-        for (let i = parsedShots.length - 1; i >= 0 && excess > 0; i--) {
-          const s = parsedShots[i];
-          const canSub = Math.min((s.durationSeconds || 6) - 5, excess);
-          if (canSub > 0) {
-            s.durationSeconds = (s.durationSeconds || 6) - canSub;
-            excess -= canSub;
-          }
+        } catch (retryErr: any) {
+          Logger.warn(`[ScriptAgent.analyzeAndBreakdownScreenplay] Retry ${iteration} failed: ${retryErr.message}`);
         }
       }
     } catch (e: any) {
       Logger.error(`[ScriptAgent.analyzeAndBreakdownScreenplay] Breakdown error: ${e.message}`);
     }
 
-    const totalDuration = parsedShots.reduce((sum: number, s: any) => sum + (s.durationSeconds || 6), 0);
+    const totalDuration = parsedShots.reduce((sum: number, s: any) => sum + (s.duration_seconds || s.durationSeconds || 6), 0);
 
     return {
       screenplay,
@@ -1209,7 +1222,7 @@ export class ScriptAgent {
       locations,
       props,
       scenes: parsedShots,
-      totalDurationSeconds: totalDuration,
+      total_duration_seconds: totalDuration,
     };
   }
 }

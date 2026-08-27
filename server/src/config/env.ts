@@ -168,6 +168,9 @@ export const EnvConfig = {
   get geminiTemperature() {
     return Number(process.env.GEMINI_TEMPERATURE) || 0.7;
   },
+  get geminiCooldownMs() {
+    return Number(process.env.GEMINI_COOLDOWN_MS) || 1000;
+  },
   get geminiMaxTokens() {
     return Number(process.env.GEMINI_MAX_TOKENS) || 8192;
   },

@@ -18,8 +18,11 @@ export class CreditService {
     activityName: string,
     details: string
   ): Promise<{ success: boolean; balance: number; error?: string }> {
+    if (!userId) {
+      throw new Error('userId is required for credit transactions');
+    }
     const db = await getDatabaseProvider();
-    const effectiveUserId = userId || 'usr_default';
+    const effectiveUserId = userId;
 
     // Fetch dynamic rates configured by Admin
     let amount = 10;

@@ -199,24 +199,31 @@ export class StorageFactory {
 
   /**
    * Resolves internal /api/assets/file/* format or raw storage key to a public S3 / Cloud Storage URL.
+   * Guarantees absolute URL so headless renderers (like Playwright) can fetch the asset directly.
    */
   public static async resolvePublicUrl(urlOrKey: string): Promise<string> {
     if (!urlOrKey || typeof urlOrKey !== 'string') return urlOrKey;
     const adapter = await this.getActiveAdapter();
+    const port = process.env.PORT || 3001;
+    const localOrigin = `http://127.0.0.1:${port}`;
 
-    // Check if URL matches /api/assets/file/{storageKey}
-    const match = urlOrKey.match(/(?:\/api\/assets\/file\/)(.+)$/);
+    let resolved = urlOrKey;
+
+    // Check if URL matches /api/assets/file/{storageKey} or /api/media/{storageKey}
+    const match = urlOrKey.match(/(?:\/api\/(?:assets\/file|media)\/)(.+)$/);
     if (match && match[1]) {
       const storageKey = decodeURIComponent(match[1]);
-      return await adapter.getFileUrl(storageKey);
+      resolved = await adapter.getFileUrl(storageKey);
+    } else if (!urlOrKey.startsWith('http://') && !urlOrKey.startsWith('https://') && !urlOrKey.startsWith('data:') && !urlOrKey.startsWith('blob:')) {
+      resolved = await adapter.getFileUrl(urlOrKey);
     }
 
-    // If it's a raw storage key path like 'assets/...' or 'renders/...'
-    if (!urlOrKey.startsWith('http://') && !urlOrKey.startsWith('https://') && !urlOrKey.startsWith('data:') && !urlOrKey.startsWith('blob:')) {
-      return await adapter.getFileUrl(urlOrKey);
+    // If still relative e.g. /api/media/... or /api/assets/..., prefix with local server origin
+    if (resolved.startsWith('/')) {
+      resolved = `${localOrigin}${resolved}`;
     }
 
-    return urlOrKey;
+    return resolved;
   }
 
   public static async reset(): Promise<void> {

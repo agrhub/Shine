@@ -155,18 +155,18 @@ Inspect every completed episode against these 3 dimensions:
 - **Frame Description Template**:
   `"A character sheet with a head and shoulders shot showing the characters face on the left and a full body shot of the character on the right wearing the same clothing and accessories against a seamless white background. Bright, even lighting clearly shows the individual's features with minimal shadow. Their expression is neutral and forward-facing, creating an objective 'asset' shot for casting. No lines or text/words in the image."`
 - **Fields**:
-  - `physicalCharacteristics`: Permanent facial and anatomical identity (face shape, skin tone, eye color, nose, lips, hair texture, wrinkles/scars, body build).
-  - `clothingAndAccessories`: Specific clothing, footwear, jewelry, and accessories worn by the character for this scene/episode.
-  - `wardrobeVariants`: If a character changes outfits across different scenes (e.g. night sleepwear vs. day business suit), define separate wardrobe variations linked to their respective scene numbers.
+  - `physical_characteristics`: Permanent facial and anatomical identity (face shape, skin tone, eye color, nose, lips, hair texture, wrinkles/scars, body build).
+  - `clothing_and_accessories`: Specific clothing, footwear, jewelry, and accessories worn by the character for this scene/episode.
+  - `wardrobe_variants`: If a character changes outfits across different scenes (e.g. night sleepwear vs. day business suit), define separate wardrobe variations linked to their respective scene numbers.
 
 ### 2. Location Asset Sheet Standard
 - **Format**: A 4-view 16:9 composite grid of the same location with perfect atmospheric continuity, without people or animals.
 - **Frame Description Template**:
   `"Make a single image with 4 different 16:9 views of this same location with perfect continuity. One image should be a wide establishing shot of the environment, well-lit for the atmosphere of the film. There are no other people, animals, or characters in the image. No lines or text/words in the image. The other three shots of the location should be from different angles and perspectives, showing different parts of the environment."`
 - **Fields**:
-  - `name`: Location name (e.g. "Rural Mekong Delta", "Sảnh tiệc Trần Gia").
-  - `timeOfDay`: e.g. "Day, approximately 1940", "Night", "Golden Hour".
-  - `physicalCharacteristics`: Deep spatial, architectural, lighting, and environmental description.
+  - `name`: Location name (e.g. "Rural Estate Manor", "Grand Ballroom").
+  - `time_of_aay`: e.g. "Day, approximately 1940", "Night", "Golden Hour".
+  - `physical_characteristics`: Deep spatial, architectural, lighting, and environmental description.
 
 ### 3. Prop Asset Sheet Standard
 - **Format**: A single ecommerce product hero shot on an isolated white background with no humans or distractions.
@@ -177,12 +177,12 @@ Inspect every completed episode against these 3 dimensions:
   - Explicitly differentiate items belonging to different characters.
 
 ### 4. Frame / Shot Prompt Construction Rule
-Every shot's `visualPrompt` MUST follow the exact Google Storyboard Studio format:
+Every shot's `visual_prompt` MUST follow the exact Google Storyboard Studio format:
 ```
 FrameDescription: [Concrete camera angle, framing size, character positioning, action, and expression]
-Locations: [Location Name]: [Exact physicalCharacteristics from Location Asset]
-Characters: [Character Name]: [Exact physicalCharacteristics + Exact clothingAndAccessories for this scene]
-Props: [Prop Name]: [Exact physicalCharacteristics from Prop Asset]
+Locations: [Location Name]: [Exact physical_characteristics from Location Asset]
+Characters: [Character Name]: [Exact physical_characteristics + Exact clothing_and_accessories for this scene]
+Props: [Prop Name]: [Exact physical_characteristics from Prop Asset]
 ```
 
 ---
@@ -194,176 +194,180 @@ Respond strictly in valid JSON format matching this exact schema:
 ```json
 {
   "episode": "EP 01",
-  "episodeNumber": 1,
+  "episode_number": 1,
   "title": "EP 01: The Betrayal Unveiled",
   "synopsis": "Concise summary of the episode conflict, key turning points, and cliffhanger.",
-  "screenplay": "# EP 01: THE BETRAYAL UNVEILED\n\n### INT. SẢNH TIỆC TRẦN GIA - ĐÊM\n\nLinh Đan đứng thẳng người, ánh mắt sắc lẹm đối diện với Trần Minh đang ung dung nâng ly rượu vang.\n\n**TRẦN MINH**\n_(mỉa mai)_\nCô nghĩ mình vẫn còn là tiểu thư sao?\n\n**LINH ĐAN**\n_(lạnh lùng)_\nTrò chơi mới chỉ bắt đầu thôi.\n\n### INT. PHÒNG NGỦ LINH ĐAN - ĐÊM (TIẾP TỤC)\n\nLinh Đan trong bộ đồ lụa ngủ ngồi trước ba màn hình máy tính phát sáng xanh.\n\n##### FADE TO BLACK:",
-  "sceneCore": "Core dramatic conflict and emotional shift.",
-  "conflictEscalation": "Specific conflict escalation dynamic.",
-  "cliffhangerHook": "End-of-episode cliffhanger hook.",
-  "totalDurationSeconds": 90,
+  "screenplay": "# EP 01: THE BETRAYAL UNVEILED\n\n### INT. GRAND BALLROOM - NIGHT\n\nLinh Dan stands resolute, meeting Tran Minh's arrogant gaze as he raises his wine glass.\n\n**TRAN MINH**\n_(smirking)_\nYou really think you belong here anymore?\n\n**LINH DAN**\n_(coldly)_\nThe game has only just begun.\n\n### INT. LINH DAN'S PRIVATE STUDY - NIGHT (CONTINUOUS)\n\nLinh Dan sits before three glowing monitors illuminating the dark room in cold cyan light.\n\n##### FADE TO BLACK:",
+  "scene_core": "Core dramatic conflict and emotional shift.",
+  "conflict_escalation": "Specific conflict escalation dynamic.",
+  "cliffhanger_hook": "End-of-episode cliffhanger hook.",
+  "total_duration_seconds": 90,
   "locations": [
     {
       "id": "loc_1",
-      "name": "Sảnh tiệc Trần Gia",
-      "timeOfDay": "Night",
-      "frameDescription": "Make a single image with 4 different 16:9 views of this same location with perfect continuity. One image should be a wide establishing shot of the environment, well-lit for the atmosphere of the film. There are no other people, animals, or characters in the image. No lines or text/words in the image. The other three shots of the location should be from different angles and perspectives, showing different parts of the environment.",
-      "physicalCharacteristics": "A grand, lavish gala ballroom with crystal chandeliers, marble pillars, satin-draped banquet tables, and dramatic warm golden lighting casting sharp shadows."
+      "name": "Grand Ballroom",
+      "time_of_day": "Night",
+      "frame_description": "Make a single image with 4 different 16:9 views of this same location with perfect continuity. One image should be a wide establishing shot of the environment, well-lit for the atmosphere of the film. There are no other people, animals, or characters in the image. No lines or text/words in the image. The other three shots of the location should be from different angles and perspectives, showing different parts of the environment.",
+      "physical_characteristics": "A grand, lavish gala ballroom with crystal chandeliers, marble pillars, satin-draped banquet tables, and dramatic warm golden lighting casting sharp shadows."
     },
     {
       "id": "loc_2",
-      "name": "Phòng riêng của Linh Đan",
-      "timeOfDay": "Night",
-      "frameDescription": "Make a single image with 4 different 16:9 views of this same location with perfect continuity. One image should be a wide establishing shot of the environment, well-lit for the atmosphere of the film. There are no other people, animals, or characters in the image. No lines or text/words in the image. The other three shots of the location should be from different angles and perspectives, showing different parts of the environment.",
-      "physicalCharacteristics": "A minimalist private room with dark hardwood floors, three glowing ultra-wide computer monitors, organized electronic equipment, and cool blue ambient backlighting."
+      "name": "Linh Dan Private Study",
+      "time_of_day": "Night",
+      "frame_description": "Make a single image with 4 different 16:9 views of this same location with perfect continuity. One image should be a wide establishing shot of the environment, well-lit for the atmosphere of the film. There are no other people, animals, or characters in the image. No lines or text/words in the image. The other three shots of the location should be from different angles and perspectives, showing different parts of the environment.",
+      "physical_characteristics": "A minimalist private room with dark hardwood floors, three glowing ultra-wide computer monitors, organized electronic equipment, and cool blue ambient backlighting."
     }
   ],
   "props": [
     {
       "id": "prop_1",
-      "name": "Điện thoại của Linh Đan",
-      "owner": "Linh Đan",
-      "frameDescription": "A product image of just the item described against a white background. This should look like an ecommerce product shot for this used item. There are no other people, animals, or characters in the image. No lines or text/words in the image.",
-      "physicalCharacteristics": "A scratched dark titanium smartphone with a matte black protective case, privacy screen protector, and custom encryption hardware attached to the charging port."
+      "name": "Encrypted Smartphone",
+      "owner": "Linh Dan",
+      "frame_description": "A product image of just the item described against a white background. This should look like an ecommerce product shot for this used item. There are no other people, animals, or characters in the image. No lines or text/words in the image.",
+      "physical_characteristics": "A scratched dark titanium smartphone with a matte black protective case, privacy screen protector, and custom encryption hardware attached to the charging port."
     },
     {
       "id": "prop_2",
-      "name": "Ly rượu vang của Trần Minh",
-      "owner": "Trần Minh",
-      "frameDescription": "A product image of just the item described against a white background. This should look like an ecommerce product shot for this used item. There are no other people, animals, or characters in the image. No lines or text/words in the image.",
-      "physicalCharacteristics": "A high-end lead crystal wine glass with a slender stem, filled with deep ruby-red Bordeaux wine catching the light."
+      "name": "Crystal Wine Glass",
+      "owner": "Tran Minh",
+      "frame_description": "A product image of just the item described against a white background. This should look like an ecommerce product shot for this used item. There are no other people, animals, or characters in the image. No lines or text/words in the image.",
+      "physical_characteristics": "A high-end lead crystal wine glass with a slender stem, filled with deep ruby-red Bordeaux wine catching the light."
     }
   ],
   "characters": [
     {
       "id": "char_1",
-      "name": "Linh Đan",
+      "name": "Linh Dan",
       "role": "protagonist",
-      "frameDescription": "A character sheet with a head and shoulders shot showing the characters face on the left and a full body shot of the character on the right wearing the same clothing and accessories against a seamless white background. Bright, even lighting clearly shows the individual's features with minimal shadow. Their expression is neutral and forward-facing, creating an objective 'asset' shot for casting. No lines or text/words in the image.",
-      "physicalCharacteristics": "A Vietnamese woman in her mid-20s with a slender build, almond-shaped dark eyes, a sharp jawline, and natural porcelain skin with subtle micro-textures. Her black hair is sleek and long.",
-      "clothingAndAccessories": "She wears an oversized tailored black wool blazer over a minimalist silk slip dress, delicate geometric silver drop earrings, and black stiletto heels.",
-      "wardrobeVariants": [
+      "frame_description": "A character sheet with a head and shoulders shot showing the characters face on the left and a full body shot of the character on the right wearing the same clothing and accessories against a seamless white background. Bright, even lighting clearly shows the individual's features with minimal shadow. Their expression is neutral and forward-facing, creating an objective 'asset' shot for casting. No lines or text/words in the image.",
+      "physical_characteristics": "A woman in her mid-20s with a slender build, almond-shaped dark eyes, a sharp jawline, and natural porcelain skin with subtle micro-textures. Her black hair is sleek and long.",
+      "clothing_and_accessories": "She wears an oversized tailored black wool blazer over a minimalist silk slip dress, delicate geometric silver drop earrings, and black stiletto heels.",
+      "wardrobe_variants": [
         {
-          "variantId": "linh_dan_gala",
-          "name": "Dạ tiệc Trần Gia",
-          "clothingAndAccessories": "Blazer đen phom rộng khoác ngoài váy lụa ôm, khuyên tai bạc, tóc búi cao quý phái.",
-          "associatedScenes": [1]
+          "variant_id": "linh_dan_gala",
+          "name": "Gala Reception",
+          "clothing_and_accessories": "Oversized tailored black blazer over silk slip dress, silver earrings, elegant high bun.",
+          "associated_scenes": [1]
         },
         {
-          "variantId": "linh_dan_bedroom",
-          "name": "Đồ ngủ đêm tại nhà",
-          "clothingAndAccessories": "Bộ đồ lụa hai dây xám tro tối giản, tóc buông xõa tự nhiên, mặt mộc.",
-          "associatedScenes": [2]
+          "variant_id": "linh_dan_bedroom",
+          "name": "Night Sleepwear",
+          "clothing_and_accessories": "Minimalist ash-gray two-piece silk camisole set, natural open hair, bare face.",
+          "associated_scenes": [2]
         }
       ],
-      "voiceId": "Kore",
+      "voice_id": "Kore",
       "backstory": "Ousted heiress orchestrating a high-stakes media retaliation from the shadows."
     },
     {
       "id": "char_2",
-      "name": "Trần Minh",
+      "name": "Tran Minh",
       "role": "antagonist",
-      "frameDescription": "A character sheet with a head and shoulders shot showing the characters face on the left and a full body shot of the character on the right wearing the same clothing and accessories against a seamless white background. Bright, even lighting clearly shows the individual's features with minimal shadow. Their expression is neutral and forward-facing, creating an objective 'asset' shot for casting. No lines or text/words in the image.",
-      "physicalCharacteristics": "A Vietnamese man in his early 30s with slicked-back dark hair, sharp arrogant features, cold hooded eyes, and a confident sneer.",
-      "clothingAndAccessories": "Bespoke midnight navy double-breasted tuxedo, Swiss gold chronograph watch, silk pocket square, polished black Oxford leather shoes.",
-      "voiceId": "Orus",
+      "frame_description": "A character sheet with a head and shoulders shot showing the characters face on the left and a full body shot of the character on the right wearing the same clothing and accessories against a seamless white background. Bright, even lighting clearly shows the individual's features with minimal shadow. Their expression is neutral and forward-facing, creating an objective 'asset' shot for casting. No lines or text/words in the image.",
+      "physical_characteristics": "A man in his early 30s with slicked-back dark hair, sharp arrogant features, cold hooded eyes, and a confident sneer.",
+      "clothing_and_accessories": "Bespoke midnight navy double-breasted tuxedo, Swiss gold chronograph watch, silk pocket square, polished black Oxford leather shoes.",
+      "voice_id": "Orus",
       "backstory": "Arrogant heir who seized control of the media empire through blackmail."
     }
   ],
   "scenes": [
     {
-      "sceneNumber": 1,
-      "heading": "INT. SẢNH TIỆC TRẦN GIA - ĐÊM",
-      "location": "Sảnh tiệc Trần Gia",
-      "timeOfDay": "Night",
-      "lightingMood": "Warm golden crystal chandelier glow with cool dramatic rim light",
+      "scene_number": 1,
+      "heading": "INT. GRAND BALLROOM - NIGHT",
+      "location": "Grand Ballroom",
+      "time_of_day": "Night",
+      "lighting_mood": "Warm golden crystal chandelier glow with cool dramatic rim light",
       "shots": [
         {
-          "shotNumber": 1,
+          "shot_number": 1,
           "title": "Face to Face Confrontation",
-          "frameDescription": "A medium close-up shot of Linh Đan standing resolute, looking straight at Trần Minh who smirks in a crowded luxury ballroom.",
-          "cameraMovement": "Slow push-in on Linh Đan's defiant expression",
-          "action": "Linh Đan adjusts her collar, maintaining unbreakable eye contact with Trần Minh.",
-          "characterCostumes": [
-            { "character": "Linh Đan", "wardrobe": "Oversized tailored black blazer over silk slip dress, silver earrings", "variantId": "linh_dan_gala" },
-            { "character": "Trần Minh", "wardrobe": "Midnight navy tuxedo with silk lapel", "variantId": "tran_minh_gala" }
+          "frame_description": "A medium close-up shot of Linh Dan standing resolute, looking straight at Tran Minh who smirks in a crowded luxury ballroom.",
+          "camera_movement": "Slow push-in on Linh Dan's defiant expression",
+          "action": "Linh Dan adjusts her collar, maintaining unbreakable eye contact with Tran Minh.",
+          "character_costumes": [
+            { "character": "Linh Dan", "wardrobe": "Oversized tailored black blazer over silk slip dress, silver earrings", "variant_id": "linh_dan_gala" },
+            { "character": "Tran Minh", "wardrobe": "Midnight navy tuxedo with silk lapel", "variant_id": "tran_minh_gala" }
           ],
-          "props": ["Ly rượu vang của Trần Minh"],
+          "props": ["Crystal Wine Glass"],
           "dialogue": [
             {
-              "character": "Trần Minh",
-              "line": "Cô nghĩ mình vẫn còn tư cách đứng ở đây sao?",
-              "emotion": "mỉa mai",
-              "speechTone": "đắc thắng"
+              "character": "Tran Minh",
+              "line": "You really think you belong here anymore?",
+              "emotion": "arrogant",
+              "speech_tone": "triumphant",
+              "speech_start_sec": 0.5,
+              "speech_end_sec": 3.2
             }
           ],
-          "durationSeconds": 6,
-          "bgmMood": "Tense low-drone heartbeat rhythm",
-          "sfxCues": ["Crowd murmurs fading", "Crystal glass clinking"],
-          "referenceAssets": {
-            "characters": ["Linh Đan", "Trần Minh"],
-            "locations": ["Sảnh tiệc Trần Gia"],
-            "props": ["Ly rượu vang của Trần Minh"]
+          "duration_seconds": 6,
+          "bgm_mood": "Tense low-drone heartbeat rhythm",
+          "sfx_cues": ["Crowd murmurs fading", "Crystal glass clinking"],
+          "reference_assets": {
+            "characters": ["Linh Dan", "Tran Minh"],
+            "locations": ["Grand Ballroom"],
+            "props": ["Crystal Wine Glass"]
           },
-          "visualPrompt": "FrameDescription: A medium close-up shot of Linh Đan standing resolute, looking straight at Trần Minh in a crowded luxury ballroom.\nLocations: Sảnh tiệc Trần Gia: A grand, lavish gala ballroom with crystal chandeliers, marble pillars, satin-draped banquet tables.\nCharacters: Linh Đan: Vietnamese woman in mid-20s, almond dark eyes, sharp jawline, tailored black blazer. Trần Minh: Vietnamese man in 30s, slicked hair, midnight navy tuxedo.\nProps: Ly rượu vang của Trần Minh: Crystal wine glass with deep ruby red wine."
+          "visual_prompt": "FrameDescription: A medium close-up shot of Linh Dan standing resolute, looking straight at Tran Minh in a crowded luxury ballroom.\nLocations: Grand Ballroom: A grand, lavish gala ballroom with crystal chandeliers, marble pillars, satin-draped banquet tables.\nCharacters: Linh Dan: Woman in mid-20s, almond dark eyes, sharp jawline, tailored black blazer. Tran Minh: Man in 30s, slicked hair, midnight navy tuxedo.\nProps: Crystal Wine Glass: Crystal wine glass with deep ruby red wine."
         },
         {
-          "shotNumber": 2,
+          "shot_number": 2,
           "title": "Cold Defiance",
-          "frameDescription": "Close-up on Linh Đan's eyes narrowing, unyielding in the glare of the flashlights.",
-          "cameraMovement": "Tight static close-up",
-          "action": "Linh Đan raises her chin slightly, leaning in to whisper.",
-          "characterCostumes": [
-            { "character": "Linh Đan", "wardrobe": "Oversized tailored black blazer", "variantId": "linh_dan_gala" }
+          "frame_description": "Close-up on Linh Dan's eyes narrowing, unyielding in the glare of the flashlights.",
+          "camera_movement": "Tight static close-up",
+          "action": "Linh Dan raises her chin slightly, leaning in to whisper.",
+          "character_costumes": [
+            { "character": "Linh Dan", "wardrobe": "Oversized tailored black blazer", "variant_id": "linh_dan_gala" }
           ],
           "props": [],
           "dialogue": [
             {
-              "character": "Linh Đan",
-              "line": "Trò chơi mới chỉ bắt đầu thôi, Trần Minh.",
-              "emotion": "lạnh lùng",
-              "speechTone": "thì thầm đe dọa"
+              "character": "Linh Dan",
+              "line": "The game has only just begun, Tran Minh.",
+              "emotion": "cold",
+              "speech_tone": "threatening whisper",
+              "speech_start_sec": 0.5,
+              "speech_end_sec": 3.4
             }
           ],
-          "durationSeconds": 6,
-          "bgmMood": "Deep sub-bass pulse",
-          "sfxCues": ["Camera flash clicks"],
-          "referenceAssets": {
-            "characters": ["Linh Đan"],
-            "locations": ["Sảnh tiệc Trần Gia"],
+          "duration_seconds": 6,
+          "bgm_mood": "Deep sub-bass pulse",
+          "sfx_cues": ["Camera flash clicks"],
+          "reference_assets": {
+            "characters": ["Linh Dan"],
+            "locations": ["Grand Ballroom"],
             "props": []
           },
-          "visualPrompt": "FrameDescription: Close-up on Linh Đan's defiant expression under flashlights.\nLocations: Sảnh tiệc Trần Gia: Grand luxury ballroom background blur.\nCharacters: Linh Đan: Sharp jawline, dark eyes, tailored black blazer."
+          "visual_prompt": "FrameDescription: Close-up on Linh Dan's defiant expression under flashlights.\nLocations: Grand Ballroom: Grand luxury ballroom background blur.\nCharacters: Linh Dan: Sharp jawline, dark eyes, tailored black blazer."
         }
       ]
     },
     {
-      "sceneNumber": 2,
-      "heading": "INT. PHÒNG RIÊNG CỦA LINH ĐAN - ĐÊM",
-      "location": "Phòng riêng của Linh Đan",
-      "timeOfDay": "Night",
-      "lightingMood": "Cool cyan monitor glow against dark room",
+      "scene_number": 2,
+      "heading": "INT. LINH DAN PRIVATE STUDY - NIGHT",
+      "location": "Linh Dan Private Study",
+      "time_of_day": "Night",
+      "lighting_mood": "Cool cyan monitor glow against dark room",
       "shots": [
         {
-          "shotNumber": 1,
+          "shot_number": 1,
           "title": "The Decryption Begins",
-          "frameDescription": "Medium tracking shot of Linh Đan in gray silk sleepwear typing rapidly on a glowing keyboard across three monitors.",
-          "cameraMovement": "Tracking slide left to right",
-          "action": "Linh Đan plugs the encrypted hardware key into her phone.",
-          "characterCostumes": [
-            { "character": "Linh Đan", "wardrobe": "Bộ đồ lụa hai dây xám tro", "variantId": "linh_dan_bedroom" }
+          "frame_description": "Medium tracking shot of Linh Dan in gray silk sleepwear typing rapidly on a glowing keyboard across three monitors.",
+          "camera_movement": "Tracking slide left to right",
+          "action": "Linh Dan plugs the encrypted hardware key into her phone.",
+          "character_costumes": [
+            { "character": "Linh Dan", "wardrobe": "Minimalist ash-gray two-piece silk camisole set", "variant_id": "linh_dan_bedroom" }
           ],
-          "props": ["Điện thoại của Linh Đan"],
+          "props": ["Encrypted Smartphone"],
           "dialogue": [],
-          "durationSeconds": 7,
-          "bgmMood": "High-tech synth suspense rhythm",
-          "sfxCues": ["Rapid keyboard typing", "USB connection chime"],
-          "referenceAssets": {
-            "characters": ["Linh Đan"],
-            "locations": ["Phòng riêng của Linh Đan"],
-            "props": ["Điện thoại của Linh Đan"]
+          "duration_seconds": 7,
+          "bgm_mood": "High-tech synth suspense rhythm",
+          "sfx_cues": ["Rapid keyboard typing", "USB connection chime"],
+          "reference_assets": {
+            "characters": ["Linh Dan"],
+            "locations": ["Linh Dan Private Study"],
+            "props": ["Encrypted Smartphone"]
           },
-          "visualPrompt": "FrameDescription: Medium shot of Linh Đan in gray silk sleepwear typing across three glowing screens.\nLocations: Phòng riêng của Linh Đan: Minimalist dark room with three ultra-wide monitors glowing cyan.\nCharacters: Linh Đan: Hair let down, bare face, minimalist gray silk camisole.\nProps: Điện thoại của Linh Đan: Scratched titanium smartphone with encryption adapter."
+          "visual_prompt": "Medium shot of Linh Dan in gray silk sleepwear typing across three glowing screens.\nLocations: Linh Dan Private Study: Minimalist dark room with three ultra-wide monitors glowing cyan.\nCharacters: Linh Dan: Hair let down, bare face, minimalist gray silk camisole.\nProps: Encrypted Smartphone: Scratched titanium smartphone with encryption adapter."
         }
       ]
     }

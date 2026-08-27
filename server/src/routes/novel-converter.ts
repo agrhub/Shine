@@ -1,32 +1,20 @@
 import { Router, Request, Response } from 'express';
 import { geminiClient } from '../integrations/ai/gemini/GeminiClient.js';
+import { PromptLoader } from '../utils/PromptLoader.js';
 
 export const novelConverterRouter = Router();
 
-// POST /v1/ai/convert-novel — Convert web novel text/PDF into micro-drama series structure
+// POST /api/ai/convert-novel — Convert web novel text/PDF into micro-drama series structure
 novelConverterRouter.post('/convert-novel', async (req: Request, res: Response) => {
   const { novelText, title, episodeCount } = req.body;
   const count = episodeCount || 20;
 
   try {
-    const prompt = `Convert the following web novel excerpt/synopsis into a ${count}-episode vertical micro-drama series structure.
-Novel Title: ${title || 'Untitled Web Novel'}
-Novel Text: ${novelText || 'A betrayed heiress returns in disguise to reclaim her company.'}
-
-Respond in strict JSON:
-{
-  "title": "${title || 'Adapted Drama'}",
-  "genre": "Urban Romance / Revenge",
-  "totalEpisodes": ${count},
-  "episodes": [
-    {
-      "episodeNumber": 1,
-      "title": "Ep 1: The Return",
-      "hook": "Opening 3s hook description",
-      "cliffhanger": "Ending 45s cliffhanger reveal"
-    }
-  ]
-}`;
+    const prompt = PromptLoader.render('skeleton/novel_convert', {
+      count,
+      title: title || 'Untitled Web Novel',
+      novelText: novelText || 'A betrayed heiress returns in disguise to reclaim her company.',
+    });
 
     const raw = await geminiClient.generateText({
       prompt,

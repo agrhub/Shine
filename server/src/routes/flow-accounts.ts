@@ -77,27 +77,38 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     }
 
     const db = await getDatabaseProvider();
+    const accounts = await db.getFlowAccounts();
+    const cleanEmail = email.trim();
+    const existing = accounts.find(a => a.email?.toLowerCase() === cleanEmail.toLowerCase());
+
     const newAccount = await db.upsertFlowAccount({
-      id: `flow_${Date.now()}`,
-      email,
+      id: existing?.id || `flow_${cleanEmail.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
+      email: cleanEmail,
       session_token: token,
       status: 'ACTIVE',
-      credits_remaining: 100,
+      credits_remaining: existing?.credits_remaining || 100,
       last_synced_at: new Date().toISOString(),
     });
 
     // Trigger background sync in non-blocking way
     flowSyncService.refreshAccountTokens({
       email,
-      flowST: token,
+      flow_st: token,
       status: AIAccountStatus.READY,
-      accountType: AIAccountType.GOOGLE_FLOW,
-      isActive: true,
+      account_type: AIAccountType.GOOGLE_FLOW,
+      is_active: true,
     } as any).catch(() => {});
 
-    res.status(201).json({ success: true, account: newAccount });
+    res.status(200).json({
+      code: 200,
+      success: true,
+      data: newAccount,
+      account: newAccount,
+      message: 'Flow Google Account added successfully',
+      error: null,
+    });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ code: 500, error: err.message, message: err.message });
   }
 });
 
@@ -110,7 +121,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
     const token = extractFlowCookieToken(rawToken);
 
     if (!token) {
-      res.status(400).json({ error: 'Valid session token or cookie is required' });
+      res.status(400).json({ code: 400, error: 'Valid session token or cookie is required', message: 'Valid session token or cookie is required' });
       return;
     }
 
@@ -120,7 +131,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
     const targetEmail = email || existing?.email;
 
     if (!targetEmail) {
-      res.status(404).json({ error: 'Account not found' });
+      res.status(404).json({ code: 404, error: 'Account not found', message: 'Account not found' });
       return;
     }
 
@@ -143,9 +154,16 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
       isActive: true,
     } as any).catch(() => {});
 
-    res.json({ success: true, message: 'Flow session token updated and validated successfully', account: updatedAccount });
+    res.json({
+      code: 200,
+      success: true,
+      message: 'Flow session token updated and validated successfully',
+      data: updatedAccount,
+      account: updatedAccount,
+      error: null,
+    });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ code: 500, error: err.message, message: err.message });
   }
 });
 
@@ -155,9 +173,9 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
     const db = await getDatabaseProvider();
     await db.deleteFlowAccount(id);
-    res.json({ success: true, message: 'Account deleted' });
+    res.json({ code: 200, success: true, message: 'Account deleted', data: { id, deleted: true }, error: null });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ code: 500, error: err.message, message: err.message });
   }
 });
 

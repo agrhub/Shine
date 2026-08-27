@@ -12,20 +12,15 @@ This document details the UI/UX enhancement proposals for **Shine** based on the
 Multi-track NLE timeline (VIDEO 1, AUDIO 1, SUBS) with 9:16 vertical preview canvas, media assets panel, and scene inspector.
 
 #### Proposed Enhancements
-- **Omni-Module AI Director Chatbot Drawer (Floating Right Drawer):**
-  - Add a persistent, floating/collapsible right-side drawer available across all workspace surfaces (*"Ask AI Director..."*).
-  - **Multimodal Drag-and-Drop Attachment Bar:** Input field includes attachment icons for uploading Images (`.png`/`.jpg` actor/costume photos), Videos (`.mp4` camera motion samples), and Documents (`.pdf`/`.docx` novel/script manuscripts).
-  - **Real-Time Microphone Voice Button:** Integrated mic button triggering WebSocket `connectLive()` multimodal live audio streaming with waveform visualizer indicator.
+- **Omni-Module AI Director Chatbot Drawer (`src/pages/projects/workspace/Chatbot.vue` & `ChatContentRenderer.vue`):**
+  - Persistent, collapsible right-side drawer available across all workspace tabs (*"Ask AI Director..."*).
   - **Dynamic Context-Aware Prompt Chips:** Surface-tailored smart action chips (Script: `[Suggest Twist]`, Persona: `[Extract Face Anchors]`, Timeline: `[Trim 500ms]`, Captions: `[Translate Spanish]`, Export: `[Viral A/B Endings]`).
   - **Clarification Option Cards:** Renders interactive choice cards when prompts are ambiguous (`[Speed up to 1.5x]`, `[Trim duration 2s]`).
-  - **Visual Action Glow Feedback:** Affected clips flash a temporary 1.5s blue outline glow (`animate-pulse-glow`) on the canvas when commands execute.
+  - **Visual Action Glow Feedback:** Affected clips update reactively on the WebGL canvas when structural OpenVideo commands execute.
 
-- **Real-Time Collaboration Avatar Bar & Command History:**
-  - Display live avatar badges of active co-editors at top-right of timeline header with live pulse indicators (reflecting WebSocket `patch:broadcast` sync).
-  - Add a visual command history breadcrumb (`clip.add` ➔ `clip.update`) with single-click inverse patch undo/redo.
-- **Dual-Render Status & Cost Ceiling Indicator:**
-  - Header mode pill: `Client WebGL Studio (Zero-Render Preview)` vs `Headless Cloud Compositor (4K Batch Export)`.
-  - Vertex AI budget progress meter (e.g. `$1.20 / $3.50 Cap (Proxy Mode Active)`).
+- **Dual-Mode Video Render Status & Modal (`ExportModal.vue`):**
+  - Instant in-browser zero-cost client render via WebCodecs (`mediabunny`).
+  - Serverless Headless Cloud Compositor (`shine-render-worker` on Google Cloud Run in `us-central1`) for high-resolution batch rendering with Pub/Sub queue status streaming.
 
 
 ---

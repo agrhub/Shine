@@ -118,6 +118,7 @@ export interface MasterPlanOutput {
     culturalAtmosphere: string; // Local lifestyle, social classes, architecture and visual aesthetic
   };
   storyCore: StoryCore;
+  synopsis: string;
   hiddenLine: string;
   targetAudience: string;
   viralHook: string;
@@ -140,8 +141,8 @@ export class StorySkeletonAgent {
     const totalEpisodes = input.totalEpisodes || 24;
     const totalDurationSeconds = Math.min(Math.max(Number(input.episodeDurationSeconds), 30), 600);
     const durationDisplay = `${Math.floor(totalDurationSeconds / 60)}m ${totalDurationSeconds % 60 ? `${totalDurationSeconds % 60}s` : ''}`.trim();
-    const country = input.country || 'US';
-    const langInfo = getLanguageForCountry(country);
+    const country = input.country || 'United States';
+    const langInfo = input.language ? getLanguageForCountry(input.language) : getLanguageForCountry(country);
     const skillInstruction = loadSkill('script_skeleton');
 
     if (!skillInstruction) {
@@ -451,7 +452,7 @@ export class StorySkeletonAgent {
       genre: corePlan.genre || 'Drama',
       country: country || corePlan.country || 'US',
       languageName: languageInstruction || corePlan.language || 'English',
-      synopsis: corePlan.storyCore?.coreAttraction || 'Drama series',
+      synopsis: corePlan.synopsis || corePlan.storyCore?.coreAttraction || 'Drama series',
       storyCore: JSON.stringify(corePlan.storyCore || {}),
       hiddenLine: corePlan.hiddenLine || '',
       targetAudience: corePlan.targetAudience || '',

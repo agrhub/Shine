@@ -44,7 +44,7 @@ function maskEmail(email: string): string {
   return `${local[0]}${'*'.repeat(Math.min(4, local.length - 2))}${local[local.length - 1]}@${domain}`;
 }
 
-// POST /v1/auth/signup - Register new user
+// POST /api/auth/signup - Register new user
 router.post('/signup', async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password, name } = req.body;
@@ -103,7 +103,7 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// POST /v1/auth/login - Authenticate user
+// POST /api/auth/login - Authenticate user
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
@@ -122,6 +122,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
           email,
           password_hash: passwordHash,
           name: email.startsWith('admin') ? 'Admin User' : 'Test Creator',
+          role: email.startsWith('admin') ? 'admin' : 'user',
           tier: 'PRO',
           credits: 1000,
           theme: 'dark',
@@ -395,7 +396,7 @@ router.post('/2fa/verify', async (req: Request, res: Response): Promise<void> =>
   }
 });
 
-// POST /v1/auth/refresh - Refresh access token
+// POST /api/auth/refresh - Refresh access token
 router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
   try {
     const { refresh_token } = req.body;
@@ -420,12 +421,12 @@ router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// POST /v1/auth/logout - Invalidate session
+// POST /api/auth/logout - Invalidate session
 router.post('/logout', async (_req: Request, res: Response): Promise<void> => {
   ok(res, null, 'Logged out successfully');
 });
 
-// POST /v1/auth/forgot-password - Send password reset email
+// POST /api/auth/forgot-password - Send password reset email
 router.post('/forgot-password', async (req: Request, res: Response): Promise<void> => {
   const { email } = req.body;
   if (!email) {
@@ -439,7 +440,7 @@ router.post('/forgot-password', async (req: Request, res: Response): Promise<voi
   ok(res, { email }, `Password reset instructions sent to ${email}`);
 });
 
-// POST /v1/auth/reset-password - Apply password reset with token
+// POST /api/auth/reset-password - Apply password reset with token
 router.post('/reset-password', async (_req: Request, res: Response): Promise<void> => {
   // Mock reset successful
   ok(res, null, 'Password reset successfully');
@@ -484,11 +485,11 @@ router.post('/change-password', async (req: Request, res: Response): Promise<voi
   }
 });
 
-// GET /v1/auth/profile - Get active user profile
+// GET /api/auth/profile - Get active user profile
 router.get('/profile', async (req: Request, res: Response): Promise<void> => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    fail(res, 401, 'Unauthorized'); return;
+    return fail(res, 401, 'Unauthorized');
   }
 
   try {
@@ -498,9 +499,10 @@ router.get('/profile', async (req: Request, res: Response): Promise<void> => {
     const user = await db.getUserById(decoded.userId);
 
     if (!user) {
-      fail(res, 404, 'User not found'); return;
+      return fail(res, 404, 'User not found');
     }
 
+    const config = await getActivePlatformConfig();
     ok(res, {
       user: {
         id: user.id,
@@ -512,9 +514,9 @@ router.get('/profile', async (req: Request, res: Response): Promise<void> => {
         api_key_rotated_at: user.api_key_rotated_at || new Date(Date.now() - 12 * 86400000).toISOString(),
         two_factor_enabled: !!user.two_factor_enabled,
         integrations: user.integrations || [
-          { id: 'tiktok', name: 'TikTok API', icon: 'fa-brands fa-tiktok', connected: true },
-          { id: 'instagram', name: 'Meta Reels', icon: 'fa-brands fa-instagram', connected: true },
-          { id: 'youtube', name: 'YouTube Shorts', icon: 'fa-brands fa-youtube', connected: false },
+          { id: 'tiktok', name: 'TikTok API', icon: 'Film', connected: config.integrations?.tiktok?.enabled || false },
+          { id: 'instagram', name: 'Meta Reels', icon: 'Share', connected: config.integrations?.instagram?.enabled || false },
+          { id: 'youtube', name: 'YouTube Shorts', icon: 'VideoPlay', connected: config.integrations?.youtube?.enabled || false },
         ],
         connected_channels: (user as any).connected_channels || [],
         tier: user.tier,
@@ -538,7 +540,7 @@ router.get('/sso-providers', async (_req: Request, res: Response): Promise<void>
       github: config?.sso?.github?.enabled !== false,
     });
   } catch {
-    ok(res, { google: true, facebook: false, github: true });
+    ok(res, { google: false, facebook: false, github: false });
   }
 });
 
@@ -552,7 +554,7 @@ router.get('/enabled-platforms', async (_req: Request, res: Response): Promise<v
       facebook: config?.publishing?.facebook?.enabled !== false,
     });
   } catch {
-    ok(res, { youtube: true, tiktok: true, facebook: true });
+    ok(res, { youtube: false, tiktok: false, facebook: false });
   }
 });
 
@@ -1095,7 +1097,7 @@ router.patch('/profile', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// PATCH /v1/auth/preferences - Persist theme & language preferences to user profile
+// PATCH /api/auth/preferences - Persist theme & language preferences to user profile
 router.patch('/preferences', async (req: Request, res: Response): Promise<void> => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -1157,6 +1159,7 @@ const handleSSOCallback = async (req: Request, res: Response, provider: string) 
         email: profile.email,
         password_hash: passwordHash,
         name: profile.name,
+        role: 'user',
         tier: 'FREE',
         credits: 100,
       });
@@ -1174,7 +1177,7 @@ const handleSSOCallback = async (req: Request, res: Response, provider: string) 
   }
 };
 
-// GET /v1/auth/google
+// GET /api/auth/google
 router.get('/google', (_req: Request, res: Response) => {
   const clientId = EnvConfig.oauth.google.clientId || 'dummy_google_client_id';
   const redirectUri = EnvConfig.oauth.google.redirectUri;
@@ -1184,7 +1187,7 @@ router.get('/google', (_req: Request, res: Response) => {
 
 router.get('/google/callback', (req: Request, res: Response) => handleSSOCallback(req, res, 'google'));
 
-// GET /v1/auth/youtube (Uses Google OAuth with YouTube scopes)
+// GET /api/auth/youtube (Uses Google OAuth with YouTube scopes)
 router.get('/youtube', (_req: Request, res: Response) => {
   const clientId = EnvConfig.oauth.youtube.clientId || 'dummy_youtube_client_id';
   const redirectUri = EnvConfig.oauth.youtube.redirectUri;
@@ -1194,7 +1197,7 @@ router.get('/youtube', (_req: Request, res: Response) => {
 
 router.get('/youtube/callback', (req: Request, res: Response) => handleSSOCallback(req, res, 'youtube'));
 
-// GET /v1/auth/facebook
+// GET /api/auth/facebook
 router.get('/facebook', (_req: Request, res: Response) => {
   const clientId = EnvConfig.oauth.facebook.clientId || 'dummy_facebook_client_id';
   const redirectUri = EnvConfig.oauth.facebook.redirectUri;
@@ -1204,7 +1207,7 @@ router.get('/facebook', (_req: Request, res: Response) => {
 
 router.get('/facebook/callback', (req: Request, res: Response) => handleSSOCallback(req, res, 'facebook'));
 
-// GET /v1/auth/tiktok
+// GET /api/auth/tiktok
 router.get('/tiktok', (_req: Request, res: Response) => {
   const clientId = EnvConfig.oauth.tiktok.clientId || 'dummy_tiktok_client_id';
   const redirectUri = EnvConfig.oauth.tiktok.redirectUri;

@@ -3,7 +3,7 @@ import { normalizeTransitionKey } from '../constants/transitions.js';
 
 const router = Router();
 
-// POST /v1/ai/cliffhanger/generate (Proposal 3: Dynamic Cliffhanger Hook Engine)
+// POST /api/ai/cliffhanger/generate (Proposal 3: Dynamic Cliffhanger Hook Engine)
 router.post('/generate', (req: Request, res: Response) => {
   const {
     episodeId = 'ep-001',

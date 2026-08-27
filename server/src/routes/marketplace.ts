@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 
 export const marketplaceRouter = Router();
 
-// GET /v1/marketplace/templates — Creator template marketplace listing
+// GET /api/marketplace/templates — Creator template marketplace listing
 marketplaceRouter.get('/templates', (req: Request, res: Response) => {
   return res.json({
     code: 200,
@@ -12,7 +12,7 @@ marketplaceRouter.get('/templates', (req: Request, res: Response) => {
   });
 });
 
-// POST /v1/marketplace/templates/:id/purchase — Purchase template
+// POST /api/marketplace/templates/:id/purchase — Purchase template
 marketplaceRouter.post('/templates/:id/purchase', (req: Request, res: Response) => {
   const templateId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   return res.json({
@@ -23,7 +23,7 @@ marketplaceRouter.post('/templates/:id/purchase', (req: Request, res: Response) 
   });
 });
 
-// GET /v1/marketplace/actors — AI virtual actor catalog
+// GET /api/marketplace/actors — AI virtual actor catalog
 marketplaceRouter.get('/actors', (req: Request, res: Response) => {
   return res.json({
     code: 200,
@@ -33,7 +33,7 @@ marketplaceRouter.get('/actors', (req: Request, res: Response) => {
   });
 });
 
-// POST /v1/marketplace/actors/:id/license — License actor
+// POST /api/marketplace/actors/:id/license — License actor
 marketplaceRouter.post('/actors/:id/license', (req: Request, res: Response) => {
   const actorId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   return res.json({

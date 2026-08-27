@@ -113,10 +113,10 @@ Respond strictly in valid JSON format matching this exact array schema:
     "topic": "Catchy Viral Drama Title in target language",
     "description": "2-sentence dramatic synopsis in target language",
     "trope": "Core Micro-Drama Trope in target language",
-    "hashtagVelocity": "+520% (TikTok/Reels/Shorts)",
-    "competitorHook": "3-second opening hook in target language",
-    "region": "VN",
-    "engagementScore": 98
+    "hashtag_velocity": "+520% (TikTok/Reels/Shorts)",
+    "competitor_hook": "3-second opening hook in target language",
+    "region": "United States",
+    "engagement_score": 98
   }
 ]
 ```

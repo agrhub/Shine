@@ -9,12 +9,11 @@ PHYSICAL CHARACTERISTICS GUIDELINES:
 - Use direct, concise language with specific adjectives.
 
 TIME OF DAY GUIDELINES:
-- Specify exact time of day based on script evidence (e.g., "Daytime", "Night", "Golden Hour", "Late afternoon").
+- Specify exact time of day based on script evidence (`DAY`, `NIGHT`, `DUSK`, `DAWN`).
 
 CRITICAL RULES:
 - Use plain text only - NO markdown formatting.
 - NEVER use null values or empty strings.
-- Give EQUAL detail and attention to EVERY location listed.
 {{#if languageInstruction}}
 - CRITICAL LANGUAGE RULE: {{languageInstruction}}
 {{/if}}
@@ -22,15 +21,13 @@ CRITICAL RULES:
 ## SCREENPLAY CONTENT:
 {{screenplay}}
 
-## LOCATIONS TO DESCRIBE:
-{{locationList}}
+## LOCATION TO DESCRIBE:
+{{locationName}}
 
-Respond ONLY with valid JSON keyed by EXACT location name:
+Respond ONLY with a valid JSON object matching this schema:
 ```json
 {
-  "Location Name": {
-    "physicalCharacteristics": "...",
-    "timeOfDay": "..."
-  }
+  "physical_characteristics": "Detailed architectural layout, lighting mood, interior furniture, materials...",
+  "time_of_day": "NIGHT"
 }
 ```

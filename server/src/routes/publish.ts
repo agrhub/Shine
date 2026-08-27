@@ -15,7 +15,7 @@ const activePublishJobs = new Map<string, {
   error?: string;
 }>();
 
-// POST /v1/publish/multi-platform — Queue and dispatch multi-platform publishing job
+// POST /api/publish/multi-platform — Queue and dispatch multi-platform publishing job
 publishRouter.post('/multi-platform', requireAuth, async (req: Request, res: Response) => {
   try {
     const { episodeId, seriesId, platforms, caption, hashtags, coverUrl, videoUrl } = req.body;
@@ -61,7 +61,7 @@ publishRouter.post('/multi-platform', requireAuth, async (req: Request, res: Res
         const fullCaption = `${caption || ''} ${(hashtags || []).map((h: string) => (h.startsWith('#') ? h : `#${h}`)).join(' ')}`.trim();
         const db = await getDatabaseProvider();
         const ep = await db.getEpisodeById(episodeId);
-        const targetVideoUrl = videoUrl || (ep?.videoUrlsByLang && (ep.videoUrlsByLang[req.body.languageCode || 'vi-VN'] || Object.values(ep.videoUrlsByLang)[0])) || coverUrl || 'https://openvideo-demo.com/video.mp4';
+        const targetVideoUrl = videoUrl || (ep?.video_urls && (ep.video_urls[req.body.languageCode || 'en-US'] || Object.values(ep.video_urls)[0]));
 
         for (let i = 0; i < accounts.length; i++) {
           const account = accounts[i];
@@ -165,9 +165,12 @@ publishRouter.post('/multi-platform', requireAuth, async (req: Request, res: Res
           }
         }
 
-        // Update database episode status
+        // Update database episode status and transition series to PUBLISHED
         if (episodeId) {
           await db.updateEpisode(episodeId, { status: 'PUBLISHED' });
+        }
+        if (seriesId) {
+          await db.updateSeries(seriesId, { status: 'PUBLISHED' });
         }
 
         const jobState = activePublishJobs.get(jobId);
@@ -214,7 +217,7 @@ publishRouter.post('/multi-platform', requireAuth, async (req: Request, res: Res
   }
 });
 
-// GET /api/v1/render/stream — Real SSE progress stream
+// GET /api/render/stream — Real SSE progress stream
 publishRouter.get('/render/stream', (req: Request, res: Response) => {
   const jobId = req.query.jobId as string || 'default';
 

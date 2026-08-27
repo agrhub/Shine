@@ -8,7 +8,7 @@ let currentGuardrails = {
   lowResProxyMode: false,
 };
 
-// GET /v1/admin/cost-guardrails
+// GET /api/admin/cost-guardrails
 costGuardrailsRouter.get('/', (req: Request, res: Response) => {
   return res.status(200).json({
     code: 200,
@@ -18,7 +18,7 @@ costGuardrailsRouter.get('/', (req: Request, res: Response) => {
   });
 });
 
-// PUT /v1/admin/cost-guardrails
+// PUT /api/admin/cost-guardrails
 costGuardrailsRouter.put('/', (req: Request, res: Response) => {
   const { maxBudgetUsd, lowResProxyMode } = req.body;
   if (typeof maxBudgetUsd === 'number') {

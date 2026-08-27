@@ -1125,3 +1125,236 @@ async function runDramaGeneration() {
 
 runDramaGeneration();
 ```
+
+---
+
+## 8. System, Cloud Run & Admin Operations Endpoints
+
+### 8.1 System Health & Diagnostics
+`GET /api/health`
+
+Returns live runtime diagnostics, database status, and microservice connectivity.
+
+**Response (200 OK):**
+```json
+{
+  "status": "ok",
+  "service": "Shine API Server",
+  "version": "0.1.0-alpha",
+  "db_provider": "firestore",
+  "timestamp": "2026-08-25T00:00:00.000Z"
+}
+```
+
+---
+
+### 8.2 Asynchronous Video Render Queue
+`POST /api/v1/render/submit`
+
+Submits an OpenVideo timeline project payload to the headless Playwright WebCodecs compositor worker on Google Cloud Run via Pub/Sub event queue.
+
+**Request Payload:**
+```json
+{
+  "projectData": {
+    "settings": { "width": 1080, "height": 1920, "fps": 30, "duration": 15000000 },
+    "tracks": [...],
+    "clips": { ... }
+  },
+  "options": {
+    "resolution": "1080p",
+    "fps": 30,
+    "quality": "high"
+  }
+}
+```
+
+**Response (202 Accepted):**
+```json
+{
+  "code": 200,
+  "data": {
+    "jobId": "render_job_x89a1bc2",
+    "status": "queued",
+    "estimatedTimeSeconds": 45
+  },
+  "message": "Render task queued successfully",
+  "error": null
+}
+```
+
+`GET /api/v1/render/status/:jobId`
+
+Queries real-time rendering progress (0–100%) and retrieves the final downloadable video URL.
+
+**Response (200 OK):**
+```json
+{
+  "code": 200,
+  "data": {
+    "jobId": "render_job_x89a1bc2",
+    "status": "completed",
+    "progress": 100,
+    "downloadUrl": "https://storage.googleapis.com/shine-studio-media/exports/ep1_1080p.mp4",
+    "renderTimeMs": 14250
+  },
+  "message": "Render completed",
+  "error": null
+}
+```
+
+---
+
+### 8.3 Audio Stem Separation (Meta Demucs v4 AI)
+`POST /api/v1/audio/separate`
+
+Isolates vocal dialogue from background music and sound effects using Meta Demucs v4.
+
+**Request Payload:**
+```json
+{
+  "audioUrl": "https://storage.googleapis.com/shine-studio-media/audio/raw_scene_1.mp3",
+  "twoStems": "vocals",
+  "model": "htdemucs"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "code": 200,
+  "data": {
+    "status": "success",
+    "stems": {
+      "vocals": "https://storage.googleapis.com/shine-studio-media/audio/separated/scene_1_vocals.wav",
+      "no_vocals": "https://storage.googleapis.com/shine-studio-media/audio/separated/scene_1_bgm.wav"
+    }
+  },
+  "message": "Stem separation completed",
+  "error": null
+}
+```
+
+---
+
+### 8.4 Admin Flow Token Pool Sync & Scheduler Heartbeat
+`POST /api/admin/flow-accounts/sync`
+
+Invoked periodically by Google Cloud Scheduler (`shine-flow-token-sync`, `*/5 * * * *`) to wake the serverless app, refresh expiring Google Flow OAuth tokens, and synchronize quotas in Firestore Native `shine-db`.
+
+**Response (200 OK):**
+```json
+{
+  "code": 200,
+  "data": {
+    "syncedAccounts": 5,
+    "activeAccounts": 5,
+    "refreshedTokens": 2,
+    "totalCredits": 1450
+  },
+  "message": "Flow token pool synced successfully",
+  "error": null
+}
+```
+
+---
+
+### 8.5 Admin Render Cluster & Worker Nodes Telemetry
+`GET /api/admin/render-cluster`
+`GET /api/admin/workers`
+`POST /api/admin/workers/heartbeat`
+`POST /api/admin/workers/job-event`
+`GET /api/admin/render-jobs`
+
+Provides live cluster telemetry, worker health monitoring, and render job queue tracking across all Cloud Run worker instances.
+
+**Render Cluster Response (`GET /api/admin/render-cluster`):**
+```json
+{
+  "code": 200,
+  "data": {
+    "activeInstances": 2,
+    "gpuLoadPct": 28,
+    "activeJobsCount": 1,
+    "queuedJobsCount": 0,
+    "completedJobsCount": 14,
+    "failedJobsCount": 0,
+    "monthlyCostUsd": 0.00,
+    "monthlyBudgetCap": 50.00,
+    "serviceName": "shine-render-worker",
+    "region": "us-central1",
+    "status": "ONLINE",
+    "workers": [
+      {
+        "workerId": "worker-playwright-01",
+        "workerName": "Playwright WebCodecs Node",
+        "serviceName": "shine-render-worker",
+        "region": "us-central1",
+        "status": "ONLINE",
+        "cpuUsagePct": 22,
+        "memoryUsageMb": 384,
+        "activeJobsCount": 0,
+        "lastHeartbeat": "2026-08-25T04:30:00.000Z"
+      }
+    ]
+  },
+  "message": "Render cluster telemetry retrieved successfully",
+  "error": null
+}
+```
+
+---
+
+### 8.6 Admin Grafana MCP Observability & Log Streaming
+`GET /api/admin/observability`
+`GET /api/admin/observability/logs`
+`POST /api/admin/observability/sync`
+`POST /api/admin/observability/test`
+
+Provides two-way observability integration with Grafana MCP / Grafana Cloud:
+- Exposes live CPU, RAM RSS, API P99 latency, and historical 24h timeseries metrics.
+- Streams error traces, warn logs, and AI subagent execution timings.
+- Supports manual sync and connection testing to Grafana MCP endpoints (`tools/call` with `ingest_logs_and_traces`) or Grafana Cloud Loki (`/loki/api/v1/push`).
+
+**Observability Response (`GET /api/admin/observability`):**
+```json
+{
+  "code": 200,
+  "data": {
+    "uptime_seconds": 38420,
+    "process_memory_rss_mb": 294,
+    "process_memory_heap_used_mb": 118,
+    "process_memory_heap_total_mb": 180,
+    "http_request_duration_p99_ms": 112,
+    "websocket_connected_clients": 12,
+    "ai_inference_latency_seconds": 1.45,
+    "api_error_rate_percentage": 0.00,
+    "cpu_count": 4,
+    "load_average_1m": 0.18,
+    "timestamp": "2026-08-25T04:35:00.000Z",
+    "grafanaConnection": {
+      "connected": true,
+      "url": "https://bronzeholly2284.grafana.net",
+      "mcpEndpoint": "https://mcp.grafana.com/mcp",
+      "mode": "MCP",
+      "latencyMs": 14,
+      "lastSyncAt": "2026-08-25T04:34:45.000Z",
+      "totalSyncedLogs": 142
+    },
+    "historyMetrics": [
+      {
+        "timestamp": "2026-08-25T03:30:00.000Z",
+        "p99LatencyMs": 108,
+        "errorRatePct": 0.00,
+        "memoryRssMb": 288,
+        "activeWebsockets": 12,
+        "aiInferenceLatency": 1.42
+      }
+    ]
+  },
+  "message": "Observability telemetry retrieved",
+  "error": null
+}
+```
+
+

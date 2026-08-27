@@ -31,40 +31,40 @@ CRITICAL SCENE & SHOT STRUCTURE (GOOGLE STORYBOARD STUDIO STANDARD):
    - EACH `scenes` object MUST contain a `"shots"` array with 3 to 6 shot objects. **NEVER return a flat `scenes` array where each item IS a shot — scenes must WRAP shots**.
    - JSON STRUCTURE (REQUIRED):
      ```
-     { "scenes": [ { "sceneNumber": 1, "heading": "...", "shots": [ { "shotNumber": 1, ... }, { "shotNumber": 2, ... } ] } ] }
+     { "scenes": [ { "scene_number": 1, "heading": "...", "shots": [ { "shot_number": 1, ... }, { "shot_number": 2, ... } ] } ] }
      ```
    - The total number of shots across the entire episode MUST be between {{minShots}} and {{maxShots}} so their durations sum to ~{{targetDuration}} seconds.
-   - For every shot, provide: `shotNumber`, `title`, `frameDescription`, `cameraMovement`, `action`, `characterCostumes`, `props`, `dialogue`, `durationSeconds`, `bgmMood`, `sfxCues`, `referenceAssets`, and `visualPrompt`.
+   - For every shot, provide: `shot_number`, `title`, `frame_description`, `camera_movement`, `action`, `character_costumes`, `props`, `dialogue`, `duration_seconds`, `bgm_mood`, `sfx_cues`, `reference_assets`, and `visual_prompt`.
 3. **Dialogue & Monologue Density (MANDATORY)**:
    - Micro-dramas are dialogue and suspense heavy. At least 60% of all shots MUST contain spoken dialogue, tense confrontations, voiceovers (V.O.), or internal monologue (OS).
-   - Whenever characters speak, you MUST populate the `dialogue` array with `{ "character": "...", "line": "...", "emotion": "...", "speechTone": "..." }`.
+   - Whenever characters speak, you MUST populate the `dialogue` array with `{ "character": "...", "line": "...", "emotion": "...", "speech_tone": "..." }`.
    - Never leave dialogue empty for shots where a character reacts verbally or commands someone.
 4. **Reference Assets Linking (MANDATORY)**:
-   - For every shot, `referenceAssets` MUST explicitly list all character names present (`characters: ["..."]`), the scene location (`locations: ["..."]`), and any props handled (`props: ["..."]`). DO NOT leave referenceAssets empty when characters or props appear!
+   - For every shot, `reference_assets` MUST explicitly list all character names present (`characters: ["..."]`), the scene location (`locations: ["..."]`), and any props handled (`props: ["..."]`). DO NOT leave reference_assets empty when characters or props appear!
 
 GOOGLE STORYBOARD ASSET SHEET DIRECTIVES (MANDATORY):
 1. **`characters` (ALL active characters in this episode)**:
    - Include all characters who appear or speak (e.g., Protagonist, Antagonist, Supporting characters).
-   - `frameDescription`: 2-view character sheet on white background (`[Head & Shoulders Face on Left] + [Full Body Wardrobe on Right]`).
-   - `physicalCharacteristics`: Full observable facial and anatomical traits (face shape, skin tone, eye color, jawline, hair, scars/features).
-   - `clothingAndAccessories`: Wardrobe, shoes, and jewelry worn in this episode.
-   - `wardrobeVariants`: If a character changes outfits across scenes, provide wardrobe variants linked to their respective scene numbers.
+   - `frame_description`: 2-view character sheet on white background (`[Head & Shoulders Face on Left] + [Full Body Wardrobe on Right]`).
+   - `physical_characteristics`: Full observable facial and anatomical traits (face shape, skin tone, eye color, jawline, hair, scars/features).
+   - `clothing_and_accessories`: Wardrobe, shoes, and jewelry worn in this episode.
+   - `wardrobe_variants`: If a character changes outfits across scenes, provide wardrobe variants linked to their respective scene numbers.
 2. **`locations` (ALL scene locations in this episode)**:
    - Include all 2 to 4 locations corresponding to the scenes.
-   - `frameDescription`: 4-view 16:9 grid showing 1 wide establishing shot + 3 different angles with perfect continuity and no people.
-   - `physicalCharacteristics`: Full architectural materials, atmosphere, lighting sources, and environmental details.
+   - `frame_description`: 4-view 16:9 grid showing 1 wide establishing shot + 3 different angles with perfect continuity and no people.
+   - `physical_characteristics`: Full architectural materials, atmosphere, lighting sources, and environmental details.
 3. **`props` (ALL interacted objects)**:
    - Extract and differentiate objects handled by each character (e.g. Linh Dan's scratched titanium smartphone, Minh Khoi's gold-trimmed smartphone, crystal glass, secret dossier).
    - `owner`: Specify the character who owns or handles the item.
-   - `frameDescription`: Isolated product shot on white background.
-   - `physicalCharacteristics`: Specific materials, patina, engravings, colors.
-4. **`visualPrompt` for each shot**:
+   - `frame_description`: Isolated product shot on white background.
+   - `physical_characteristics`: Specific materials, patina, engravings, colors.
+4. **`visual_prompt` for each shot**:
    - Combine the full asset sheet descriptions into the exact format:
      ```
      FrameDescription: [prose]
-     Locations: [Name]: [Exact physicalCharacteristics]
-     Characters: [Name]: [Exact physicalCharacteristics + clothingAndAccessories]
-     Props: [Name]: [Exact physicalCharacteristics]
+     Locations: [Name]: [Exact physical_characteristics]
+     Characters: [Name]: [Exact physical_characteristics + clothing_and_accessories]
+     Props: [Name]: [Exact physical_characteristics]
      ```
 
 LANGUAGE SPECIFICATION (MANDATORY):

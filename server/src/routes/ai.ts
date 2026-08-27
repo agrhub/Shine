@@ -38,16 +38,16 @@ aiRouter.post('/generate-master-plan', async (req, res) => {
     const {
       title,
       genre,
-      visualStyle,
-      visualStylePrompt,
+      visual_style,
+      visual_style_prompt,
       synopsis,
-      totalEpisodes,
-      episodeDurationSeconds,
+      total_episodes,
+      episode_duration_seconds,
       country,
       language,
       ratio,
-      viralTopic,
-      referenceAssets,
+      viral_topic,
+      reference_assets,
     } = req.body;
 
     const userId = getUserId(req);
@@ -59,16 +59,16 @@ aiRouter.post('/generate-master-plan', async (req, res) => {
     const plan = await storySkeletonAgent.execute({
       title: title || 'Untitled Series',
       genre: genre || 'Suspense / Mystery',
-      visualStyle: visualStyle || 'realistic',
-      visualStylePrompt: visualStylePrompt || '',
+      visualStyle: visual_style || 'realistic',
+      visualStylePrompt: visual_style_prompt || '',
       synopsis: synopsis || 'A high-stakes conflict of ambition, betrayal, and power.',
-      totalEpisodes: totalEpisodes || 24,
-      episodeDurationSeconds: episodeDurationSeconds ? Number(episodeDurationSeconds) : undefined,
-      country: country || 'Vietnam',
-      language: language || 'vi-VN',
+      totalEpisodes: total_episodes || 24,
+      episodeDurationSeconds: episode_duration_seconds ? Number(episode_duration_seconds) : undefined,
+      country: country || 'United States',
+      language: language || 'en-US',
       ratio: ratio || '9:16',
-      viralTopic: viralTopic || '',
-      referenceAssets,
+      viralTopic: viral_topic || '',
+      referenceAssets: reference_assets,
     });
 
     return res.json({
@@ -90,7 +90,7 @@ aiRouter.post('/generate-master-plan', async (req, res) => {
 // POST /api/ai/generate-outline — Delegated to StorySkeletonAgent
 aiRouter.post('/generate-outline', async (req, res) => {
   try {
-    const { title, genre, visualStyle, synopsis, totalEpisodes } = req.body;
+    const { title, genre, visual_style, synopsis, total_episodes } = req.body;
     const userId = getUserId(req);
     const deduct = await CreditService.deductUserCredits(userId, 'scriptGeneration', 'Story Outline Generation', `Series: ${title || 'Untitled'}`);
     if (!deduct.success && deduct.error?.includes('Insufficient')) {
@@ -100,9 +100,9 @@ aiRouter.post('/generate-outline', async (req, res) => {
     const outline = await storySkeletonAgent.execute({
       title: title || 'Undercover Mastermind',
       genre: genre || 'Suspense',
-      visualStyle: visualStyle || 'realistic',
+      visualStyle: visual_style || 'realistic',
       synopsis: synopsis || 'Betrayed heir undercover to dismantle corrupt board.',
-      totalEpisodes: totalEpisodes || 20,
+      totalEpisodes: total_episodes || 20,
     });
     return res.json({ code: 200, data: outline, message: 'Outline generated successfully', error: null });
   } catch (err: any) {
@@ -118,23 +118,23 @@ aiRouter.post('/generate-outline', async (req, res) => {
 // POST /api/ai/refine-master-plan — Delegated to MasterPlanRefineAgent & script_refine_master_plan skill
 aiRouter.post('/refine-master-plan', async (req, res) => {
   try {
-    const { currentPlan, userInstruction } = req.body;
-    if (!currentPlan || !userInstruction) {
+    const { current_plan, user_instruction } = req.body;
+    if (!current_plan || !user_instruction) {
       return res.status(400).json({
         code: 400,
         data: null,
-        message: 'currentPlan and userInstruction are required',
+        message: 'current_plan and user_instruction are required',
         error: 'INVALID_PAYLOAD',
       });
     }
 
     const userId = getUserId(req);
-    const deduct = await CreditService.deductUserCredits(userId, 'scriptGeneration', 'Master Plan Refine', `Plan: ${currentPlan?.title || 'Series'}`);
+    const deduct = await CreditService.deductUserCredits(userId, 'scriptGeneration', 'Master Plan Refine', `Plan: ${current_plan?.title || 'Series'}`);
     if (!deduct.success && deduct.error?.includes('Insufficient')) {
       return res.status(402).json({ code: 402, data: null, message: deduct.error, error: 'INSUFFICIENT_CREDITS' });
     }
 
-    const result = await masterPlanRefineAgent.execute({ currentPlan, userInstruction });
+    const result = await masterPlanRefineAgent.execute({ currentPlan: current_plan, userInstruction: user_instruction });
 
     return res.json({
       code: 200,
@@ -155,9 +155,9 @@ aiRouter.post('/refine-master-plan', async (req, res) => {
 // POST /api/ai/generate-script — Delegated to DirectorAgent & multi-agent pipeline
 aiRouter.post('/generate-script', async (req, res) => {
   try {
-    const { title, genre, visualStyle, synopsis, episodeNumber, totalEpisodes } = req.body;
+    const { title, genre, visual_style, synopsis, episode_number, total_episodes } = req.body;
     const userId = getUserId(req);
-    const deduct = await CreditService.deductUserCredits(userId, 'scriptGeneration', 'Screenplay Script Generation', `Series: ${title || 'Untitled'} (Ep ${episodeNumber || 1})`);
+    const deduct = await CreditService.deductUserCredits(userId, 'scriptGeneration', 'Screenplay Script Generation', `Series: ${title || 'Untitled'} (Ep ${episode_number || 1})`);
     if (!deduct.success && deduct.error?.includes('Insufficient')) {
       return res.status(402).json({ code: 402, data: null, message: deduct.error, error: 'INSUFFICIENT_CREDITS' });
     }
@@ -165,16 +165,16 @@ aiRouter.post('/generate-script', async (req, res) => {
     const pipelineResult = await directorAgent.runPipeline({
       title: title || 'Undercover Mastermind',
       genre: genre || 'Suspense',
-      visualStyle: visualStyle || 'realistic',
+      visualStyle: visual_style || 'realistic',
       synopsis: synopsis || 'Betrayed heir undercover to dismantle corrupt board.',
-      episodeNumber: episodeNumber || 1,
-      totalEpisodes: totalEpisodes || 20,
+      episodeNumber: episode_number || 1,
+      totalEpisodes: total_episodes || 20,
     });
 
     return res.json({
       code: 200,
       data: {
-        scriptItem: pipelineResult.scriptItem,
+        script_item: pipelineResult.scriptItem,
         supervision: pipelineResult.supervision,
         outline: pipelineResult.outline,
       },
@@ -194,9 +194,9 @@ aiRouter.post('/generate-script', async (req, res) => {
 // POST /api/ai/verify-compliance — Master Plan Compliance & Safety Audit
 aiRouter.post('/verify-compliance', async (req, res) => {
   try {
-    const { masterPlan, country, ratio } = req.body;
+    const { master_plan, country, ratio } = req.body;
     const result = await supervisionAgent.verifyMasterPlanCompliance({
-      masterPlan,
+      masterPlan: master_plan,
       country,
       ratio,
     });
@@ -222,8 +222,8 @@ import { productionAgentService } from '../services/ProductionAgentService.js';
 // POST /api/ai/analyze-pacing — Script pacing & emotional retention trajectory analysis
 aiRouter.post('/analyze-pacing', async (req, res) => {
   try {
-    const { scriptData } = req.body;
-    const result = await analysisService.analyzeScriptPacing(scriptData);
+    const { script_data } = req.body;
+    const result = await analysisService.analyzeScriptPacing(script_data);
     return res.json({
       code: 200,
       data: result,

@@ -118,8 +118,8 @@ Respond strictly in valid JSON format matching this exact schema:
 
 ```json
 {
-  "overallScore": 98,
-  "isCompliant": true,
+  "overall_score": 98,
+  "is_compliant": true,
   "categories": {
     "violence": {
       "label": "Violence / Gore",
@@ -128,21 +128,21 @@ Respond strictly in valid JSON format matching this exact schema:
       "safe": true,
       "notes": "No prohibited extreme violence detected"
     },
-    "adultContent": {
+    "adult_content": {
       "label": "Adult Content",
       "score": 100,
       "status": "Passed",
       "safe": true,
       "notes": "Compliant with platform commercial standards"
     },
-    "culturalSensitivity": {
+    "cultural_sensitivity": {
       "label": "Cultural Sensitivity",
       "score": 94,
       "status": "Passed",
       "safe": true,
       "notes": "Harmonious with target market sensibilities"
     },
-    "copyrightIP": {
+    "copyright_ip": {
       "label": "Copyright / IP",
       "score": 96,
       "status": "Passed",
@@ -150,12 +150,12 @@ Respond strictly in valid JSON format matching this exact schema:
       "notes": "Original trope combination without trademark infringement"
     }
   },
-  "copyrightChecks": [
+  "copyright_checks": [
     { "label": "Script Origin & Plagiarism", "status": "Passed", "safe": true },
     { "label": "Generated Visual Assets", "status": "Passed", "safe": true },
     { "label": "Audio & Foley Library", "status": "Passed", "safe": true }
   ],
-  "identifiedIssues": [],
+  "identified_issues": [],
   "recommendations": []
 }
 ```

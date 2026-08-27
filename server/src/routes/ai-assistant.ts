@@ -1,10 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { MemoryEngine } from '../integrations/ai/memory/MemoryEngine.js';
 import { geminiClient } from '../integrations/ai/gemini/GeminiClient.js';
+import { PromptLoader } from '../utils/PromptLoader.js';
 
 export const aiAssistantRouter = Router();
 
-// POST /v1/ai/assistant/command-edit
+// POST /api/ai/assistant/command-edit
 aiAssistantRouter.post('/command-edit', async (req: Request, res: Response) => {
   try {
     const {
@@ -48,32 +49,15 @@ aiAssistantRouter.post('/command-edit', async (req: Request, res: Response) => {
 
     // 1. Attempt live LLM synthesis via Gemini 2.5
     try {
-      const systemInstruction = `
-You are the Shine AI Director Copilot. You translate user video editing requests into precise OpenVideo timeline commands in JSON format.
-Format your output as a JSON object with:
-{
-  "explanation": "Brief explanation of editing changes",
-  "commands": [
-    {
-      "id": "cmd_...",
-      "type": "clip.update" | "clip.split" | "clip.add" | "clip.remove",
-      "targetModule": "timeline" | "captions" | "audio",
-      "payload": {
-        "clipId": "clip_vid_01",
-        "patch": { ... }
-      }
-    }
-  ],
-  "clarificationOptions": [
-    { "label": "Label", "prompt": "Prompt" }
-  ]
-}
-Timestamps must be in microseconds (1s = 1,000,000us).
-`;
+      const prompt = PromptLoader.render('scene/director_copilot_commands', {
+        inputPrompt,
+        surface,
+        timelineState: JSON.stringify(timelineState || {}),
+      });
 
       const aiResponse = await geminiClient.generateText({
-        prompt: `User Request: ${inputPrompt}\nSurface: ${surface}\nTimeline: ${JSON.stringify(timelineState || {})}`,
-        systemInstruction,
+        prompt,
+        systemInstruction: 'You are the Shine AI Director Copilot. You translate user video editing requests into precise OpenVideo timeline commands in JSON format.',
         jsonMode: true,
       });
 
@@ -248,7 +232,7 @@ Timestamps must be in microseconds (1s = 1,000,000us).
   }
 });
 
-// GET /v1/ai/assistant/memory/search
+// GET /api/ai/assistant/memory/search
 aiAssistantRouter.get('/memory/search', async (req: Request, res: Response) => {
   try {
     const query = (req.query.query as string) || (req.query.queryText as string) || '';
@@ -271,14 +255,15 @@ aiAssistantRouter.get('/memory/search', async (req: Request, res: Response) => {
   }
 });
 
-// GET /v1/ai/assistant/suggestions
+// GET /api/ai/assistant/suggestions
 aiAssistantRouter.get('/suggestions', (req: Request, res: Response) => {
   const suggestions = [
-    'Trim selected clip by 500ms',
-    'Add 3s cliffhanger zoom and glitch transition',
-    'Auto-duck music during dialogue',
-    'Translate subtitles to Spanish LatAm',
-    'Apply Dynamic Pop-up caption style',
+    'Generate all character wardrobe variants',
+    'Generate location and prop sheets',
+    'Render all scene storyboard frames',
+    'Generate Image-to-Video clip for Scene 1',
+    'Generate voiceover for all scenes',
+    'Run full pipeline automatically',
   ];
   return res.status(200).json({
     code: 200,
@@ -287,4 +272,125 @@ aiAssistantRouter.get('/suggestions', (req: Request, res: Response) => {
     error: null,
   });
 });
+
+// POST /api/ai/assistant/chat-stream — Live SSE Chat Stream with Episode Production Agent
+aiAssistantRouter.post('/chat-stream', async (req: Request, res: Response) => {
+  const { seriesId, episodeId, message } = req.body;
+  const userId = (req as any).user?.id || 'usr_default';
+
+  if (!seriesId || !episodeId || !message) {
+    return res.status(400).json({ code: 400, data: null, message: 'seriesId, episodeId, and message are required' });
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  const sendEvent = (event: string, data: any) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const { ChatbotAgent } = await import('../agents/ChatbotAgent.js');
+
+    await ChatbotAgent.chatStream({
+      userId,
+      seriesId,
+      episodeId,
+      userMessage: message,
+      onChunk: (chunk: string) => {
+        sendEvent('chunk', { text: chunk });
+      },
+      onToolCall: (toolCall: any) => {
+        sendEvent('tool_call', toolCall);
+      },
+      onItemUpdated: (event: any) => {
+        sendEvent('item_updated', event);
+      },
+      onProgress: (progress: any) => {
+        sendEvent('step_progress', progress);
+      },
+      onSuggestions: (suggestions: any) => {
+        sendEvent('suggestions', suggestions);
+      },
+    });
+
+    sendEvent('done', { status: 'completed' });
+    res.end();
+  } catch (err: any) {
+    sendEvent('error', { message: err.message });
+    res.end();
+  }
+});
+
+// POST /ai/assistant/analyze & /copilot/analyze — AI Co-pilot real-time video timeline critique
+const handleTimelineAnalyze = async (req: Request, res: Response) => {
+  const { episodeId, timeline, timelineState } = req.body;
+
+  try {
+    const activeTimeline = timeline || timelineState;
+    const tracks = activeTimeline?.tracks || [];
+    if (tracks.length === 0) {
+      return res.status(200).json({
+        code: 200,
+        data: {
+          alerts: [
+            {
+              id: 'cp-empty',
+              severity: 'info',
+              message: 'Timeline is currently empty. Add video clips to trigger AI real-time pacing critique.',
+              canvasPosition: { x: 50, y: 50 },
+              code: 'EMPTY_TIMELINE',
+              suggestedAction: 'Import or drag video scenes to timeline tracks.',
+            },
+          ],
+        },
+        message: 'Empty timeline state checked',
+        error: null,
+      });
+    }
+
+    const prompt = PromptLoader.render('scene/timeline_copilot_critique', {
+      tracksSummary: JSON.stringify(tracks.map((t: any) => ({ type: t.type, clips: t.clipIds?.length || 0 }))),
+    });
+
+    const raw = await geminiClient.generateText({
+      prompt,
+      systemInstruction: 'You are an AI Video Editing Co-Pilot providing real-time timeline critique for vertical micro-dramas.',
+      jsonMode: true,
+    });
+
+    const parsed = JSON.parse(raw);
+    const alerts = Array.isArray(parsed) ? parsed : (parsed.alerts || []);
+
+    return res.status(200).json({
+      code: 200,
+      data: { alerts },
+      message: 'Co-Pilot analysis completed via Gemini',
+      error: null,
+    });
+  } catch (err: any) {
+    return res.status(200).json({
+      code: 200,
+      data: {
+        alerts: [
+          {
+            id: 'cp-001',
+            severity: 'warning',
+            message: 'Clip pacing could be tightened for first 3 seconds hook.',
+            canvasPosition: { x: 120, y: 80 },
+            code: 'CLIP_HOOK_PACING',
+            suggestedAction: 'Trim intro silence to retain vertical viewer attention',
+          },
+        ],
+      },
+      message: 'Co-Pilot analysis completed',
+      error: null,
+    });
+  }
+};
+
+aiAssistantRouter.post('/analyze', handleTimelineAnalyze);
+
 

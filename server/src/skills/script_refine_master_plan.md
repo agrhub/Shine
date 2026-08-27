@@ -17,33 +17,34 @@ You are the **Lead Script Consultant Agent** responsible for refining, editing, 
 ## Output JSON Schema
 ```json
 {
-  "aiResponse": "string (clear summary of structural changes applied)",
-  "updatedPlan": {
-    "seriesId": "string",
+  "ai_response": "string (clear summary of structural changes applied)",
+  "updated_plan": {
+    "series_id": "string",
     "title": "string",
     "genre": "string",
-    "visualStyle": "string",
-    "visualStylePrompt": "string",
+    "visual_style": "string",
+    "visual_style_prompt": "string",
     "country": "string",
     "language": "string",
     "ratio": "string",
-    "totalEpisodes": 24,
-    "totalDurationSeconds": 90,
-    "storyCore": {
-      "coreAttraction": "string",
-      "psychologicalPleasure": "string",
-      "goldFingerRule": "string"
+    "total_episodes": 24,
+    "total_duration_seconds": 90,
+    "story_core": {
+      "core_attraction": "string",
+      "psychological_pleasure": "string",
+      "gold_finger_rule": "string"
     },
-    "hiddenLine": "string",
-    "targetAudience": "string",
-    "viralHook": "string",
-    "estimatedRetention": "string",
+    "synopsis": "string",
+    "hidden_line": "string",
+    "target_audience": "string",
+    "viral_hook": "string",
+    "estimated_retention": "string",
     "characters": [],
     "locations": [],
     "props": [],
-    "threeActs": [],
-    "majorReversals": [],
-    "paywallHooks": [],
+    "three_acts": [],
+    "major_reversals": [],
+    "paywall_hooks": [],
     "episodes": []
   }
 }

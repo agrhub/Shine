@@ -8,6 +8,7 @@
 <p align="center">
   <a href="#-key-features">Features</a> •
   <a href="#-architecture--tech-stack">Tech Stack</a> •
+  <a href="#-cloud-run-serverless-ecosystem">Cloud Run Deployment</a> •
   <a href="#-pipeline-workflow-b1--b10">Pipeline</a> •
   <a href="#-getting-started">Getting Started</a> •
   <a href="#-environment-variables">Configuration</a> •
@@ -53,7 +54,7 @@
 
 ### 🚀 7. Dual-Mode Render & Export (B8)
 - **Local In-Browser Render**: Zero-server-cost fast client rendering via WebCodecs (`mediabunny` / `ExportModal`).
-- **Cloud Server Queue**: Scalable background rendering via OpenVideo engine for high-resolution distribution bundles.
+- **Cloud Serverless Queue**: Scalable asynchronous rendering via `@openvideo/video-renderer` headless Playwright workers on Google Cloud Run + Pub/Sub.
 - **Post-Render Review**: In-app video preview player with instant download and direct publishing triggers.
 
 ### 🛡️ 8. AI Watermarking & Provenance
@@ -66,53 +67,90 @@
 
 ```mermaid
 graph TD
-    Client[Vue 3 Client App] -->|REST / Socket.io| Server[Express Backend API]
+    Client[Vue 3 Client App] -->|REST / Socket.io| Server[Express Backend API / shine-app]
     Client -->|WebGL Rendering| PIXI[Pixi.js & OpenVideo Engine]
     Client -->|Local Export| WebCodecs[Client WebCodecs / Mediabunny]
 
-    Server -->|Script & Direction| Gemini[Google Gemini 3 / Vertex AI]
-    Server -->|Neural Voices / TTS| TTS[Gemini Audio]
-    Server -->|Video Generation| VideoAI[Image-to-Video Pipeline]
-    Server -->|Cloud Storage| S3[Backblaze B2 / AWS S3]
-    Server -->|Persistence| DB[(MongoDB / SQLite)]
-    Server -->|Cloud Render| OpenVideo[OpenVideo Render Worker]
-    Server -->|Authenticity| C2PA[C2PA & SynthID Service]
+    Server -->|Script & Direction| Gemini[Google Vertex AI / Gemini 3.5 & 3.1]
+    Server -->|Neural Voices / TTS| TTS[Gemini Audio & Google Cloud TTS]
+    Server -->|Video Generation| VideoAI[Veo 3.1 & Imagen 3]
+    Server -->|Stem Separation| Demucs[Meta Demucs v4 on Cloud Run]
+    Server -->|Async Render Jobs| PubSub[Google Cloud Pub/Sub]
+    PubSub -->|Event Trigger| RenderWorker[shine-render-worker Playwright WebCodecs]
+    Server -->|Asset Storage| Storage[Google Cloud Storage gs://shine-studio-media / B2]
+    Server -->|Persistence Layer| DB[(Google Cloud Firestore Native: shine-db)]
+    Scheduler[Google Cloud Scheduler] -->|Heartbeat Sync Token */5 min| Server
 ```
 
 | Layer | Technologies |
 |---|---|
 | **Frontend Framework** | [Vue 3](https://vuejs.org/) (Composition API, `<script setup>`), [TypeScript](https://www.typescriptlang.org/) |
 | **Build Tool** | [Vite 7](https://vitejs.dev/), [pnpm](https://pnpm.io/) |
-| **UI & Styling** | [Element Plus](https://element-plus.org/), [TailwindCSS v4](https://tailwindcss.com/), [UnoCSS](https://unocss.dev/), Tabler & Lucide Icons |
-| **Video & Canvas Engine** | [`@openvideo/core`](https://openvideo.dev/), `@openvideo/engine-pixi`, `@openvideo/timeline`, [Pixi.js v8](https://pixijs.com/) |
+| **UI & Styling** | [Element Plus](https://element-plus.org/), [TailwindCSS v4](https://tailwindcss.com/), Tabler & Lucide Icons |
+| **Video & Canvas Engine** | [`@openvideo/video-renderer`](https://www.npmjs.com/package/@openvideo/video-renderer), `@openvideo/engine-pixi`, `@openvideo/timeline`, [Pixi.js v8](https://pixijs.com/) |
 | **State Management** | [Pinia](https://pinia.vuejs.org/), VueUse |
 | **Internationalization** | [Vue I18n](https://vue-i18n.intlify.dev/) (EN, VI, ZH, JA, KO) |
 | **Backend API** | [Node.js](https://nodejs.org/), [Express](https://expressjs.com/), [Socket.io](https://socket.io/) |
-| **Database** | [MongoDB](https://www.mongodb.com/) (`mongoose`) / SQLite (`better-sqlite3`) |
-| **Media Processing** | [OpenVideo](https://openvideo.dev/) (`@openvideo/core`), [Mediabunny](https://github.com/) |
-| **AI Services** | Google Gemini (`@google/genai`), Vertex AI, SynthID |
-| **Observability** | [OpenTelemetry](https://opentelemetry.io/) traces & metrics |
+| **Database Providers** | [Google Cloud Firestore](https://cloud.google.com/firestore) Native (`shine-db`), [MongoDB](https://www.mongodb.com/), MapDB, SQLite |
+| **Cloud Infrastructure** | **Google Cloud Run** (`us-central1`), **Cloud Pub/Sub**, **Cloud Scheduler**, **Google Cloud Storage** (`gs://shine-studio-media`) |
+| **Audio Stem Separation** | [Meta Demucs v4](https://github.com/facebookresearch/demucs) Serverless Microservice on **Google Cloud Run** |
+| **Media Processing** | [`@openvideo/video-renderer`](https://www.npmjs.com/package/@openvideo/video-renderer) (Playwright WebCodecs Headless), [FFmpeg](https://ffmpeg.org/) |
+| **AI Services** | Google Vertex AI / Gemini 3.5 & 3.1 Flash / Imagen 3 / Veo 3.1 |
 
 ---
 
-## 🔄 Pipeline Workflow (B1 – B10)
+## ☁️ Cloud Run Serverless Ecosystem
+
+The entire backend and processing engine is architected for **Serverless Scale-to-Zero ($0 idle cost)** with automated infrastructure provisioning:
+
+| Microservice | Default Region | Resource Specs | Behavior & Cost Optimization |
+|---|---|---|---|
+| **`shine-app`** | `us-central1` | 2 vCPU / 2Gi RAM | Main API + Vue SPA (`--min-instances 0`, `--cpu-throttling`). Scales to zero when idle. |
+| **`shine-render-worker`** | `us-central1` | 4 vCPU / 8Gi RAM | Headless Chromium + WebCodecs compositor for asynchronous 4K/1080p MP4 exports (`--min-instances 0`). |
+| **`demucs-worker`** | `us-central1` | 2 vCPU / 4Gi RAM | Meta Demucs v4 AI worker for vocal/BGM isolation (`--min-instances 0`). |
+| **Cloud Scheduler** | `us-central1` | `*/5 * * * *` | Calls `POST /api/admin/flow-accounts/sync` to maintain Google Flow token freshness in Firestore. |
+
+### 🚀 1-Click Complete Ecosystem Deployment
+
+Deploy all 3 Cloud Run services, Cloud Scheduler, Pub/Sub topics, Firestore Database, and GCS Bucket in one command:
+
+```powershell
+# Windows PowerShell
+.\scripts\deploy-cloudrun.ps1
+```
+
+```bash
+# Linux / macOS / Cloud Shell
+./scripts/deploy-cloudrun.sh
+```
+
+**Automated Deployment Steps Handled by Script:**
+1. **API Check & Activation**: Auto-checks and enables 10 GCP APIs (`run`, `cloudbuild`, `artifactregistry`, `pubsub`, `firestore`, `datastore`, `cloudscheduler`, `aiplatform`, `storage`, `texttospeech`).
+2. **IAM & Security**: Auto-grants `roles/datastore.user`, `roles/pubsub.editor`, `roles/storage.objectAdmin`, and `roles/aiplatform.user` to the Compute Service Account.
+3. **Database & Storage**: Auto-creates Firestore Native database `shine-db` and GCS Bucket `gs://shine-studio-media` if missing.
+4. **Message Queue**: Auto-creates Pub/Sub topics (`shine-render-jobs`, `shine-render-status`) and subscriptions (`shine-render-sub`, `shine-render-status-sub`).
+5. **Full Configuration Injection**: Forwards 100% of `.env` variables via YAML dictionary.
+6. **Token Sync Heartbeat**: Automatically sets up Google Cloud Scheduler.
+
+---
+
+## 🔄 Pipeline Workflow (B1 – B9)
 
 ```
-[B1: Storyboards] ➔ [B2: Characters] ➔ [B3: Image2Video] ➔ [B4: Multi-Lang Voiceover]
-       ➔ [B5: Scene BGM] ➔ [B6: Kinetic Captions] ➔ [B7: WebGL Preview]
-              ➔ [B8: Dual Export] ➔ [B9: Auto-Save] ➔ [B10: Multi-Publish]
+[B1: Storyboards] ➔ [B2: Characters/Assets] ➔ [B3: Image2Video] ➔ [B4: Multi-Lang Voiceover]
+       ➔ [B5: Kinetic Captions] ➔ [B6: WebGL Preview]
+              ➔ [B7: Dual Export] ➔ [B8: Auto-Save] ➔ [B9: Multi-Publish]
 ```
 
 1. **B1: Storyboard Backgrounds** — Generates initial 9:16 scene visual concepts.
-2. **B2: Consistent Cast** — Generates and locks character avatars and visual prompts.
+2. **B2: Consistent Cast** — Generates and locks character avatars and visual assets.
 3. **B3: Scene Image-to-Video** — Converts storyboard scenes into motion video clips.
 4. **B4: Neural Voiceover (TTS)** — Synthesizes multi-speaker dialogue per language track.
-5. **B5: Dynamic BGM & SFX** — Matches scene tone with mood-based background audio tracks.
-6. **B6: Kinetic Captions** — Generates word-level animated subtitles with translation capabilities.
-7. **B7: Interactive Timeline Preview** — Synchronizes all assets into the OpenVideo canvas editor.
-8. **B8: Dual-Mode Export** — Fast local browser render or high-performance server job queue.
-9. **B9: Auto-Save & State Sync** — Automatically persists timeline state, scenes, and language tracks.
-10. **B10: Multi-Platform Publish** — Prepares and packages exports for TikTok, YouTube Shorts, and Reels.
+5. **B5: Kinetic Captions** — Generates word-level animated subtitles with translation capabilities.
+6. **B6: Interactive Timeline Preview** — Synchronizes all assets into the OpenVideo canvas editor.
+7. **B7: Dual-Mode Export** — Fast local browser render or high-performance server job queue.
+8. **B8: Auto-Save & State Sync** — Automatically persists timeline state, scenes, and language tracks.
+9. **B9: Multi-Platform Publish** — Prepares and packages exports for TikTok, YouTube Shorts, and Reels.
 
 ---
 
@@ -122,6 +160,7 @@ graph TD
 
 - **Node.js**: `v20.x` or higher
 - **Package Manager**: `pnpm` (`v9.x` or `v10.x`)
+- **Google Cloud SDK (`gcloud`)**: Configured with project authentication
 
 ### 1. Clone the Repository
 
@@ -164,63 +203,51 @@ pnpm run dev
 Configure these variables in your root `.env` file (see [`.env.example`](./.env.example) for reference):
 
 ```env
-# --- Database Configuration ---
-DB_PROVIDER="mongodb" # "mongodb" | "sqlite"
-MONGODB_URI="mongodb+srv://<username>:<password>@<cluster>.mongodb.net/shine?retryWrites=true&w=majority"
+# --- 1. Database Configuration ---
+DB_PROVIDER="firestore" # "firestore" | "mongodb" | "sqlite" | "mapdb"
+FIRESTORE_PROJECT_ID="your-gcp-project-id"
+FIRESTORE_DATABASE_ID="shine-db"
 
-# --- Google AI & Vertex AI Model Configuration ---
-GEMINI_MODEL_TEXT_ANALYSIS="gemini-3.1-flash-lite"
-GEMINI_MODEL_IMAGE_GENERATION="gemini-3.1-flash-lite-image"
-GEMINI_MODEL_VIDEO_GENERATION="veo-3.1-generate-001"
-GEMINI_MODEL_TTS="gemini-3.1-flash-tts-preview"
-GEMINI_MODEL_VOICE="gemini-live-2.5-flash-native-audio"
-GEMINI_MODEL_MUSIC="lyria-3-clip-preview"
-GEMINI_MODEL_AGENT="gemini-3.1-flash-lite"
+# --- 2. Google Cloud Run Microservices (us-central1) ---
+DEMUCS_SERVICE_URL="https://demucs-worker-xxxx-uc.a.run.app"
+RENDER_WORKER_URL="https://shine-render-worker-xxxx-uc.a.run.app"
 
-# --- Google Cloud Platform / Vertex AI Credentials ---
-GOOGLE_CLOUD_PROJECT="your_gcp_project_id"
-GOOGLE_CLOUD_LOCATION="global"
-GOOGLE_GENAI_USE_VERTEXAI=1
-GOOGLE_APPLICATION_CREDENTIALS="gcp-service-account.json"
-# Standalone Google AI Studio API Key (optional fallback):
-# GOOGLE_API_KEY="your_google_ai_studio_api_key_here"
-
-# --- Storage Provider (Backblaze B2 / AWS S3) ---
-STORAGE_PROVIDER="b2" # "b2" | "s3"
-S3_BUCKET_NAME="your_s3_bucket_name"
+# --- 3. Storage Provider (Google Cloud Storage / Backblaze B2 / AWS S3) ---
+STORAGE_PROVIDER="gcs" # "gcs" | "b2" | "s3" | "local"
+GCS_BUCKET_NAME="shine-studio-media"
+S3_BUCKET_NAME="microcine"
 S3_ACCESS_KEY="your_s3_access_key"
 S3_SECRET_KEY="your_s3_secret_key"
-S3_ACCOUNT_ID=""
-S3_PUBLIC_DOMAIN=""
 S3_REGION="us-east-005"
 S3_ENDPOINT="https://s3.us-east-005.backblazeb2.com"
 
-# --- Speech & Voiceover APIs ---
-DEEPGRAM_URL="https://api.deepgram.com/v1"
-DEEPGRAM_API_KEY="your_deepgram_api_key_here"
-DEEPGRAM_MODEL="nova-3"
+# --- 4. Google Cloud Pub/Sub ---
+PUBSUB_TOPIC_RENDER="shine-render-jobs"
+PUBSUB_TOPIC_STATUS="shine-render-status"
+PUBSUB_SUBSCRIPTION_RENDER="shine-render-sub"
+PUBSUB_SUBSCRIPTION_STATUS="shine-render-status-sub"
 
-# --- Stock Media (Pexels) ---
+# --- 5. Stock Video, Audio & SFX APIs ---
 PEXELS_URL="https://api.pexels.com"
-PEXELS_API_KEY="your_pexels_api_key_here"
+PEXELS_API_KEY="your_pexels_api_key"
+PIXABAY_URL="https://pixabay.com/api"
+PIXABAY_API_KEY="your_pixabay_api_key"
+FREESOUND_URL="https://freesound.org/apiv2/search/text"
+FREESOUND_CLIENT_ID="your_freesound_client_id"
+FREESOUND_API_KEY="your_freesound_api_key"
 
-# --- Parallel & Task MCP ---
-PARALLEL_API_KEY="your_parallel_api_key_here"
-PARALLEL_MCP_SERVER="https://task-mcp.parallel.ai/mcp"
+# --- 6. Google AI & Vertex AI Models ---
+GEMINI_MODEL_TEXT="gemini-3.5-flash-lite"
+GEMINI_MODEL_IMAGE="gemini-3.1-flash-lite-image"
+GEMINI_MODEL_VIDEO="veo-3.1-generate-001"
+GEMINI_MODEL_TTS="gemini-3.1-flash-tts-preview"
+GEMINI_MODEL_VOICE="gemini-live-2.5-flash-native-audio"
+GEMINI_MODEL_MUSIC="lyria-3-clip-preview"
+GEMINI_MODEL_AGENT="gemini-3.5-flash-lite"
 
-# --- Grafana & Observability ---
-GRAFANA_MCP_ENDPOINT="https://mcp.grafana.com/mcp"
-GRAFANA_URL="https://your-org.grafana.net"
-GRAFANA_API_KEY="your_grafana_api_key_here"
-
-# --- SMTP Email Notifications ---
-SMTP_HOST="smtp.yourdomain.com"
-SMTP_PORT=465
-SMTP_SECURE="true"
-SMTP_USER="notifications@yourdomain.com"
-SMTP_PASS="your_smtp_app_password"
-SMTP_NAME="Shine Studio"
-ADMIN_EMAIL="admin@yourdomain.com"
+GOOGLE_CLOUD_PROJECT="your-gcp-project-id"
+GOOGLE_CLOUD_LOCATION="global"
+GOOGLE_GENAI_USE_VERTEXAI="1"
 ```
 
 ---
@@ -244,15 +271,32 @@ shine/
 │
 ├── server/                     # Express Backend Application
 │   ├── src/
-│   │   ├── agents/             # AI Pipeline Agents (MasterPlan, Character, Video)
+│   │   ├── agents/             # AI Pipeline Agents (ChatbotAgent, PipelineTools)
 │   │   ├── routes/             # REST Endpoints (series, voices, captions, render, etc.)
-│   │   ├── database/           # MongoDB & SQLite providers
-│   │   ├── integrations/       # GeminiClient, SynthID, StorageFactory
-│   │   └── services/           # RenderService, TrendService, C2PA
+│   │   ├── database/           # Firestore, MapDB, MongoDB, SQLite providers
+│   │   ├── integrations/       # GeminiClient, FlowAdapter, SynthID, StorageFactory
+│   │   └── services/           # TimelineService, VideoService, CaptionService, CompositorWorker
 │   └── tsconfig.json
 │
+├── services/                   # Standalone Microservices
+│   ├── demucs-worker/          # Meta Demucs v4 AI Stem Separator for Google Cloud Run (us-central1)
+│   │   ├── main.py             # FastAPI stem separation service
+│   │   ├── Dockerfile          # Container with pre-cached htdemucs model
+│   │   ├── deploy.sh           # 1-Click Cloud Run deploy script (Linux/macOS)
+│   │   ├── deploy.ps1          # 1-Click Cloud Run deploy script (Windows PowerShell)
+│   │   └── requirements.txt
+│   │
+│   └── render-worker/          # Serverless Video Renderer (@openvideo/video-renderer on Cloud Run)
+│       ├── src/server.ts       # Express headless compositor server
+│       ├── Dockerfile          # Container with Playwright Chromium & WebCodecs
+│       ├── deploy.sh           # 1-Click Cloud Run deploy script (Linux/macOS)
+│       ├── deploy.ps1          # 1-Click Cloud Run deploy script (Windows PowerShell)
+│       └── package.json
+│
 ├── docs/                       # Technical architecture, guides, & API documents
-├── scripts/                    # Build & i18n synchronization utilities
+├── scripts/                    # 1-Click End-to-End Cloud Run deployment scripts
+│   ├── deploy-cloudrun.ps1     # Complete deployment script (Windows PowerShell)
+│   └── deploy-cloudrun.sh      # Complete deployment script (Linux/macOS)
 ├── package.json
 └── README.md
 ```
@@ -270,6 +314,8 @@ shine/
 | `pnpm run client:build` | Compiles client Vue/Vite application |
 | `pnpm run server:build` | Compiles server TypeScript application |
 | `pnpm run start` | Runs the compiled production server |
+| `.\scripts\deploy-cloudrun.ps1` | Full 1-Click Deployment to Google Cloud Run (`us-central1`) |
+| `./scripts/deploy-cloudrun.sh` | Full 1-Click Deployment to Google Cloud Run (Linux/macOS) |
 
 ---
 

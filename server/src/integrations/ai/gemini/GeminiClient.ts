@@ -61,12 +61,82 @@ export class GeminiClient {
   private googleGenAI?: GoogleGenAI;
 
   private static instance?: GeminiClient;
+  private static lastCallTimestamp = 0;
+  private static queueLock: Promise<void> = Promise.resolve();
+  private static lastAlertTimestamps = new Map<string, number>();
 
   public static getInstance(): GeminiClient {
     if (!GeminiClient.instance) {
       GeminiClient.instance = new GeminiClient();
     }
     return GeminiClient.instance;
+  }
+
+  public static async applyCooldown(cooldownMs: number = EnvConfig.geminiCooldownMs): Promise<void> {
+    const nextLock = GeminiClient.queueLock.then(async () => {
+      const now = Date.now();
+      const elapsed = now - GeminiClient.lastCallTimestamp;
+      if (elapsed < cooldownMs) {
+        const waitTime = cooldownMs - elapsed;
+        await new Promise((resolve) => setTimeout(resolve, waitTime));
+      }
+      GeminiClient.lastCallTimestamp = Date.now();
+    });
+    GeminiClient.queueLock = nextLock.catch(() => {});
+    await nextLock;
+  }
+
+  public static sendThrottledAlert(service: string, message: string) {
+    const now = Date.now();
+    const last = GeminiClient.lastAlertTimestamps.get(service) || 0;
+    // Throttled: at most 1 email alert per 5 minutes per service category
+    if (now - last > 5 * 60 * 1000) {
+      GeminiClient.lastAlertTimestamps.set(service, now);
+      emailService.sendAdminSystemAlert(`Gemini ${service}`, message).catch(console.error);
+    }
+  }
+
+  public static async executeWithRetry<T>(
+    operationName: string,
+    fn: () => Promise<T>,
+    maxRetries: number = 3,
+    initialBackoffMs: number = 2000
+  ): Promise<T> {
+    let attempt = 0;
+    while (true) {
+      attempt++;
+      await GeminiClient.applyCooldown();
+      try {
+        return await fn();
+      } catch (err: any) {
+        const errMsg = String(err?.message || err?.statusText || '');
+        const isRateLimit =
+          err?.status === 429 ||
+          err?.code === 429 ||
+          errMsg.includes('429') ||
+          errMsg.includes('RESOURCE_EXHAUSTED') ||
+          errMsg.includes('Resource exhausted') ||
+          errMsg.includes('rate limit') ||
+          errMsg.includes('Quota exceeded') ||
+          errMsg.includes('quota');
+
+        if (isRateLimit && attempt <= maxRetries) {
+          const jitter = Math.floor(Math.random() * 500);
+          const backoff = initialBackoffMs * Math.pow(2, attempt - 1) + jitter;
+          Logger.warn(
+            `[GeminiClient] Rate limit hit on ${operationName} (Attempt ${attempt}/${maxRetries}). Backing off for ${backoff}ms...`
+          );
+          await new Promise((resolve) => setTimeout(resolve, backoff));
+          continue;
+        }
+
+        if (attempt > maxRetries || !isRateLimit) {
+          Logger.error(`[GeminiClient] ${operationName} failed: ${errMsg}`);
+          GeminiClient.sendThrottledAlert(operationName, errMsg);
+        }
+        throw err;
+      }
+    }
   }
 
   constructor(options?: { apiKey?: string; serviceAccount?: string | Record<string, any>; keyFilename?: string }) {
@@ -193,23 +263,41 @@ export class GeminiClient {
     return res.text;
   }
 
-  public async generateContent(prompt: string | any[], modelId: string = EnvConfig.geminiModelText, options: any = {}) {
-    try {
-      const client = this.getClient(modelId);
-      const parts: any[] = Array.isArray(prompt) ? prompt : [{ text: String(prompt) }];
+  public async generateContentStream(options: { model?: string; contents: any[]; config?: any }): Promise<any> {
+    await GeminiClient.applyCooldown();
+    const client = this.getClient(options.model);
+    return await (client as any).models.generateContentStream({
+      model: options.model || EnvConfig.geminiModelAgent || EnvConfig.geminiModelText,
+      contents: options.contents,
+      config: options.config,
+    });
+  }
 
-      if (options.image) {
-        parts.push({
-          inlineData: {
-            data: Buffer.isBuffer(options.image) ? options.image.toString('base64') : options.image,
-            mimeType: options.mimeType || 'image/png',
-          },
-        });
+  public async generateContent(prompt: string | any[], modelId: string = EnvConfig.geminiModelText, options: any = {}) {
+    return await GeminiClient.executeWithRetry('generateContent', async () => {
+      const client = this.getClient(modelId);
+
+      let contents: any[];
+      if (Array.isArray(prompt) && prompt.length > 0 && typeof prompt[0] === 'object' && ('role' in prompt[0] || 'parts' in prompt[0])) {
+        contents = prompt;
+      } else {
+        const parts: any[] = Array.isArray(prompt) ? prompt : [{ text: String(prompt) }];
+
+        if (options.image) {
+          parts.push({
+            inlineData: {
+              data: Buffer.isBuffer(options.image) ? options.image.toString('base64') : options.image,
+              mimeType: options.mimeType || 'image/png',
+            },
+          });
+        }
+
+        contents = [{ role: 'user', parts }];
       }
 
       const response = await (client as any).models.generateContent({
         model: modelId,
-        contents: [{ role: 'user', parts }],
+        contents,
         config: {
           systemInstruction: options.systemPrompt ? { parts: [{ text: options.systemPrompt }] } : undefined,
           tools: options.grounding ? [{ googleSearch: {} }] : options.tools,
@@ -223,12 +311,10 @@ export class GeminiClient {
       return {
         text: response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '',
         usage: response.usageMetadata,
+        candidates: response.candidates,
+        rawResponse: response,
       };
-    } catch (error: any) {
-      Logger.error(`[GeminiClient] generateContent failed: ${error.message}`);
-      emailService.sendAdminSystemAlert('Gemini generateContent', error.message).catch(console.error);
-      throw error;
-    }
+    });
   }
 
   // Helper to resolve images for Veo API structure
@@ -326,10 +412,12 @@ export class GeminiClient {
         ...(Array.isArray(prompt) ? prompt : [{ text: String(prompt) }]),
       ];
 
-      const response = await (client as any).models.generateContent({
-        model: targetModel,
-        contents: [{ role: 'user', parts }],
-        config: { responseModalities: ['IMAGE'] },
+      const response: any = await GeminiClient.executeWithRetry('generateImage', async () => {
+        return await (client as any).models.generateContent({
+          model: targetModel,
+          contents: [{ role: 'user', parts }],
+          config: { responseModalities: ['IMAGE'] },
+        });
       });
 
       const responseParts = response?.candidates?.[0]?.content?.parts || [];
@@ -408,7 +496,9 @@ export class GeminiClient {
 
       if (Object.keys(genConfig).length > 0) generateParams.config = genConfig;
 
-      let operation = await (client as any).models.generateVideos(generateParams);
+      let operation: any = await GeminiClient.executeWithRetry('generateVideo', async () => {
+        return await (client as any).models.generateVideos(generateParams);
+      });
 
       if (options.async) {
         return { jobId: operation.name, status: 'pending' };
@@ -490,10 +580,12 @@ export class GeminiClient {
         }
       }
 
-      const response = await (client as any).models.generateContent({
-        model: modelId,
-        contents: [{ role: 'user', parts: [{ text: finalText }] }],
-        config: { responseModalities: ['AUDIO'], speechConfig },
+      const response: any = await GeminiClient.executeWithRetry('generateAudio', async () => {
+        return await (client as any).models.generateContent({
+          model: modelId,
+          contents: [{ role: 'user', parts: [{ text: finalText }] }],
+          config: { responseModalities: ['AUDIO'], speechConfig },
+        });
       });
 
       const part = response.candidates?.[0]?.content?.parts?.[0];

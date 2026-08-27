@@ -46,11 +46,7 @@ router.post('/spatial-mix', async (req: Request, res: Response) => {
 
     const inputTracks: SpatialAudioTrackInput[] = Array.isArray(tracks) && tracks.length > 0
       ? tracks
-      : [
-          { id: 'trk_voice', name: 'Lead Dialogue', type: 'voice', position: { x: 0, y: 1.5, z: 2.0 }, gain: 1.0 },
-          { id: 'trk_bgm', name: 'Orchestral Score', type: 'bgm', position: { x: 0, y: 3.0, z: 5.0 }, gain: 0.75 },
-          { id: 'trk_sfx', name: 'Ambient Foley', type: 'sfx', position: { x: -2.5, y: 1.2, z: 1.8 }, gain: 0.85 },
-        ];
+      : [];
 
     // Compute Sabine RT60 Reverberation Decay Time: RT60 = 0.161 * V / (S * alpha)
     const roomVolume = mixConfig.roomDimensions!.length * mixConfig.roomDimensions!.width * mixConfig.roomDimensions!.height;

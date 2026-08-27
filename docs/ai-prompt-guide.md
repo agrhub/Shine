@@ -478,7 +478,7 @@ Genre: ${genre}
 Episodes: ${episodeCount}
 `;
 // Send to GeminiClient
-const response = await geminiClient.generateContent(skeletonPrompt, 'gemini-2.5-flash', {
+const response = await geminiClient.generateContent(skeletonPrompt, 'gemini-3.5-flash-lite', {
   generationConfig: { responseMimeType: 'application/json' }
 });
 const data = JSON.parse(response.text);
@@ -500,7 +500,7 @@ Tone Config: ${JSON.stringify(toneConfig)}
 Characters: ${JSON.stringify(characterList)}
 `;
 // Send to GeminiClient
-const response = await geminiClient.generateContent(scriptPrompt, 'gemini-2.5-flash', {
+const response = await geminiClient.generateContent(scriptPrompt, 'gemini-3.5-flash-lite', {
   generationConfig: { responseMimeType: 'application/json' }
 });
 const data = JSON.parse(response.text);

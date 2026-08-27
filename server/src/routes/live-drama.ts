@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 
 export const liveDramaRouter = Router();
 
-// POST /v1/live/polling — Start interactive live-stream drama audience poll
+// POST /api/live/polling — Start interactive live-stream drama audience poll
 liveDramaRouter.post('/polling', (req: Request, res: Response) => {
   const { episodeId, question, options } = req.body;
 

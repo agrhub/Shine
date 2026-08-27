@@ -17,30 +17,22 @@ This document defines the official design system, typography, color palette, UI 
 
 | Route Path | Target View Component | UI Ground Truth Design File (`apps/shine/docs/stitch_shine_app_design/`) | Key Panel Layout & Components |
 | :--- | :--- | :--- | :--- |
-| `/dashboard` | `src/views/dashboard/index.vue` | [`dashboard.png`](../docs/stitch_shine_app_design/project_hub_dashboard_light_mode/screen.png) | Top KPI metric cards, series grid with genre tags, left navigation menu |
-| `/series/create` | `src/views/series/create.vue` | [`drama-project-creating.png`](../docs/stitch_shine_app_design/shine_new_series_wizard_core_dna_step_1/screen.png) | 3-step genre selection wizard, lighting & AI engine selector |
-| `/script/*` | `src/views/script/index.vue` | [`workspace-scripts.png`](../docs/stitch_shine_app_design/script_assembly_shadows_in_the_code/screen.png) | Left: Character bible & tone; Center: Script editor; Right: Scene storyboard grid |
-| `/editor/*` | `src/views/editor/index.vue` | [`workspace-editor.png`](../docs/stitch_shine_app_design/episode_editor_shadows_in_the_code/screen.png) | Left: Media Assets; Center: 9:16 vertical canvas & timeline; Right: Inspector & production balance |
-| `/captions/*` | `src/views/captions/index.vue` | [`workspace-captions.png`](../docs/stitch_shine_app_design/caption_management_shadows_in_the_code/screen.png) | Left: 9:16 caption preview; Center: Cue timeline; Right: Transcription & style presets |
-| `/export/*` | `src/views/export/index.vue` | [`workspace-episode-export.png`](../docs/stitch_shine_app_design/export_publish_shadows_in_the_code/screen.png) | Left: Cover generator & preview; Right: Social platform targets & viral caption |
-| `/dubbing/*` | `src/views/dubbing/index.vue` | [`workspace-voice-dubbing.png`](../docs/stitch_shine_app_design/voice_music_shadows_in_the_code/screen.png) | Left: Voice profiles; Center: Emotional curve; Right: Neural engine performance controls |
-| `/persona/*` | `src/views/persona/index.vue` | [`workspace-characters-2.png`](../docs/stitch_shine_app_design/character_profile_modal_mara_vance/screen.png) | Left: Character list; Center: Facial anchors & outfit continuity; Right: Generation mode |
-| `/analytics/*` | `src/views/analytics/index.vue` | [`analytics.png`](../docs/stitch_shine_app_design/shine_ai_analytics_light_mode/screen.png) & [`workspace-episode-analytic.png`](../docs/stitch_shine_app_design/shine_project_analysis_aligned_light_mode/screen.png) | KPI stats, retention curve line chart, platform revenue donut chart, top episodes table |
-| `/audio/*` | `src/views/audio/index.vue` | [`audio-mixing.png`](../docs/stitch_shine_app_design/voice_music_shadows_in_the_code/screen.png) | Left: Master VU meters & auto-ducking; Center: Multi-track audio timeline; Right: Parametric EQ |
-| `/environment/*` | `src/views/environment/index.vue` | [`workspace-eposode-scene-environment.png`](../docs/stitch_shine_app_design/episode_editor_shadows_in_the_code/screen.png) | Top: Prompt bar; Left: Mood presets; Center: 9:16 background preview; Right: Camera & lighting engine |
-| `/reviews/*` | `src/views/reviews/index.vue` | [`workspace-reviews.png`](../docs/stitch_shine_app_design/episode_editor_shadows_in_the_code/screen.png) | Center: Frame-accurate video preview with pin markers; Right: Real-time feedback panel |
-| `/library/*` | `src/views/library/index.vue` | [`asset-library.png`](../docs/stitch_shine_app_design/shine_team_shared_workspace/screen.png) & [`workspace-library.png`](../docs/stitch_shine_app_design/shine_team_shared_workspace/screen.png) | Left: Collections & LoRA trainer; Center: Character LoRA card grid |
-
+| `/` | `src/pages/Home.vue` | [`home.png`](../docs/stitch_shine_app_design/shine_marketing_landing_light_mode/screen.png) | Hero section, Marquee ticker, Bento grid features, Phone mockup preview, Pricing tiers |
+| `/dashboard` | `src/pages/dashboard/index.vue` | [`dashboard.png`](../docs/stitch_shine_app_design/project_hub_dashboard_light_mode/screen.png) | KPI metric cards, series grid with genre tags, SeriesWizardModal creation trigger |
+| `/projects/:id` | `src/pages/projects/ProjectWorkspacePage.vue` | [`workspace-editor.png`](../docs/stitch_shine_app_design/episode_editor_shadows_in_the_code/screen.png) | 4-Tab Studio Workspace (`PipelineTab`, `ScriptTab`, `AudioTab`, `CaptionsTab`), 9:16 WebGL Canvas, OpenVideo multi-track timeline, AI Copilot Sidebar (`Chatbot.vue`) |
+| `/assets` | `src/pages/assets/AssetLibraryPage.vue` | [`asset-library.png`](../docs/stitch_shine_app_design/shine_team_shared_workspace/screen.png) | Stock video/photo search (Pexels), Freesound SFX search, uploaded character LoRAs |
+| `/analytics` | `src/pages/analytics/AnalyticsPage.vue` | [`analytics.png`](../docs/stitch_shine_app_design/shine_ai_analytics_light_mode/screen.png) | Audience retention curve chart, episode watch time, multi-platform export stats |
+| `/settings` | `src/pages/settings/SettingsPage.vue` | [`settings.png`](../docs/stitch_shine_app_design/settings_light_mode/screen.png) | Tabbed configuration (Profile, Billing, API Models, Storage, Render Cluster, Team Directory, Observability, Legal) |
+| `/auth/*` | `src/pages/auth/*.vue` | [`login.png`](../docs/stitch_shine_app_design/login/screen.png) | Hero brand visual column + centered auth form card |
 
 ### 1.2 Application Layout Shells (`src/layouts/`)
 
-The application defines 5 core layout shells to encapsulate structural UI patterns:
+The application defines 4 core layout shells to encapsulate structural UI patterns:
 
-1. **`DefaultLayout.vue`**: Simple layout for static and legal pages (`/terms`, `/privacy`, `/contact`, `/manual`). Features clean footer, `<router-view />`, no sidebar.
-2. **`HomeLayout.vue`**: Dedicated marketing landing layout for `/`. Features marketing header with Logo, nav links (Features, Pricing, Use Cases, Blog), LanguageSelect, Sign In button, Get Started button, clean footer, `<router-view />`, no sidebar.
-3. **`AuthLayout.vue`**: Authentication layout (`/auth/login`, `/auth/signup`, `/auth/forgot-password`, `/auth/reset-password`). Features left column Image/Video/Brand hero illustration (Shine branding) + right column centered card with `<router-view />`.
-4. **`AppLayout.vue`**: Main workspace management layout (`/dashboard`, `/projects`, `/team`, `/assets`, `/analytics`). Features `.g-sub-sidebar` collapsible menu (Series Dashboard, My Projects, Team Shared, Assets Library, Analytics; top logo icon menu and bottom user profile menu with Profile, Settings, LanguageSelect, Dark/Light toggle, logout and collapse toggle button at the bottom) + `.g-main-area` content space.
-5. **`StudioLayout.vue`**: Dedicated video production studio layout (`/wizard`, `/script/*`, `/editor/*`, `/persona/*`, `/dubbing/*`, `/captions/*`, `/audio/*`, `/environment/*`, `/reviews/*`, `/export/*` / `/publish/*`). Features `.g-header` logo with back to dashboard/my project/team shared button and tabs (Script, Editor, Characters, Library, Voice & Dubbing, Captions, Analytics, Export & Publish) + `.g-main-area` content space.
+1. **`HomeLayout.vue`**: Dedicated marketing landing layout for `/`. Features marketing header with Logo, nav links (Features, Pricing, Use Cases, Blog), LanguageSelect, Sign In button, Get Started button, clean footer, `<router-view />`, no sidebar.
+2. **`AuthLayout.vue`**: Authentication layout (`/auth/login`, `/auth/signup`, `/auth/forgot-password`, `/auth/reset-password`). Features left column Image/Video/Brand hero illustration (Shine branding) + right column centered card with `<router-view />`.
+3. **`AppLayout.vue`**: Main workspace management layout (`/dashboard`, `/assets`, `/analytics`, `/settings`). Features collapsible sidebar navigation (Series Dashboard, My Projects, Team Shared, Assets Library, Analytics; top logo icon menu and bottom user profile menu with Profile, Settings, LanguageSelect, Dark/Light toggle, logout and collapse toggle button) + main content area.
+4. **`StudioLayout.vue`**: Dedicated full-screen video production studio layout for `/projects/:id` (`ProjectWorkspacePage.vue`), hosting the 4-tab workflow (`PipelineTab`, `ScriptTab`, `AudioTab`, `CaptionsTab`), embedded OpenVideo WebGL engine, and AI Copilot sidebar drawer.
 
 ---
 

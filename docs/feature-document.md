@@ -27,21 +27,20 @@ To be the ultimate AI Director and Production Studio for vertical micro-dramas, 
 
 | Feature Module | Description | Priority | Phase | Status |
 | :--- | :--- | :---: | :---: | :---: |
-| **Project Hub** | Dashboard for all drama series, KPI tracking, and project management. | P0 | V1 | Active |
-| **Onboarding Wizard** | 3-step genre selection and AI adaptation wizard. | P1 | V1 | Active |
-| **Script & Scene Assembly** | AI-assisted script editor and storyboard grid. | P0 | V1 | Active |
-| **Video Editor / Timeline** | Vertical 9:16 preview, multi-track timeline, and scene inspector. | P0 | V1 | Active |
-| **Auto-Captions & Subtitle Styling** | Auto-transcription, translation, and dynamic subtitle presets. | P0 | V1 | Active |
-| **Export & Smart Publishing** | Smart cover generation, AI metadata, and direct social API posting. | P1 | V2 | Planned |
-| **Voice & Dubbing** | Neural voice generation, lip-sync, and emotion control. | P0 | V1 | Active |
-| **Persona Studio** | Character consistency, facial anchors, and outfit continuity. | P0 | V1 | Active |
-| **Analytics Insights** | Granular KPI tracking, viewer retention, and platform revenue. | P1 | V2 | Planned |
-| **Audio Mixing** | AI auto-ducking, master mixer, and effects chains. | P1 | V2 | Planned |
-| **Viral Hook Analyzer** | AI retention prediction and visual/emotional hook suggestions. | P2 | V3 | Planned |
-| **Virtual Set Studio** | Generative AI environment creation and relighting. | P1 | V2 | Planned |
-| **Collaboration Review** | Real-time commenting, version history, and feedback resolution. | P2 | V3 | Planned |
-| **Asset Library** | Management of AI characters, LoRA models, and environments. | P0 | V1 | Active |
-| **Transitions/SFX Library** | AI-generated transitions, sound effects, and neural soundstage. | P1 | V2 | Planned |
+| **Project Hub & Series Studio** | Dashboard for all drama series, episode management, and creation wizards. | P0 | V1 | Active |
+| **Onboarding Wizard** | 3-step genre selection, AI story skeleton adaptation, and trend detection. | P1 | V1 | Active |
+| **Script & Scene Assembly** | AI screenplay breakdown, dialog cue generator, and storyboard panel creation. | P0 | V1 | Active |
+| **OpenVideo WebGL Timeline** | Vertical 9:16 canvas preview, multi-track timeline, clip trimming/splitting. | P0 | V1 | Active |
+| **Auto-Captions & Translation** | Word-level kinetic subtitles, karaoke timing, translation, and SRT export. | P0 | V1 | Active |
+| **Dual-Mode Video Export** | Client WebCodecs render & Cloud Run headless Playwright WebCodecs worker. | P0 | V1 | Active |
+| **Voice Casting & Dubbing** | Multi-speaker neural TTS, granular emotion/pitch control, multi-lang tracks. | P0 | V1 | Active |
+| **AI Audio Stem Separation** | Meta Demucs v4 on Cloud Run for vocal isolation and clean BGM extraction. | P0 | V1 | Active |
+| **AI Director Copilot (Chatbot)** | Interactive sidebar agent executing natural language timeline operations. | P0 | V1 | Active |
+| **Persona & Cast Studio** | Character visual consistency reference sheets and avatar generators. | P0 | V1 | Active |
+| **Asset Library (GCS / B2 / S3)**| Media management with Pexels stock video/photo & Freesound SFX search. | P0 | V1 | Active |
+| **Analytics & Retention Engine** | Granular KPI tracking, episode retention curves, and platform export stats. | P1 | V1 | Active |
+| **Multi-DB Architecture** | Firestore Native (`shine-db`), MongoDB, SQLite, MapDB abstraction. | P0 | V1 | Active |
+| **Cloud Run Infrastructure** | Serverless scale-to-zero microservices in `us-central1` with Cloud Scheduler. | P0 | V1 | Active |
 
 ## 4. Detailed Feature Descriptions
 

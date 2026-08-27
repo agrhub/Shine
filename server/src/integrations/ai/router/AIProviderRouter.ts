@@ -10,7 +10,7 @@ export interface RouteGenerationOptions {
   mode?: 'DRAFT_STORYBOARD' | 'COMMERCIAL_EXPORT';
   prompt: string;
   type: 'TEXT' | 'IMAGE' | 'VIDEO' | 'VOICE' | 'MUSIC';
-  aspectRatio?: '9:16' | '1:1' | '16:9';
+  aspectRatio?: '9:16' | '1:1' | '16:9' | '4:3';
   model?: string;
   jsonMode?: boolean;
   systemInstruction?: string;
@@ -47,13 +47,13 @@ export class AIProviderRouter {
             const flowAccountAdapterParam = {
               id: bestAccount.id,
               email: bestAccount.email,
-              flowST: bestAccount.session_token,
-              flowAT: bestAccount.access_token,
-              projectId: bestAccount.project_id,
+              flow_st: bestAccount.session_token,
+              flow_at: bestAccount.access_token,
+              project_id: bestAccount.project_id,
               status: AIAccountStatus.READY,
               credits: bestAccount.credits_remaining,
-              accountType: AIAccountType.GOOGLE_FLOW,
-              isActive: true,
+              account_type: AIAccountType.GOOGLE_FLOW,
+              is_active: true,
             };
 
             const imageInputs = options.imageInputs || (options.characterReferences?.length ? options.characterReferences : []);
@@ -129,13 +129,13 @@ export class AIProviderRouter {
             const flowAccountAdapterParam = {
               id: bestAccount.id,
               email: bestAccount.email,
-              flowST: bestAccount.session_token,
-              flowAT: bestAccount.access_token,
-              projectId: bestAccount.project_id,
+              flow_st: bestAccount.session_token,
+              flow_at: bestAccount.access_token,
+              project_id: bestAccount.project_id,
               status: AIAccountStatus.READY,
               credits: bestAccount.credits_remaining,
-              accountType: AIAccountType.GOOGLE_FLOW,
-              isActive: true,
+              account_type: AIAccountType.GOOGLE_FLOW,
+              is_active: true,
             };
 
             const flowResult: any = await flowAdapter.generateVideo(
@@ -278,7 +278,7 @@ export class AIProviderRouter {
     });
 
     return {
-      provider: 'Gemini (Gemini 2.5/3.x)',
+      provider: 'Gemini',
       data: text,
     };
   }
@@ -298,6 +298,85 @@ export class AIProviderRouter {
     return String(res.data || '');
   }
 
+  private extractJsonString(text: string): string {
+    const str = text.trim();
+    if (!str) return '{}';
+
+    // 1. Try parsing directly if it's already pure JSON
+    try {
+      JSON.parse(str);
+      return str;
+    } catch {}
+
+    // 2. Try markdown fenced codeblock
+    const codeBlockMatch = str.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (codeBlockMatch && codeBlockMatch[1]) {
+      const candidate = codeBlockMatch[1].trim();
+      try {
+        JSON.parse(candidate);
+        return candidate;
+      } catch {}
+    }
+
+    // 3. Robust Bracket Balancing to find exact outermost JSON object or array
+    const firstBrace = str.indexOf('{');
+    const firstBracket = str.indexOf('[');
+    if (firstBrace === -1 && firstBracket === -1) return str;
+
+    const isObject = firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket);
+    const startIdx = isObject ? firstBrace : firstBracket;
+    const openChar = isObject ? '{' : '[';
+    const closeChar = isObject ? '}' : ']';
+
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    let endIdx = -1;
+
+    for (let i = startIdx; i < str.length; i++) {
+      const char = str[i];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (char === '\\' && inString) {
+        escape = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (!inString) {
+        if (char === openChar) {
+          depth++;
+        } else if (char === closeChar) {
+          depth--;
+          if (depth === 0) {
+            endIdx = i;
+            break;
+          }
+        }
+      }
+    }
+
+    if (endIdx !== -1) {
+      const extracted = str.substring(startIdx, endIdx + 1).trim();
+      try {
+        JSON.parse(extracted);
+        return extracted;
+      } catch {}
+    }
+
+    // 4. Fallback to lastIndex boundary
+    const lastIdx = isObject ? str.lastIndexOf('}') : str.lastIndexOf(']');
+    if (lastIdx > startIdx) {
+      return str.substring(startIdx, lastIdx + 1).trim();
+    }
+
+    return str;
+  }
+
   async generateJSON<T>(prompt: string, fallbackData?: T, options?: { model?: string; systemInstruction?: string }): Promise<T> {
     const db = await getDatabaseProvider();
     const studioConfig: any = (await db.getSystemSetting('studio_config')) || {};
@@ -311,8 +390,7 @@ export class AIProviderRouter {
         systemInstruction: options?.systemInstruction,
       });
       const rawText = String(res.data || '');
-      const match = rawText.match(/```json([\s\S]*?)```/) || rawText.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-      const jsonStr = match ? match[1] || match[0] : rawText;
+      const jsonStr = this.extractJsonString(rawText);
       return JSON.parse(jsonStr) as T;
     } catch (err: any) {
       Logger.error(`[AIProviderRouter] generateJSON error: ${err.message}`);
@@ -321,7 +399,7 @@ export class AIProviderRouter {
     }
   }
 
-  async generateImage(prompt: string, options?: { aspectRatio?: '9:16' | '1:1' | '16:9'; model?: string; systemPrompt?: string; characterReferences?: string[]; imageInputs?: string[] }): Promise<{ url: string; mimeType: string; provider: string; buffer?: Buffer }> {
+  async generateImage(prompt: string, options?: { aspectRatio?: '9:16' | '1:1' | '16:9' | '4:3'; model?: string; systemPrompt?: string; characterReferences?: string[]; imageInputs?: string[] }): Promise<{ url: string; mimeType: string; provider: string; buffer?: Buffer }> {
     const db = await getDatabaseProvider();
     const studioConfig: any = (await db.getSystemSetting('studio_config')) || {};
     const targetModel = options?.model || studioConfig?.gemini?.imageModel || EnvConfig.geminiModelImage;

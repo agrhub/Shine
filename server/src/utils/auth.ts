@@ -16,7 +16,7 @@ export interface DecodedAuthUser {
 /**
  * Extracts and returns the authenticated userId from Request (headers/body/query)
  */
-export function getUserId(req: Request | any, defaultUserId = 'usr_default'): string {
+export function getUserId(req: Request | any, defaultUserId = ''): string {
   if (req?.user?.id) return req.user.id;
   if (req?.user?.userId) return req.user.userId;
 

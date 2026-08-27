@@ -1,6 +1,7 @@
 import { aiProviderRouter } from '@/integrations/ai/router/AIProviderRouter.js';
 import { getDatabaseProvider, SocialAccount } from '@/database/index.js';
 import { platformAnalyticsService } from '@/services/PlatformAnalyticsService.js';
+import { PromptLoader } from '@/utils/PromptLoader.js';
 import { Logger } from '@/utils/logger.js';
 
 export class AnalysisService {
@@ -8,33 +9,16 @@ export class AnalysisService {
    * Analyzes script pacing and retention dynamics using AI based on real platform retention curve standards.
    */
   async analyzeScriptPacing(scriptData: any) {
-    const prompt = `You are a viral short-drama retention and pacing algorithm analyzer trained on real-world TikTok, Douyin, and YouTube Shorts viewer drop-off analytics.
-Analyze the following script content for pacing, retention risks, tension trajectory, hook strength, and cliffhanger density:
-${typeof scriptData === 'string' ? scriptData : JSON.stringify(scriptData, null, 2)}
-
-Return strict JSON:
-{
-  "pacingScore": 92,
-  "retentionScore": 88,
-  "viralProbability": "95%",
-  "emotionalCurve": [
-    { "second": 0, "tension": 40, "description": "3-second opening hook" },
-    { "second": 15, "tension": 72, "description": "Core conflict escalation" },
-    { "second": 45, "tension": 91, "description": "Pre-climax reversal" },
-    { "second": 60, "tension": 98, "description": "Episode cliffhanger hook" }
-  ],
-  "recommendations": [
-    "Ensure first 3 seconds contain immediate dialogue or action hook",
-    "Pacing accelerates smoothly toward the 45s revelation"
-  ]
-}`;
+    const prompt = PromptLoader.render('trend/script_pacing_analysis', {
+      scriptData: typeof scriptData === 'string' ? scriptData : JSON.stringify(scriptData, null, 2),
+    });
 
     try {
       return await aiProviderRouter.generateJSON(prompt, {
-        pacingScore: 92,
-        retentionScore: 88,
-        viralProbability: '94%',
-        emotionalCurve: [
+        pacing_score: 92,
+        retention_score: 88,
+        viral_probability: '94%',
+        emotional_curve: [
           { second: 0, tension: 40, description: '3-second opening hook' },
           { second: 15, tension: 72, description: 'Core conflict escalation' },
           { second: 45, tension: 91, description: 'Pre-climax reversal' },
@@ -50,10 +34,10 @@ Return strict JSON:
     } catch (err: any) {
       Logger.warn(`[AnalysisService] Pacing analysis fallback: ${err.message}`);
       return {
-        pacingScore: 90,
-        retentionScore: 85,
-        viralProbability: '91%',
-        emotionalCurve: [
+        pacing_score: 90,
+        retention_score: 85,
+        viral_probability: '91%',
+        emotional_curve: [
           { second: 0, tension: 35, description: 'Opening Hook' },
           { second: 15, tension: 70, description: 'Escalation' },
           { second: 45, tension: 90, description: 'Climax' },

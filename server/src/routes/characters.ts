@@ -5,40 +5,25 @@ import { aiProviderRouter } from '../integrations/ai/router/AIProviderRouter.js'
 import { StorageFactory } from '../services/storage/StorageFactory.js';
 import { SynthIDService } from '../services/SynthIDService.js';
 import { getVisualStylePrompt } from '../constants/VisualStyles.js';
+import { PromptLoader } from '@/utils/PromptLoader.js';
 import { Logger } from '@/utils/logger.js';
 import { nanoid } from 'nanoid';
 
 export const characterRouter = Router();
 
-// GET /v1/characters — List characters directly from Database
+// GET /api/characters — List characters directly from Database
 characterRouter.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { seriesId } = req.query as { seriesId?: string };
+    const seriesId = (req.query.series_id || req.query.seriesId) as string | undefined;
     const db = await getDatabaseProvider();
 
     if (seriesId) {
       const series = await db.getSeriesById(seriesId);
       const seriesChars = series?.characters || series?.master_plan?.characters || [];
-      const list = (Array.isArray(seriesChars) ? seriesChars : []).map((c: any, idx: number) => ({
-        id: c.id || `char_${seriesId}_${idx + 1}`,
-        seriesId,
-        name: c.name || `Character ${idx + 1}`,
-        gender: c.gender || (idx % 2 === 0 ? 'Female' : 'Male'),
-        age: c.age || 25,
-        role: (c.role?.toLowerCase() === 'protagonist' ? 'protagonist' : c.role?.toLowerCase() === 'antagonist' ? 'antagonist' : 'supporter'),
-        personality: c.traits || c.identity || c.personality || 'Driven and focused',
-        visualTraits: c.visualTraits || c.traits || 'Modern cinematic framing',
-        avatarUrl: c.avatarUrl || c.avatar || null,
-        loraModel: c.loraAnchor || c.loraModel || `lora-${(c.name || 'char').toLowerCase().replace(/\s+/g, '-')}-sdxl`,
-        meshMatchRate: c.meshMatchRate || 98.2,
-        anchors: c.anchors || [],
-        wardrobe: c.wardrobe || [],
-        createdAt: c.createdAt || new Date().toISOString(),
-      }));
-
+      
       res.json({
         code: 200,
-        data: list,
+        data: seriesChars,
         message: 'Characters fetched successfully from database',
         error: null,
       });
@@ -54,7 +39,7 @@ characterRouter.get('/', async (req: Request, res: Response): Promise<void> => {
         for (const c of chars) {
           aggregatedChars.push({
             ...c,
-            seriesId: s.id,
+            series_id: s.id,
           });
         }
       }
@@ -71,39 +56,43 @@ characterRouter.get('/', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// POST /v1/characters — Create/register character in Series within Database
+// POST /api/characters — Create/register character in Series within Database
 characterRouter.post('/', async (req: Request, res: Response) => {
   try {
-    const { name, gender, age, role, personality, visualTraits, seriesId, avatarUrl } = req.body;
+    const { name, gender, age, role, nationality, personality, visual_traits, visualTraits, series_id, seriesId, avatar } = req.body;
     const charName = name || 'New Character';
-    const charTraits = visualTraits || personality || 'Modern cinematic look';
+    const charTraits = visual_traits || visualTraits || personality || 'Modern cinematic look';
     const db = await getDatabaseProvider();
 
     const charId = `char_${Date.now()}`;
+    const targetSeriesId = series_id || seriesId || 'series-001';
     const newChar: any = {
       id: charId,
-      seriesId: seriesId || 'series-001',
+      series_id: targetSeriesId,
       name: charName,
       gender: gender || 'Female',
       age: age || 25,
       role: role || 'protagonist',
-      personality: personality || 'Complex and driven',
-      visualTraits: charTraits,
-      avatarUrl: avatarUrl || null,
-      avatar: avatarUrl || null,
-      loraModel: `lora-${charName.toLowerCase().replace(/\s+/g, '-')}-sdxl`,
-      meshMatchRate: 98.5,
-      anchors: [],
-      wardrobe: [],
-      createdAt: new Date().toISOString(),
+      nationality: nationality || '',
+      identity: personality || '',
+      traits: charTraits,
+      visual_traits: charTraits,
+      physical_characteristics: charTraits,
+      appearance: charTraits,
+      clothing_and_accessories: '',
+      speech_style: 'Sharp and concise',
+      avatar: avatar || null,
+      lora_model: `lora-${charName.toLowerCase().replace(/\s+/g, '-')}-sdxl`,
+      description: '',
+      created_at: new Date().toISOString(),
     };
 
-    if (seriesId) {
-      const series = await db.getSeriesById(seriesId);
+    if (targetSeriesId) {
+      const series = await db.getSeriesById(targetSeriesId);
       if (series) {
         const characters = Array.isArray(series.characters) ? [...series.characters] : [];
         characters.push(newChar);
-        await db.updateSeries(seriesId, { characters });
+        await db.updateSeries(targetSeriesId, { characters });
       }
     }
 
@@ -118,42 +107,45 @@ characterRouter.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// POST /v1/characters/:characterId/portrait — Generate single character avatar / portrait image via CharacterService
+// POST /api/characters/:characterId/portrait — Generate single character avatar / portrait image via CharacterService
 characterRouter.post('/:characterId/portrait', async (req: Request, res: Response) => {
   try {
     const { characterId } = req.params;
-    const { seriesId, name, age, gender, visualTraits, prompt, style, visualStyle, visualStylePrompt, aspectRatio } = req.body;
+    const { series_id, seriesId, name, age, gender, nationality, visual_traits, visualTraits, prompt, style, visual_style, visualStyle, visual_style_prompt, visualStylePrompt, aspect_ratio, aspectRatio } = req.body;
     const db = await getDatabaseProvider();
 
     let charName = name;
-    let charTraits = visualTraits;
+    let charTraits = visual_traits || visualTraits;
     let charAge = age;
     let charGender = gender;
+    let charNationality = nationality;
     let targetSeries: any = null;
+    const targetSeriesId = series_id || seriesId;
 
-    if (seriesId) {
-      targetSeries = await db.getSeriesById(seriesId);
+    if (targetSeriesId) {
+      targetSeries = await db.getSeriesById(targetSeriesId);
       const dbChar = (targetSeries?.characters || targetSeries?.master_plan?.characters || []).find(
         (c: any) => c.id === characterId || c.name === name
       );
       if (dbChar) {
         charName = dbChar.name || charName;
-        charTraits = dbChar.visualTraits || dbChar.traits || charTraits;
+        charTraits = dbChar.visual_traits || dbChar.traits || charTraits;
         charAge = dbChar.age || charAge;
         charGender = dbChar.gender || charGender;
+        charNationality = dbChar.nationality || charNationality;
       }
     }
 
-    const resolvedStyle = visualStyle || targetSeries?.visual_style || 'realistic';
-    const resolvedStylePrompt = visualStylePrompt || getVisualStylePrompt(resolvedStyle);
-    const targetAspect = "9:16"//(aspectRatio || targetSeries?.ratio || '9:16').trim();
+    const resolvedStyle = visual_style || visualStyle || targetSeries?.visual_style || 'realistic';
+    const resolvedStylePrompt = visual_style_prompt || visualStylePrompt || getVisualStylePrompt(resolvedStyle);
+    const targetAspect = (aspect_ratio || aspectRatio || '9:16').trim();
 
     charName = charName || 'Character';
     charTraits = charTraits || 'Cinematic character portrait';
-    const ageTag = charAge ? `${charAge}-year-old ` : '';
-    const genderTag = charGender && charGender !== 'neutral' ? `${charGender} ` : '';
-
-    const fullPrompt = prompt || `${resolvedStylePrompt}, portrait of ${ageTag}${genderTag}${charName}, ${charTraits}, ${style || 'cinematic lighting'}, age-accurate facial features, character continuity reference.`;
+    const ageTag = charAge ? `age: ${charAge}-year-old` : '';
+    const genderTag = charGender && charGender !== 'neutral' ? `gender: ${charGender}` : '';
+    const nationalityTag = charNationality ? `nationality: ${charNationality}` : '';
+    const fullPrompt = prompt || `${resolvedStylePrompt}, portrait of ${charName}, ${ageTag}, ${genderTag}, ${nationalityTag}, ${charTraits}, ${style || 'cinematic lighting'}, age-accurate facial features, character continuity reference.`;
 
     const imgResult = await aiProviderRouter.generateImage(fullPrompt, {
       aspectRatio: targetAspect,
@@ -170,7 +162,7 @@ characterRouter.post('/:characterId/portrait', async (req: Request, res: Respons
     const synthIdResult = await SynthIDService.embedSynthID({
       assetType: 'image',
       model: imgResult.provider || 'Google Flow',
-      seriesId: seriesId,
+      seriesId: targetSeriesId,
       sceneId: characterId,
     });
 
@@ -182,43 +174,41 @@ characterRouter.post('/:characterId/portrait', async (req: Request, res: Respons
       type: 'character_portrait',
       ext: '.PNG',
       size: `${(s3.size / (1024 * 1024)).toFixed(1)} MB`,
-      sizeBytes: s3.size,
-      categoryLabel: 'Character Portrait',
-      categoryColor: 'text-violet-500 dark:text-violet-400',
-      s3Key: s3.key,
+      size_bytes: s3.size,
+      category_label: 'Character Portrait',
+      category_color: 'text-violet-500 dark:text-violet-400',
+      s3_key: s3.key,
       url: finalUrl,
       thumbnail: finalUrl,
-      seriesId,
-      characterId,
+      series_id: targetSeriesId,
+      character_id: characterId,
       prompt: fullPrompt,
       provider: imgResult.provider,
       aspect: 'aspect-[9/16]',
-      synthIdVerified: true,
-      synthIdHash: synthIdResult.synthIdHash,
-      synthIdMetadata: synthIdResult.synthIdMetadata,
+      synth_id_verified: true,
+      synth_id_hash: synthIdResult.synthIdHash,
+      synth_id_metadata: synthIdResult.synthIdMetadata,
       created_at: new Date().toISOString(),
     });
 
     // Update Series Character in Database
-    if (seriesId && targetSeries && Array.isArray(targetSeries.characters)) {
+    if (targetSeriesId && targetSeries && Array.isArray(targetSeries.characters)) {
       const cIdx = targetSeries.characters.findIndex((c: any) => c.id === characterId || c.name === charName);
       if (cIdx !== -1) {
-        targetSeries.characters[cIdx].avatarUrl = finalUrl;
         targetSeries.characters[cIdx].avatar = finalUrl;
         if (charAge) targetSeries.characters[cIdx].age = charAge;
         if (charGender) targetSeries.characters[cIdx].gender = charGender;
-        await db.updateSeries(seriesId, { characters: targetSeries.characters });
+        await db.updateSeries(targetSeriesId, { characters: targetSeries.characters });
       }
     }
 
     return res.json({
       code: 200,
       data: {
-        imageUrl: finalUrl,
-        url: finalUrl,
-        assetId,
-        s3Key: s3.key,
-        characterId,
+        image_url: finalUrl,
+        asset_id: assetId,
+        s3_key: s3.key,
+        character_id: characterId,
         provider: imgResult.provider,
       },
       message: 'Character portrait generated and saved to database successfully',
@@ -230,22 +220,23 @@ characterRouter.post('/:characterId/portrait', async (req: Request, res: Respons
   }
 });
 
-// POST /v1/characters/:characterId/anchors — Extract 8 facial consistency anchors using CharacterService & AI
+// POST /api/characters/:characterId/anchors — Extract 8 facial consistency anchors using CharacterService & AI
 characterRouter.post('/:characterId/anchors', async (req: Request, res: Response) => {
   try {
     const { characterId } = req.params;
-    const { seriesId, name, age, gender, visualTraits, visualStyle, visualStylePrompt } = req.body;
+    const { series_id, seriesId, name, age, gender, visual_traits, visualTraits, visual_style, visualStyle, visual_style_prompt, visualStylePrompt } = req.body;
     const db = await getDatabaseProvider();
 
     let targetSeries: any = null;
     let charName = name;
-    let charTraits = visualTraits;
+    let charTraits = visual_traits || visualTraits;
     let charAge = age;
     let charGender = gender;
+    const targetSeriesId = series_id || seriesId;
 
     let cIdx = -1;
-    if (seriesId) {
-      targetSeries = await db.getSeriesById(seriesId);
+    if (targetSeriesId) {
+      targetSeries = await db.getSeriesById(targetSeriesId);
       if (targetSeries && Array.isArray(targetSeries.characters)) {
         cIdx = targetSeries.characters.findIndex(
           (c: any) => c.id === characterId || c.name === name
@@ -253,15 +244,15 @@ characterRouter.post('/:characterId/anchors', async (req: Request, res: Response
         if (cIdx !== -1) {
           const dbChar = targetSeries.characters[cIdx];
           charName = dbChar.name || charName;
-          charTraits = dbChar.visualTraits || dbChar.traits || charTraits;
+          charTraits = dbChar.visual_traits || dbChar.traits || charTraits;
           charAge = dbChar.age || charAge;
           charGender = dbChar.gender || charGender;
         }
       }
     }
 
-    const resolvedStyle = visualStyle || targetSeries?.visual_style || 'realistic';
-    const resolvedStylePrompt = visualStylePrompt || getVisualStylePrompt(resolvedStyle);
+    const resolvedStyle = visual_style || visualStyle || targetSeries?.visual_style || 'realistic';
+    const resolvedStylePrompt = visual_style_prompt || visualStylePrompt || getVisualStylePrompt(resolvedStyle);
 
     charName = charName || 'Character';
     charTraits = charTraits || 'Modern cinematic look';
@@ -279,87 +270,75 @@ characterRouter.post('/:characterId/anchors', async (req: Request, res: Response
     let existingFrontalUrl = '';
     if (cIdx !== -1 && targetSeries?.characters?.[cIdx]) {
       const dbChar = targetSeries.characters[cIdx];
-      existingFrontalUrl = dbChar.avatarUrl || dbChar.avatar || dbChar.anchors?.[0]?.imageUrl || '';
+      existingFrontalUrl = dbChar.avatar || dbChar.avatarUrl || dbChar.anchors?.[0]?.imageUrl || '';
     }
 
     // 1. Generate multi-angle facial consistency anchors using CharacterService with age, gender, wardrobe, visualStyle, and frontal reference
     const facialAnchors = await characterService.extractFacialAnchors(characterId, charName, charTraits, charAge, charGender, wardrobeDesc, existingFrontalUrl, resolvedStyle, resolvedStylePrompt);
 
-    const prompt = `Analyze facial consistency landmarks for character "${charName}" with visual traits: "${charTraits}".
-Extract 8 spatial key landmarks for LoRA face-lock in short drama video generation:
-1. front
-2. quarter_left
-3. quarter_right
-4. profile_left
-5. profile_right
-6. low_angle
-7. high_angle
-8. dramatic_close_up
-
-Respond in strict JSON:
-[
-  { "id": "anc-1", "name": "Frontal Primary View", "landmarkType": "front", "matchScore": 99.2, "status": "locked" },
-  { "id": "anc-2", "name": "45-Degree Side Profile", "landmarkType": "quarter_left", "matchScore": 98.4, "status": "locked" },
-  { "id": "anc-3", "name": "Right 45 Angle", "landmarkType": "quarter_right", "matchScore": 98.1, "status": "locked" },
-  { "id": "anc-4", "name": "Profile Left", "landmarkType": "profile_left", "matchScore": 97.5, "status": "locked" },
-  { "id": "anc-5", "name": "Profile Right", "landmarkType": "profile_right", "matchScore": 97.3, "status": "locked" },
-  { "id": "anc-6", "name": "Low Dramatic", "landmarkType": "low_angle", "matchScore": 96.8, "status": "locked" },
-  { "id": "anc-7", "name": "High Tense", "landmarkType": "high_angle", "matchScore": 96.4, "status": "locked" },
-  { "id": "anc-8", "name": "Cinematic Dramatic Close-up", "landmarkType": "dramatic_close_up", "matchScore": 98.9, "status": "locked" }
-]`;
+    const prompt = PromptLoader.render('character/facial_consistency_landmarks', {
+      charName,
+      charTraits,
+    });
 
     const extractedAnchors = await aiProviderRouter.generateJSON<any[]>(prompt, [
-      { id: 'anc-1', name: 'Frontal Primary View', landmarkType: 'front', matchScore: 99.2, status: 'locked', imageUrl: facialAnchors?.frontAnchorUrl },
-      { id: 'anc-2', name: '45-Degree Side Profile', landmarkType: 'quarter_left', matchScore: 98.4, status: 'locked', imageUrl: facialAnchors?.sideAnchorUrl },
-      { id: 'anc-8', name: 'Cinematic Dramatic Close-up', landmarkType: 'dramatic_close_up', matchScore: 98.9, status: 'locked', imageUrl: facialAnchors?.expressionSheetUrl },
+      { id: 'anc-1', name: 'Frontal Primary View', landmark_type: 'front', match_score: 99.2, status: 'locked', image_url: facialAnchors?.frontAnchorUrl },
+      { id: 'anc-2', name: '45-Degree Side Profile', landmark_type: 'quarter_left', match_score: 98.4, status: 'locked', image_url: facialAnchors?.sideAnchorUrl },
+      { id: 'anc-8', name: 'Cinematic Dramatic Close-up', landmark_type: 'dramatic_close_up', match_score: 98.9, status: 'locked', image_url: facialAnchors?.expressionSheetUrl },
     ], {
       systemInstruction: 'You are an AI Character Consistency & Facial Landmark Extraction Engine for cinematic video diffusion models.',
     });
 
     let finalAnchors: any[] = [];
     if (facialAnchors?.allAnchors && Array.isArray(facialAnchors.allAnchors) && facialAnchors.allAnchors.length > 0) {
-      finalAnchors = facialAnchors.allAnchors;
+      finalAnchors = facialAnchors.allAnchors.map((a: any) => ({
+        id: a.id,
+        name: a.name,
+        image_url: a.imageUrl || a.image_url,
+        match_score: a.matchScore || a.match_score || 98.5,
+        landmark_type: a.landmarkType || a.landmark_type,
+        status: a.status || 'locked',
+      }));
     } else if (Array.isArray(extractedAnchors) && extractedAnchors.length > 0) {
       if (facialAnchors) {
-        if (extractedAnchors[0]) extractedAnchors[0].imageUrl = facialAnchors.frontAnchorUrl;
-        if (extractedAnchors[1]) extractedAnchors[1].imageUrl = facialAnchors.sideAnchorUrl;
-        if (extractedAnchors[extractedAnchors.length - 1]) extractedAnchors[extractedAnchors.length - 1].imageUrl = facialAnchors.expressionSheetUrl;
+        if (extractedAnchors[0]) extractedAnchors[0].image_url = facialAnchors.frontAnchorUrl;
+        if (extractedAnchors[1]) extractedAnchors[1].image_url = facialAnchors.sideAnchorUrl;
+        if (extractedAnchors[extractedAnchors.length - 1]) extractedAnchors[extractedAnchors.length - 1].image_url = facialAnchors.expressionSheetUrl;
       }
       finalAnchors = extractedAnchors;
     }
 
-    const avatarUrl = existingFrontalUrl || facialAnchors?.frontAnchorUrl || finalAnchors[0]?.imageUrl || '';
+    const avatarUrl = existingFrontalUrl || facialAnchors?.frontAnchorUrl || finalAnchors[0]?.image_url || '';
 
     // Persist each anchor image asset to Database
     for (const anc of finalAnchors) {
-      if (anc.imageUrl) {
+      if (anc.image_url) {
         await db.saveAsset({
           id: `ast_${nanoid(8)}`,
           name: `${charName}_${anc.name}`,
           type: 'character_anchor',
           ext: '.PNG',
-          url: anc.imageUrl,
-          thumbnail: anc.imageUrl,
-          seriesId,
-          characterId,
-          categoryLabel: 'Character Anchor',
-          categoryColor: 'text-violet-500 dark:text-violet-400',
+          url: anc.image_url,
+          thumbnail: anc.image_url,
+          series_id: targetSeriesId,
+          character_id: characterId,
+          category_label: 'Character Anchor',
+          category_color: 'text-violet-500 dark:text-violet-400',
           aspect: 'aspect-[9/16]',
-          metadata: { landmarkType: anc.landmarkType, matchScore: anc.matchScore },
+          metadata: { landmark_type: anc.landmark_type, match_score: anc.match_score },
           created_at: new Date().toISOString(),
         });
       }
     }
 
     // Persist to Database series
-    if (seriesId && targetSeries && Array.isArray(targetSeries.characters)) {
-      const cIdx = targetSeries.characters.findIndex((c: any) => c.id === characterId || c.name === charName);
-      if (cIdx !== -1) {
-        targetSeries.characters[cIdx].anchors = finalAnchors;
-        targetSeries.characters[cIdx].avatarUrl = avatarUrl || targetSeries.characters[cIdx].avatarUrl;
-        targetSeries.characters[cIdx].avatar = avatarUrl || targetSeries.characters[cIdx].avatar;
-        targetSeries.characters[cIdx].meshMatchRate = 98.7;
-        await db.updateSeries(seriesId, { characters: targetSeries.characters });
+    if (targetSeriesId && targetSeries && Array.isArray(targetSeries.characters)) {
+      const charIndex = targetSeries.characters.findIndex((c: any) => c.id === characterId || c.name === charName);
+      if (charIndex !== -1) {
+        targetSeries.characters[charIndex].anchors = finalAnchors;
+        targetSeries.characters[charIndex].avatar = avatarUrl || targetSeries.characters[charIndex].avatar;
+        targetSeries.characters[charIndex].mesh_match_rate = 98.7;
+        await db.updateSeries(targetSeriesId, { characters: targetSeries.characters });
       }
     }
 
@@ -367,11 +346,11 @@ Respond in strict JSON:
       code: 200,
       data: {
         id: characterId,
-        seriesId,
+        series_id: targetSeriesId,
         name: charName,
-        avatarUrl,
+        avatar: avatarUrl,
         anchors: finalAnchors,
-        meshMatchRate: 98.7,
+        mesh_match_rate: 98.7,
       },
       message: 'Facial consistency anchors extracted and locked successfully in database',
       error: null,
@@ -382,7 +361,7 @@ Respond in strict JSON:
   }
 });
 
-// POST /v1/characters/:characterId/anchors/:anchorId — Re-generate a single facial anchor angle
+// POST /api/characters/:characterId/anchors/:anchorId — Re-generate a single facial anchor angle
 characterRouter.post('/:characterId/anchors/:anchorId', async (req: Request, res: Response) => {
   try {
     const { characterId, anchorId } = req.params;
@@ -453,10 +432,10 @@ characterRouter.post('/:characterId/anchors/:anchorId', async (req: Request, res
       ext: '.PNG',
       url: singleAnchor.imageUrl,
       thumbnail: singleAnchor.imageUrl,
-      seriesId,
-      characterId,
-      categoryLabel: 'Character Anchor',
-      categoryColor: 'text-violet-500 dark:text-violet-400',
+      series_id: seriesId,
+      character_id: characterId,
+      category_label: 'Character Anchor',
+      category_color: 'text-violet-500 dark:text-violet-400',
       aspect: 'aspect-[9/16]',
       created_at: new Date().toISOString(),
     });
@@ -476,7 +455,7 @@ characterRouter.post('/:characterId/anchors/:anchorId', async (req: Request, res
   }
 });
 
-// POST /v1/characters/:characterId/wardrobe — Register/Generate outfit & continuity tags dynamically via AI
+// POST /api/characters/:characterId/wardrobe — Register/Generate outfit & continuity tags dynamically via AI
 characterRouter.post('/:characterId/wardrobe', async (req: Request, res: Response) => {
   try {
     const { characterId } = req.params;
@@ -558,11 +537,11 @@ Return strict JSON:
             ext: '.PNG',
             url: outfitThumbnail,
             thumbnail: outfitThumbnail,
-            seriesId,
-            characterId,
+            series_id: seriesId,
+            character_id: characterId,
             prompt: imagePrompt,
-            categoryLabel: 'Wardrobe Outfit',
-            categoryColor: 'text-emerald-500 dark:text-emerald-400',
+            category_label: 'Wardrobe Outfit',
+            category_color: 'text-emerald-500 dark:text-emerald-400',
             aspect: 'aspect-[9/16]',
             created_at: new Date().toISOString(),
           });
@@ -605,7 +584,7 @@ Return strict JSON:
   }
 });
 
-// POST /v1/characters/sync-shots — Synchronize character facial anchors & wardrobe continuity into all storyboard scenes
+// POST /api/characters/sync-shots — Synchronize character facial anchors & wardrobe continuity into all storyboard scenes
 characterRouter.post('/sync-shots', async (req: Request, res: Response) => {
   try {
     const { seriesId, episodeId } = req.body;

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import { geminiClient } from '../integrations/ai/gemini/GeminiClient.js';
+import { PromptLoader } from '../utils/PromptLoader.js';
 import { requireAuth } from '../middleware/RequireAuth.js';
 import { directorAgent } from '../agents/DirectorAgent.js';
 import { SocialAccount, getDatabaseProvider } from '../database/index.js';
@@ -210,22 +211,10 @@ router.post('/analyze', requireAuth, async (req: Request, res: Response) => {
       .map((c: any) => `- [${c.platform || 'Social'}] ${c.author || 'Viewer'}: "${c.text}" (Likes: ${c.likes || 0})`)
       .join('\n');
 
-    const prompt = `Analyze viewer reaction comments for Episode ID: ${episodeId}.
-Comments:
-${commentsSummary}
-
-Perform in-depth micro-drama audience analysis. Respond in strict JSON with the following structure:
-{
-  "sentiment": "Positive" | "Mixed" | "Critical" | "Highly Viral",
-  "positiveRatio": 85,
-  "topReactionTropes": ["Loved the cliffhanger slap", "Shocked by the betrayal reveal"],
-  "audienceComplaints": ["Scene 2 pacing felt slightly rushed"],
-  "scriptSuggestions": [
-    "Extend the confrontation dialogue between protagonists in the next episode",
-    "Add an even sharper audio sting cliffhanger at the end"
-  ],
-  "retentionForecast": 94
-}`;
+    const prompt = PromptLoader.render('trend/audience_engagement_analysis', {
+      episodeId,
+      commentsSummary,
+    });
 
     const rawResponse = await geminiClient.generateText({
       prompt,

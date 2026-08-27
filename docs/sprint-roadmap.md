@@ -180,25 +180,26 @@ Implement multi-platform publishing, AI viral cover poster generator, growth A/B
 
 ---
 
-### Sprint 7: OpenVideo Engine Integration, Full Backend REST API Services & Interactive E2E Testing (Weeks 13–14)
+### Sprint 7: OpenVideo WebGL Engine, Microservices on Cloud Run & Full Interactive E2E (Weeks 13–14)
 
 #### Goals
-Instantiate the OpenVideo core libraries (`@openvideo/core`, `@openvideo/engine-pixi`, `@openvideo/timeline`) inside `EditPage.vue` to replace static HTML track bars with an active WebGL PIXI.js preview stage and interactive timeline. Connect all 19 Stitch UI surfaces dynamically to Express REST APIs (`/v1/*`) and Pinia stores with real backend services, error code handling (`400`, `401`, `403`, `422`, `500`), and full interactive click-sequence E2E testing.
+Instantiate the OpenVideo core libraries (`@openvideo/video-renderer`, `@openvideo/engine-pixi`, `@openvideo/timeline`) inside `ProjectWorkspacePage.vue` to mount an active WebGL PIXI.js preview stage and multi-track interactive timeline. Connect all UI surfaces dynamically to Express REST APIs (`/api/*`) and Pinia stores with real backend services, error code handling, Meta Demucs v4 AI worker, Headless Playwright WebCodecs Cloud Run worker, and full 1-Click deployment to Google Cloud Run (`us-central1`).
 
 #### Feature Tasks
-- **OpenVideo Editor Integration (`EditPage.vue`):** Reference working implementation in `apps/vue-editor` (`src/lib/project.ts`, `src/components/editor/CanvasPanel.vue`, `src/components/editor/timeline/`) and OpenVideo docs (`https://docs.openvideo.dev/core/*`). Instantiate `createProjectStore()`, mount PIXI.js WebGL rendering stage (`@openvideo/engine-pixi`), and mount interactive `@openvideo/timeline` component for clip dragging, trimming, splitting, and undo/redo (`Ctrl+Z`).
-- **Axios HTTP Client Interceptors:** Bearer JWT auth token injection, automatic `401` session cleanup, and `422/500` `ElMessage` error toasts.
-- **Dynamic Pinia Store Rewiring:** Connect `useAuthStore`, `useSeriesStore`, `useScriptStore`, `usePersonaStore` to REST endpoints.
-- **Auth Suite API Integration:** Signup (`POST /v1/auth/signup`), Login (`POST /v1/auth/login`), Password Reset flows.
-- **Series Wizard & Dashboard Integration:** Live series list fetching, Trend Hunt API, Content Compliance API, and Series creation in database.
-- **Studio Production & Server Media Services:** Dynamic script synthesis via Vertex AI (`@google/genai`), scene generation, audio dubbing, caption transcription, and headless OpenVideo / FFmpeg cloud rendering.
-- **Interactive E2E User Journey Testing:** Full click-sequence verification from Signup -> Dashboard -> Series Wizard -> Episode Studio -> Export without URL navigation shortcuts.
+- **OpenVideo Editor Integration (`ProjectWorkspacePage.vue`):** Mount PIXI.js WebGL rendering stage (`@openvideo/engine-pixi`) and interactive `@openvideo/timeline` component for clip dragging, trimming, splitting, and undo/redo (`Ctrl+Z`).
+- **Axios HTTP Client Interceptors:** Bearer JWT auth token injection, automatic `401` session cleanup, and error toasts.
+- **Dynamic Pinia Store Rewiring:** Connect `useAuthStore`, `useSeriesStore`, `useScriptStore`, `usePipelineStore` to REST endpoints.
+- **Auth Suite API Integration:** Signup (`POST /api/auth/signup`), Login (`POST /api/auth/login`), Password Reset flows.
+- **Series Wizard & Dashboard Integration:** Live series list fetching, Trend Hunt API, Content Compliance API, and Series creation in Firestore Native / MongoDB.
+- **Studio Production & Server Media Services:** Dynamic script synthesis via Vertex AI (`@google/genai`), scene generation, audio dubbing, caption transcription, and dual-mode export (Client WebCodecs & Cloud Run headless Playwright WebCodecs).
+- **Google Cloud Run Microservices Ecosystem (`us-central1`):** Complete serverless Scale-to-Zero deployment pipeline with 1-click deployment script (`deploy-cloudrun.ps1` / `deploy-cloudrun.sh`), Cloud Scheduler heartbeat, Firestore Native `shine-db`, GCS `gs://shine-studio-media`, and Pub/Sub render queue.
+- **Interactive E2E User Journey Testing:** Full click-sequence verification from Signup -> Dashboard -> Series Wizard -> Episode Studio -> Export.
 
 #### Testing & QA
 - OpenVideo PIXI WebGL canvas stage active & zero-render preview verified.
 - `pnpm run check-i18n` with 100% key parity across 6 locales.
-- `pnpm run build` production build PASS.
+- `pnpm run build` production build PASS with 0 errors.
 - Interactive user click flow E2E test PASS.
 
 #### Deliverable & Release
-- **Release Version:** `v1.1 Production-Ready Commercial App 🚀`.
+- **Release Version:** `v1.1 Production-Ready Commercial App & Cloud Run Ecosystem 🚀`.

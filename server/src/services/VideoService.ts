@@ -2,6 +2,7 @@ import { aiProviderRouter } from '@/integrations/ai/router/AIProviderRouter.js';
 import { StorageFactory } from '@/services/storage/StorageFactory.js';
 import { SynthIDService } from '@/services/SynthIDService.js';
 import { CaptionService } from '@/services/CaptionService.js';
+import { TimelineService } from '@/services/TimelineService.js';
 import { CharacterEntity, getDatabaseProvider } from '@/database/index.js';
 import { loadSkill } from '@/utils/SkillLoader.js';
 import { PromptLoader } from '@/utils/PromptLoader.js';
@@ -120,20 +121,20 @@ export class VideoService {
 
         // Find the previous shot that belongs to the SAME scene (same sceneNumber) and has a rendered frame
         if (ep?.scenes && sceneObj) {
-          const currSceneNum = sceneObj.sceneNumber;
+          const currSceneNum = sceneObj.scene_number;
           const prevShot = ep.scenes
-            .filter((s: any) => s.sceneNumber === currSceneNum && s.index < sNum && s.storyboardFrameUrl)
+            .filter((s: any) => s.scene_number === currSceneNum && s.index < sNum && s.storyboard_frame_url)
             .sort((a: any, b: any) => b.index - a.index)[0]; // most recent rendered shot in same scene
-          if (prevShot?.storyboardFrameUrl) {
-            previousShotUrl = prevShot.storyboardFrameUrl;
+          if (prevShot?.storyboard_frame_url) {
+            previousShotUrl = prevShot.storyboard_frame_url;
           }
         }
 
         // Fallback: if no same-scene previous shot, try the immediately preceding shot regardless of scene
         if (!previousShotUrl && sNum > 1 && ep?.scenes) {
           const prevAny = ep.scenes.find((s: any) => s.index === sNum - 1);
-          if (prevAny?.storyboardFrameUrl) {
-            previousShotUrl = prevAny.storyboardFrameUrl;
+          if (prevAny?.storyboard_frame_url) {
+            previousShotUrl = prevAny.storyboard_frame_url;
           }
         }
 
@@ -144,8 +145,8 @@ export class VideoService {
             const lName = (l.name || '').toLowerCase();
             return lName && currLoc && (currLoc.includes(lName) || lName.includes(currLoc));
           });
-          if (locAsset?.imageUrl) {
-            locationAssetUrl = locAsset.imageUrl;
+          if (locAsset?.image_url) {
+            locationAssetUrl = locAsset.image_url;
           }
         }
       } catch {}
@@ -163,14 +164,14 @@ export class VideoService {
     const propDetails = sceneObj?.propDetails || '';
 
     // ─── Character Continuity & Face Reference Extraction ─────────────────────
-    const allSeriesCharacters: CharacterEntity[] = targetSeries?.characters || targetSeries?.master_plan?.characters || [];
+    const allSeriesCharacters: any[] = targetSeries?.characters || targetSeries?.master_plan?.characters || [];
     const characterReferences: string[] = [];
     const characterContinuityDescriptions: string[] = [];
     const promptUpper = `${prompt || ''} ${sceneAction}`.toUpperCase();
 
     // Check if referenceAssets.characters provides explicit ground truth of who is physically present in frame
-    const explicitPhysicalChars = Array.isArray(sceneObj?.referenceAssets?.characters) && sceneObj.referenceAssets.characters.length > 0
-      ? sceneObj.referenceAssets.characters.map((c: string) => String(c).toUpperCase())
+    const explicitPhysicalChars = Array.isArray(sceneObj?.reference_assets?.characters) && sceneObj.reference_assets.characters.length > 0
+      ? sceneObj.reference_assets.characters.map((c: string) => String(c).toUpperCase())
       : null;
     const sceneContextLower = (sceneContext || '').toLowerCase();
 
@@ -191,32 +192,32 @@ export class VideoService {
 
       if (isPresent) {
         // Resolve scene costume & wardrobe variant
-        const sceneCostume = Array.isArray(sceneObj?.characterCostumes)
-          ? sceneObj.characterCostumes.find((cc: any) => (cc.character || '').toLowerCase().trim() === charNameLower)
+        const sceneCostume = Array.isArray(sceneObj?.character_costumes)
+          ? sceneObj.character_costumes.find((cc: any) => (cc.character || '').toLowerCase().trim() === charNameLower)
           : null;
 
-        const wardrobeVariants: any[] = Array.isArray(char.wardrobeVariants) ? char.wardrobeVariants : [];
+        const wardrobeVariants: any[] = Array.isArray(char.wardrobe_variants) ? char.wardrobe_variants : [];
         let matchedVariant: any = null;
 
         // 1. Match by variantId
-        if (sceneCostume?.variantId && wardrobeVariants.length > 0) {
-          matchedVariant = wardrobeVariants.find((v: any) => v.variantId?.toLowerCase() === String(sceneCostume.variantId).toLowerCase());
+        if (sceneCostume?.variant_id && wardrobeVariants.length > 0) {
+          matchedVariant = wardrobeVariants.find((v: any) => v.variant_id?.toLowerCase() === String(sceneCostume.variant_id).toLowerCase());
         }
         // 2. Match by sceneNumber in associatedScenes
-        if (!matchedVariant && sceneObj?.sceneNumber && wardrobeVariants.length > 0) {
-          matchedVariant = wardrobeVariants.find((v: any) => Array.isArray(v.associatedScenes) && v.associatedScenes.includes(sceneObj.sceneNumber));
+        if (!matchedVariant && sceneObj?.scene_number && wardrobeVariants.length > 0) {
+          matchedVariant = wardrobeVariants.find((v: any) => Array.isArray(v.associated_scenes) && v.associated_scenes.includes(sceneObj.scene_number));
         }
         // 3. Match by wardrobe description / name similarity
         if (!matchedVariant && sceneCostume?.wardrobe && wardrobeVariants.length > 0) {
           const wLower = String(sceneCostume.wardrobe).toLowerCase();
           matchedVariant = wardrobeVariants.find((v: any) =>
             (v.name && wLower.includes(v.name.toLowerCase())) ||
-            (v.clothingAndAccessories && wLower.includes(v.clothingAndAccessories.toLowerCase()))
+            (v.clothing_and_accessories && wLower.includes(v.clothing_and_accessories.toLowerCase()))
           );
         }
 
-        // Determine reference image URL: prioritize matched wardrobe variant image, fallback to character avatar/image
-        let refUrl = matchedVariant?.imageUrl || char.avatarUrl || char.avatar || char.imageUrl;
+        // Determine reference image URL: prioritize matched wardrobe variant image, fallback to character avatar
+        let refUrl = matchedVariant?.image_url || char.avatar;
         if (refUrl && !characterReferences.includes(refUrl)) {
           characterReferences.push(refUrl);
         }
@@ -224,11 +225,11 @@ export class VideoService {
         const ageTag = char.age ? `${char.age}-year-old ` : '';
         const genderTag = char.gender && char.gender !== 'neutral' ? `${char.gender} ` : '';
         let wardrobeTag = '';
-        const costumeDesc = matchedVariant?.clothingAndAccessories || sceneCostume?.wardrobe || char.clothingAndAccessories;
+        const costumeDesc = matchedVariant?.clothing_and_accessories || sceneCostume?.wardrobe || char.clothing_and_accessories;
         if (costumeDesc) {
           wardrobeTag = `, wearing ${costumeDesc}`;
         }
-        const traits = char.visualTraits || char.physicalCharacteristics || char.traits || char.identity || '';
+        const traits = char.visual_traits || char.physical_characteristics || char.traits || char.identity || '';
         characterContinuityDescriptions.push(
           `Character ${char.name}: ${ageTag}${genderTag}${traits}${wardrobeTag}, exact face matching reference photo.`
         );
@@ -240,19 +241,19 @@ export class VideoService {
     const propContextDescriptions: string[] = [];
     let shotPropNames: string[] = [
       ...(Array.isArray(sceneObj?.props) ? sceneObj.props : []),
-      ...(Array.isArray(sceneObj?.referenceAssets?.props) ? sceneObj.referenceAssets.props : []),
+      ...(Array.isArray(sceneObj?.reference_assets?.props) ? sceneObj.reference_assets.props : []),
     ];
 
     // Gather props from other shots in the same scene group (same sceneNumber) to ensure visual consistency
     if (episodeId) {
       try {
         const epForProps = await db.getEpisodeById(episodeId);
-        const currSceneNum = sceneObj?.sceneNumber;
+        const currSceneNum = sceneObj?.scene_number;
         if (currSceneNum && Array.isArray(epForProps?.scenes)) {
-          const sameSceneShots = epForProps.scenes.filter((s: any) => s.sceneNumber === currSceneNum);
+          const sameSceneShots = epForProps.scenes.filter((s: any) => s.scene_number === currSceneNum);
           for (const sh of sameSceneShots) {
             if (Array.isArray(sh.props)) shotPropNames.push(...sh.props);
-            if (Array.isArray(sh.referenceAssets?.props)) shotPropNames.push(...sh.referenceAssets.props);
+            if (Array.isArray(sh.reference_assets?.props)) shotPropNames.push(...sh.reference_assets.props);
           }
         }
         shotPropNames = shotPropNames.filter((v, i, a) => v && a.indexOf(v) === i);
@@ -407,21 +408,21 @@ export class VideoService {
       type: isEndFrame ? 'scene_end_image' : 'scene_image',
       ext: '.PNG',
       size: `${(s3Result.size / (1024 * 1024)).toFixed(1)} MB`,
-      sizeBytes: s3Result.size,
-      categoryLabel: isEndFrame ? 'Scene End Frame' : 'Scene Background',
-      categoryColor: isEndFrame ? 'text-indigo-500 dark:text-indigo-400' : 'text-pink-500 dark:text-pink-400',
-      s3Key: s3Result.key,
+      size_bytes: s3Result.size,
+      category_label: isEndFrame ? 'Scene End Frame' : 'Scene Background',
+      category_color: isEndFrame ? 'text-indigo-500 dark:text-indigo-400' : 'text-pink-500 dark:text-pink-400',
+      s3_key: s3Result.key,
       url: internalUrl,
       thumbnail: internalUrl,
-      seriesId,
-      episodeId,
-      sceneId,
+      series_id: seriesId,
+      episode_id: episodeId,
+      scene_id: sceneId,
       prompt: enhancedPrompt,
       provider: imageResult.provider,
       aspect: aspectClass,
-      synthIdVerified: true,
-      synthIdHash: synthIdResult.synthIdHash,
-      synthIdMetadata: synthIdResult.synthIdMetadata,
+      synth_id_verified: true,
+      synth_id_hash: synthIdResult.synthIdHash,
+      synth_id_metadata: synthIdResult.synthIdMetadata,
       created_at: new Date().toISOString(),
     });
 
@@ -488,7 +489,7 @@ export class VideoService {
     let seriesGenre = 'micro-drama';
     let seriesRatio = (aspectRatio || '9:16').trim();
     let seriesVisual = 'realistic';
-    let seriesLanguage = language || sceneData?.language || 'vi-VN';
+    let seriesLanguage = language || sceneData?.language || 'en-US';
 
     let seriesChars: any[] = [];
     if (seriesId) {
@@ -549,7 +550,15 @@ export class VideoService {
       } catch {}
     }
 
-    const dialogues: Array<{ character: string; line: string; tone: string; charInfo?: string }> = [];
+    const dialogues: Array<{
+      character: string;
+      line: string;
+      tone: string;
+      voiceId?: string;
+      speechStartSec?: number;
+      speechEndSec?: number;
+      charInfo?: string;
+    }> = [];
     if (rawDialogues) {
       const dList = Array.isArray(rawDialogues) ? rawDialogues : [rawDialogues];
       for (const d of dList) {
@@ -579,10 +588,18 @@ export class VideoService {
               ? `${matchedChar.gender || ''} ${matchedChar.age ? matchedChar.age + 'yo' : ''}, ${matchedChar.visualTraits || matchedChar.traits || ''}`.trim()
               : '';
 
+            const charObj = seriesChars.find((c: any) => c.name?.toLowerCase() === charName.toLowerCase());
+            const voiceId = charObj?.voiceId || (charObj?.gender == 'male' ? 'Fenrir' : 'Kore');
+            const speechStartSec = d.speechStartSec !== undefined ? Number(d.speechStartSec) : (sceneData?.voiceStartUs ? sceneData.voiceStartUs / 1_000_000 : 0.5);
+            const speechEndSec = d.speechEndSec !== undefined ? Number(d.speechEndSec) : (sceneData?.voiceDurationUs ? speechStartSec + (sceneData.voiceDurationUs / 1_000_000) : speechStartSec + (line.length / 14));
+
             dialogues.push({
               character: charName,
               line: line.replace(/^["']|["']$/g, ''),
               tone: d.speechTone || d.emotion || 'natural tone',
+              voiceId,
+              speechStartSec,
+              speechEndSec,
               charInfo: charInfo || undefined,
             });
           }
@@ -634,31 +651,36 @@ export class VideoService {
 
       if (isPresent) {
         // Resolve scene costume & wardrobe variant
-        const sceneCostume = Array.isArray(sceneData?.characterCostumes)
-          ? sceneData.characterCostumes.find((cc: any) => (cc.character || '').toLowerCase().trim() === charNameLower)
+        const sceneCostume = Array.isArray(sceneData?.character_costumes || sceneData?.characterCostumes)
+          ? (sceneData?.character_costumes || sceneData?.characterCostumes).find((cc: any) => (cc.character || '').toLowerCase().trim() === charNameLower)
           : null;
 
-        const wardrobeVariants: any[] = Array.isArray(char.wardrobeVariants) ? char.wardrobeVariants : [];
+        const wardrobeVariants: any[] = Array.isArray(char.wardrobe_variants || char.wardrobeVariants) ? (char.wardrobe_variants || char.wardrobeVariants) : [];
         let matchedVariant: any = null;
 
-        // 1. Match by variantId
-        if (sceneCostume?.variantId && wardrobeVariants.length > 0) {
-          matchedVariant = wardrobeVariants.find((v: any) => v.variantId?.toLowerCase() === String(sceneCostume.variantId).toLowerCase());
+        // 1. Match by variant_id
+        const sceneVariantId = sceneCostume?.variant_id || sceneCostume?.variantId;
+        if (sceneVariantId && wardrobeVariants.length > 0) {
+          matchedVariant = wardrobeVariants.find((v: any) => (v.variant_id || v.variantId)?.toLowerCase() === String(sceneVariantId).toLowerCase());
         }
-        // 2. Match by sceneNumber in associatedScenes
-        if (!matchedVariant && sceneData?.sceneNumber && wardrobeVariants.length > 0) {
-          matchedVariant = wardrobeVariants.find((v: any) => Array.isArray(v.associatedScenes) && v.associatedScenes.includes(sceneData.sceneNumber));
+        // 2. Match by scene_number in associated_scenes
+        const currScNum = sceneData?.scene_number || sceneData?.sceneNumber;
+        if (!matchedVariant && currScNum && wardrobeVariants.length > 0) {
+          matchedVariant = wardrobeVariants.find((v: any) => {
+            const scenes = v.associated_scenes || v.associatedScenes;
+            return Array.isArray(scenes) && scenes.includes(currScNum);
+          });
         }
         // 3. Match by wardrobe description / name similarity
         if (!matchedVariant && sceneCostume?.wardrobe && wardrobeVariants.length > 0) {
           const wLower = String(sceneCostume.wardrobe).toLowerCase();
           matchedVariant = wardrobeVariants.find((v: any) =>
             (v.name && wLower.includes(v.name.toLowerCase())) ||
-            (v.clothingAndAccessories && wLower.includes(v.clothingAndAccessories.toLowerCase()))
+            ((v.clothing_and_accessories || v.clothingAndAccessories) && wLower.includes((v.clothing_and_accessories || v.clothingAndAccessories).toLowerCase()))
           );
         }
 
-        const refUrl = matchedVariant?.imageUrl || char.avatarUrl || char.avatar || char.imageUrl;
+        const refUrl = matchedVariant?.image_url || matchedVariant?.imageUrl || char.avatar || char.image_url || char.imageUrl;
         if (refUrl && !characterReferences.includes(refUrl)) {
           characterReferences.push(refUrl);
         }
@@ -666,11 +688,11 @@ export class VideoService {
         const ageTag = char.age ? `${char.age}-year-old ` : '';
         const genderTag = char.gender && char.gender !== 'neutral' ? `${char.gender} ` : '';
         let wardrobeTag = '';
-        const costumeDesc = matchedVariant?.clothingAndAccessories || sceneCostume?.wardrobe || char.clothingAndAccessories;
+        const costumeDesc = matchedVariant?.clothing_and_accessories || matchedVariant?.clothingAndAccessories || sceneCostume?.wardrobe || char.clothing_and_accessories || char.clothingAndAccessories;
         if (costumeDesc) {
           wardrobeTag = `, wearing ${costumeDesc}`;
         }
-        const traits = char.visualTraits || char.traits || char.identity || '';
+        const traits = char.visual_traits || char.visualTraits || char.physical_characteristics || char.physicalCharacteristics || char.traits || char.identity || '';
         characterContinuityDescriptions.push(
           `Character ${char.name}: ${ageTag}${genderTag}${traits}${wardrobeTag}, exact face matching reference photo.`
         );
@@ -733,7 +755,7 @@ export class VideoService {
       const speechClauses = dialogues
         .map(
           (d) =>
-            `Dialogue: ${d.character} speaks in ${targetLanguageName}, "${d.line}" with synchronized lip-sync and ${d.tone} voice.`
+            `[Speech & Vocal Profile]: At ${d.speechStartSec !== undefined ? d.speechStartSec.toFixed(1) : '0.5'}s to ${d.speechEndSec !== undefined ? d.speechEndSec.toFixed(1) : '3.5'}s, ${d.character} (Voice: ${d.voiceId || 'Studio'}, Tone: ${d.tone}) speaks aloud in ${targetLanguageName}: "${d.line}". Lip movements, facial expressions, and vocal cadence synchronize naturally between ${d.speechStartSec !== undefined ? d.speechStartSec.toFixed(1) : '0.5'}s and ${d.speechEndSec !== undefined ? d.speechEndSec.toFixed(1) : '3.5'}s.`
         )
         .join(' ');
       videoPrompt = `${videoPrompt}. ${speechClauses}`;
@@ -783,40 +805,38 @@ export class VideoService {
       type: 'scene_video',
       ext: '.MP4',
       size: `${(s3Result.size / (1024 * 1024)).toFixed(1)} MB`,
-      sizeBytes: s3Result.size,
-      categoryLabel: 'Scene Video',
-      categoryColor: 'text-purple-500 dark:text-purple-400',
-      s3Key: s3Result.key,
+      size_bytes: s3Result.size,
+      category_label: 'Scene Video',
+      category_color: 'text-purple-500 dark:text-purple-400',
+      s3_key: s3Result.key,
       url: internalUrl,
       thumbnail: startFrameUrl || internalUrl,
-      seriesId,
-      episodeId,
-      sceneId,
+      series_id: seriesId,
+      episode_id: episodeId,
+      scene_id: sceneId,
       prompt: videoPrompt,
       provider: videoResult.provider,
       aspect: seriesRatio === '16:9' ? 'aspect-[16/9]' : seriesRatio === '4:3' ? 'aspect-[4/3]' : seriesRatio === '1:1' ? 'aspect-square' : 'aspect-[9/16]',
-      synthIdVerified: true,
-      synthIdHash: synthIdResult.synthIdHash,
-      synthIdMetadata: synthIdResult.synthIdMetadata,
+      synth_id_verified: true,
+      synth_id_hash: synthIdResult.synthIdHash,
+      synth_id_metadata: synthIdResult.synthIdMetadata,
       created_at: new Date().toISOString(),
     });
 
-    const sceneNum = parseInt(String(sceneId).replace(/\D/g, ''), 10) || 1;
-
-    // Auto-update episode scene's videoUrl in Database
-    if (episodeId) {
+    let sceneNum = Number(sceneData?.index) || Number(sceneData?.scene_number) || 0;
+    if (!sceneNum && episodeId) {
       try {
         const ep = await db.getEpisodeById(episodeId);
         if (ep && Array.isArray(ep.scenes)) {
-          const sIdx = ep.scenes.findIndex((s: any) => s.index === sceneNum || s.id === sceneId);
-          if (sIdx !== -1) {
-            ep.scenes[sIdx].videoUrl = internalUrl;
-            await db.updateEpisode(ep.id, { scenes: ep.scenes });
+          const matchedIdx = ep.scenes.findIndex((s: any) => (sceneId && s.id === sceneId) || (sceneData?.id && s.id === sceneData.id));
+          if (matchedIdx !== -1) {
+            sceneNum = ep.scenes[matchedIdx].index || (matchedIdx + 1);
           }
         }
-      } catch (err: any) {
-        Logger.warn(`[VideoService.generateSceneVideo] Auto-update episode scene videoUrl failed: ${err.message}`);
-      }
+      } catch {}
+    }
+    if (!sceneNum) {
+      sceneNum = parseInt(String(sceneId).replace(/\D/g, ''), 10) || 1;
     }
 
     // ─── Automated Audio & Word-Level Caption Pipeline (BGM, TTS, Gemini Deepgram-style Captions) ───
@@ -825,6 +845,7 @@ export class VideoService {
       audioPipelineResult = await CaptionService.processSceneAudioAndCaptions({
         videoUrl: internalUrl,
         episodeId,
+        sceneId: sceneId || sceneData?.id,
         sceneIndex: sceneNum,
         dialogue: dialogues,
         language,
@@ -833,6 +854,53 @@ export class VideoService {
       Logger.info(`[VideoService.generateSceneVideo] Auto audio & caption pipeline completed for scene ${sceneNum}: bgm=${!!audioPipelineResult?.bgmUrl}, voice=${!!audioPipelineResult?.voiceoverUrl}, cues=${audioPipelineResult?.captionsData?.length || 0}`);
     } catch (aErr: any) {
       Logger.warn(`[VideoService.generateSceneVideo] Auto audio/caption pipeline notice: ${aErr.message}`);
+    }
+
+    // Auto-update episode scene's video_url, bgm_url, voiceover_url, captions_data & sync timeline
+    if (episodeId) {
+      try {
+        const ep = await db.getEpisodeById(episodeId);
+        if (ep && Array.isArray(ep.scenes)) {
+          const sIdx = ep.scenes.findIndex((s: any) => (sceneId && s.id === sceneId) || (sceneData?.id && s.id === sceneData.id) || (sceneNum && s.index === sceneNum));
+          if (sIdx !== -1) {
+            ep.scenes[sIdx].video_url = internalUrl;
+            if (audioPipelineResult?.bgmUrl) {
+              ep.scenes[sIdx].bgm_url = audioPipelineResult.bgmUrl;
+            }
+            if (audioPipelineResult?.voiceoverUrl) {
+              ep.scenes[sIdx].voiceover_url = audioPipelineResult.voiceoverUrl;
+            }
+            if (audioPipelineResult?.voiceStartUs !== undefined) {
+              ep.scenes[sIdx].voice_start_us = audioPipelineResult.voiceStartUs;
+            }
+            if (audioPipelineResult?.voiceDurationUs !== undefined) {
+              ep.scenes[sIdx].voice_duration_us = audioPipelineResult.voiceDurationUs;
+            }
+            if (audioPipelineResult?.captionsData?.length) {
+              ep.scenes[sIdx].captions_data = audioPipelineResult.captionsData;
+            }
+            if (audioPipelineResult?.words?.length) {
+              ep.scenes[sIdx].words = audioPipelineResult.words;
+            }
+            if (language) {
+              if (!ep.scenes[sIdx].translations) ep.scenes[sIdx].translations = {};
+              ep.scenes[sIdx].translations[language] = {
+                ...(ep.scenes[sIdx].translations[language] || {}),
+                voiceover_url: audioPipelineResult?.voiceoverUrl || ep.scenes[sIdx].translations[language]?.voiceover_url,
+                captions_data: audioPipelineResult?.captionsData || ep.scenes[sIdx].translations[language]?.captions_data,
+                words: audioPipelineResult?.words || ep.scenes[sIdx].translations[language]?.words,
+                voice_duration_us: audioPipelineResult?.voiceDurationUs,
+              };
+            }
+            await db.updateEpisode(ep.id, { scenes: ep.scenes });
+
+            // Synchronize music track (track_bgm) and voiceover_main track (track_voiceover_main) into Timeline
+            await TimelineService.getOrBuildEpisodeTimeline(ep.id);
+          }
+        }
+      } catch (err: any) {
+        Logger.warn(`[VideoService.generateSceneVideo] Auto-update episode scene and timeline failed: ${err.message}`);
+      }
     }
 
     return {

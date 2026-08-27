@@ -1,23 +1,19 @@
 import { Router, Request, Response } from 'express';
 import { geminiClient } from '../integrations/ai/gemini/GeminiClient.js';
+import { PromptLoader } from '../utils/PromptLoader.js';
 
 export const culturalAdaptRouter = Router();
 
-// POST /v1/ai/cultural-adapt — Localize script dialogue and cultural nuances
+// POST /api/ai/cultural-adapt — Localize script dialogue and cultural nuances
 culturalAdaptRouter.post('/cultural-adapt', async (req: Request, res: Response) => {
-  const { dialogue, targetCulture = 'US_ENTERTAINMENT', language = 'en' } = req.body;
+  const { dialogue, target_culture = 'US_ENTERTAINMENT', language = 'en' } = req.body;
 
   try {
-    const prompt = `Adapt the following micro-drama dialogue for target market and culture:
-Original Dialogue: "${dialogue || 'He is an arrogant CEO.'}"
-Target Culture: ${targetCulture}
-Target Language: ${language}
-
-Respond in strict JSON:
-{
-  "adaptedDialogue": "Localized spoken dialogue line",
-  "culturalNotes": "Detailed explanation of localized tropes and slang"
-}`;
+    const prompt = PromptLoader.render('compliance/cultural_adapt', {
+      dialogue: dialogue || 'He is an arrogant CEO.',
+      targetCulture: target_culture,
+      language,
+    });
 
     const raw = await geminiClient.generateText({
       prompt,
@@ -29,11 +25,11 @@ Respond in strict JSON:
     return res.json({
       code: 200,
       data: {
-        originalDialogue: dialogue || 'He is an arrogant CEO.',
-        adaptedDialogue: parsed.adaptedDialogue || (language === 'vi' ? 'Hắn ta là một Tổng Tài bá đạo.' : 'He is a high-powered tech founder.'),
-        targetCulture,
+        original_dialogue: dialogue,
+        adapted_dialogue: parsed.adapted_dialogue || parsed.adaptedDialogue || dialogue,
+        target_culture,
         language,
-        culturalNotes: parsed.culturalNotes || 'Adapted CEO trope to fit target market archetype.',
+        cultural_notes: parsed.cultural_notes || parsed.culturalNotes || '',
       },
       message: 'Script dialogue localized for target cultural market via Gemini',
       error: null,
@@ -42,13 +38,13 @@ Respond in strict JSON:
     return res.json({
       code: 200,
       data: {
-        originalDialogue: dialogue || 'He is an arrogant CEO.',
-        adaptedDialogue: language === 'vi' ? 'Hắn ta là một Tổng Tài bá đạo.' : 'He is a high-powered tech founder.',
-        targetCulture,
+        original_dialogue: dialogue,
+        adapted_dialogue: dialogue,
+        target_culture,
         language,
-        culturalNotes: 'Adapted CEO trope to fit US tech founder archetype for maximum audience resonance.',
+        cultural_notes: 'Adapted with default fallback localization',
       },
-      message: 'Script dialogue localized for target cultural market',
+      message: 'Script dialogue localized for target cultural market (fallback)',
       error: null,
     });
   }

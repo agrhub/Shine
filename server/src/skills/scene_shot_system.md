@@ -24,34 +24,41 @@ You are generating shots for **Scene {{sceneIndex}} of {{totalScenes}}**:
 {{assetContext}}
 
 ## Shot Requirements
-
 - Generate **{{minShotsPerScene}} to {{maxShotsPerScene}}** shots for this scene.
-- Each shot duration: **5s–8s** (specify `durationSeconds` as an integer in this range).
+- Each shot duration: **5s–8s** (specify `duration_seconds` as an integer in this range).
 - Every shot must advance the scene's conflict or character state.
 - Do NOT repeat the same camera angle or character position consecutively.
+
+### Critical Dialogue & Single-Speaker Mandate (MANDATORY):
+- **SINGLE SPEAKER PER SHOT RULE**: Each shot MUST contain AT MOST ONE dialogue line from EXACTLY ONE character. Multi-character dialogue within the same shot is STRICTLY FORBIDDEN. Conversations between characters MUST be split across separate consecutive shots (e.g. Shot 1: Character A speaks -> Shot 2: Character B reacts and replies).
+- **High Dialogue Density**: At least 75% to 85% of shots MUST have spoken dialogue or narrator voiceover. Never allow shots to remain silent for more than 1.5 seconds without narrative purpose.
+- **Inner Monologue / Narrator**: When a character is alone, scheming, observing, or in intense action: Use **Inner Monologue** (`character: "[Character Name] (Inner Monologue)"`) or **Narrator Voiceover** (`character: "Narrator"`).
+- **Speech Timestamps**: Specify `speech_start_sec` (e.g. `0.5`) and `speech_end_sec` (e.g. `3.8`) for the spoken line within the shot.
+- **Voice Consistency**: Do NOT invent `voice_id` in dialogue; the system automatically resolves the character's fixed `voice_id` from their Character Profile.
 
 ## For each shot, return
 
 | Field | Description |
 |---|---|
-| `shotNumber` | Integer starting at 1 |
+| `shot_number` | Integer starting at 1 |
 | `title` | Short evocative title (3–6 words) |
-| `sceneContext` | Physical context: clarify who is physically in the room vs on a screen/device |
-| `propDetails` | Detailed appearance & placement of props for visual consistency across the scene |
-| `frameDescription` | Precise visual description for AI image generation — include camera angle, subject position, lighting, and background |
-| `cameraMovement` | e.g. `Slow push-in`, `Handheld tracking`, `Static wide` |
+| `scene_context` | Physical context: clarify who is physically in the room vs on a screen/device |
+| `prop_details` | Detailed appearance & placement of props for visual consistency across the scene |
+| `frame_description` | Precise visual description for AI image generation — include camera angle, subject position, lighting, and background |
+| `camera_movement` | e.g. `Slow push-in`, `Handheld tracking`, `Static wide` |
 | `action` | What happens in this shot — character actions, reactions, environment changes |
-| `characterCostumes` | Array: `[{ character, wardrobe, variantId }]` for every character physically in frame. `variantId` MUST EXACTLY MATCH one of the `variantId`s in that character's `Wardrobe Variants` from the Asset Context |
+| `character_costumes` | Array: `[{ character, wardrobe, variant_id }]` for every character physically in frame. `variant_id` MUST EXACTLY MATCH one of the `variant_id`s in that character's `Wardrobe Variants` from the Asset Context |
 | `props` | Array of prop names used in this shot |
-| `dialogue` | Array: `[{ character, line, emotion, speechTone }]` — include whenever characters speak |
-| `durationSeconds` | Integer 5–8 |
-| `bgmMood` | Music mood for this specific shot |
-| `sfxCues` | Array of sound effect cues (e.g. `["Door slam", "Rain intensifies"]`) |
-| `referenceAssets` | `{ characters: [names], locations: [name], props: [names] }` (Only physically present characters) |
-| `visualPrompt` | Compact AI Start-Frame image prompt (≤60 words) — style, subject, lighting, composition |
-| `endFramePrompt` | Compact AI End-Frame image prompt (≤50 words) — character's final posture/expression at shot end |
-| `transitionEffect` | OpenVideo GLSL transition key (`fade`, `wipeLeft`, `wipeRight`, `cube`, `CrossZoom`, `SimpleZoom`, `DreamyZoom`, `glitchMemories`, `GlitchDisplace`, `dreamy`, `Swirl`, `waterDrop`, `ripple`, `wind`, `LinearBlur`, `Mosaic`, `pixelize`, `circleopen`, `windowslice`, `doorway`, `burn`, `InvertedPageCurl`), or empty `""` for direct cut |
-| `videoEffect` | OpenVideo Built-in Effect or Pixi Filter (`vignette`, `retro70s`, `filmStripPro`, `sepia`, `tvScanlines`, `glitch`, `rgbGlitch`, `shine`, `bloomFilter`, `glowFilter`, `oldFilmFilter`, `crtFilter`, `motionBlur`, `cameraMove`, `fastZoom`, `shockwaveFilter`), or empty `""` for natural look |
+| `dialogue` | Array with AT MOST 1 item: `[{ character, line, emotion, speech_tone, speech_start_sec, speech_end_sec }]` (Empty `[]` if silent shot) |
+| `duration_seconds` | Integer 5–8 |
+| `bgm_mood` | Music mood for this specific shot |
+| `sfx_cues` | Array of sound effect cues (e.g. `["Door slam", "Rain intensifies"]`) |
+| `reference_assets` | `{ characters: [names], locations: [name], props: [names] }` (Only physically present characters) |
+| `visual_prompt` | Compact AI Start-Frame image prompt (≤60 words) — style, subject, lighting, composition |
+| `end_frame_prompt` | Compact AI End-Frame image prompt (≤50 words) — character's final posture/expression at shot end |
+| `transition_effect` | OpenVideo GLSL transition key (`fade`, `wipeLeft`, `wipeRight`, `cube`, `CrossZoom`, `SimpleZoom`, `DreamyZoom`, `glitchMemories`, `GlitchDisplace`, `dreamy`, `Swirl`, `waterDrop`, `ripple`, `wind`, `LinearBlur`, `Mosaic`, `pixelize`, `circleopen`, `windowslice`, `doorway`, `burn`, `InvertedPageCurl`), or empty `""` for direct cut |
+| `effects` | Array: `[{ effect_key: "vignette" | "flash" | "glitch" | "rgbGlitch" | "shake" | "zoom_in" | "dramatic_glow" | "filmStripPro", intensity: 0.8, timing: "onset" | "throughout" | "climax" }]` |
+| `video_effect` | OpenVideo Built-in Effect or Pixi Filter (`vignette`, `retro70s`, `filmStripPro`, `sepia`, `tvScanlines`, `glitch`, `rgbGlitch`, `shine`, `bloomFilter`, `glowFilter`, `oldFilmFilter`, `crtFilter`, `motionBlur`, `cameraMove`, `fastZoom`, `shockwaveFilter`), or empty `""` for natural look |
 
 ## JSON Structure
 
@@ -59,24 +66,25 @@ You are generating shots for **Scene {{sceneIndex}} of {{totalScenes}}**:
 {
   "shots": [
     {
-      "shotNumber": 1,
+      "shot_number": 1,
       "title": "...",
-      "sceneContext": "...",
-      "propDetails": "...",
-      "frameDescription": "...",
-      "cameraMovement": "...",
+      "scene_context": "...",
+      "prop_details": "...",
+      "frame_description": "...",
+      "camera_movement": "...",
       "action": "...",
-      "characterCostumes": [ { "character": "...", "wardrobe": "...", "variantId": "..." } ],
+      "character_costumes": [ { "character": "...", "wardrobe": "...", "variant_id": "..." } ],
       "props": [ "..." ],
-      "dialogue": [ { "character": "...", "line": "...", "emotion": "...", "speechTone": "..." } ],
-      "durationSeconds": 6,
-      "bgmMood": "...",
-      "sfxCues": [ "..." ],
-      "referenceAssets": { "characters": [ "..." ], "locations": [ "..." ], "props": [ "..." ] },
-      "visualPrompt": "...",
-      "endFramePrompt": "...",
-      "transitionEffect": "",
-      "videoEffect": ""
+      "dialogue": [ { "character": "...", "line": "...", "emotion": "...", "speech_tone": "...", "speech_start_sec": 0.5, "speech_end_sec": 3.8 } ],
+      "duration_seconds": 6,
+      "bgm_mood": "...",
+      "sfx_cues": [ "..." ],
+      "reference_assets": { "characters": [ "..." ], "locations": [ "..." ], "props": [ "..." ] },
+      "visual_prompt": "...",
+      "end_frame_prompt": "...",
+      "transition_effect": "",
+      "effects": [ { "effect_key": "vignette", "intensity": 0.6 } ],
+      "video_effect": ""
     }
   ]
 }

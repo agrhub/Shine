@@ -31,3 +31,5 @@ playwright.config.ts
 docs/devpost-submission-content.md
 openvideo-project-1787393848394.json
 client/scripts
+pnpm-lock.yaml
+scripts/test-render-worker.js
