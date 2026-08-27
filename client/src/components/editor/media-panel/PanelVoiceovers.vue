@@ -34,7 +34,7 @@ const handleAddAudio = async (url: string, name: string) => {
           stroke="1.5"
         />
         <div class="flex flex-col gap-2 text-center">
-          <p class="font-semibold text-white">No Voiceover Assets</p>
+          <p class="font-semibold text-white">{{ $t('editor.noVoiceoversFound') }}</p>
           <p class="text-sm text-muted-foreground max-w-xs">
             Start building your collection by clicking the generate button
             in the chat panel.

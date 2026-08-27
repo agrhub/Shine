@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Volume2, Gauge, Wand2 } from 'lucide-vue-next';
@@ -12,6 +13,8 @@ import FadeGroupProperty from './options/FadeGroupProperty.vue';
 const props = defineProps<{
   clip: any;
 }>();
+
+const { t } = useI18n();
 
 const x = ref(0);
 const y = ref(0);
@@ -155,7 +158,7 @@ const handleStrokeRemove = () => {
 
 <template>
   <div class="space-y-4 text-xs">
-    <div class="font-semibold text-sm">Video Properties</div>
+    <div class="font-semibold text-sm">{{ t('editor.videoProperties') }}</div>
 
     <!-- Transform (Position X/Y, Size W/H, Rotation) -->
     <div class="border-b border-border/40 pb-4">
@@ -186,7 +189,7 @@ const handleStrokeRemove = () => {
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-1.5 font-medium">
           <Gauge class="size-3.5 text-muted-foreground" />
-          <span>Speed</span>
+          <span>{{ t('editor.speed') }}</span>
         </div>
         <span class="font-mono text-muted-foreground">{{ playbackRate.toFixed(2) }}x</span>
       </div>
@@ -198,7 +201,7 @@ const handleStrokeRemove = () => {
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-1.5 font-medium">
           <Volume2 class="size-3.5 text-muted-foreground" />
-          <span>Volume</span>
+          <span>{{ t('editor.volume') }}</span>
         </div>
         <span class="font-mono text-muted-foreground">{{ Math.round(volume * 100) }}%</span>
       </div>
@@ -208,7 +211,7 @@ const handleStrokeRemove = () => {
     <!-- Opacity -->
     <div class="space-y-2 border-b border-border/40 pb-4">
       <div class="flex items-center justify-between">
-        <span class="font-medium">Opacity</span>
+        <span class="font-medium">{{ t('editor.opacity') }}</span>
         <span class="font-mono text-muted-foreground">{{ Math.round(opacity * 100) }}%</span>
       </div>
       <Slider :model-value="[opacity]" :min="0" :max="1" :step="0.01" @update:model-value="handleOpacityChange" />
@@ -259,12 +262,12 @@ const handleStrokeRemove = () => {
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-1.5 font-medium">
           <Wand2 class="size-3.5 text-primary" />
-          <span>Chroma Key (Green Screen)</span>
+          <span>{{ t('editor.chromaKey') }}</span>
         </div>
         <Switch :checked="chromaKeyEnabled" @update:checked="handleChromaKeyToggle" />
       </div>
       <div v-if="chromaKeyEnabled" class="flex items-center justify-between">
-        <span class="text-muted-foreground">Key Color</span>
+        <span class="text-muted-foreground">{{ t('editor.keyColor') }}</span>
         <input
           type="color"
           :value="chromaKeyColor"

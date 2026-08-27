@@ -1,23 +1,6 @@
+import { DownloadItem } from '@/types/api';
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-
-export type DownloadStatus = 'pending' | 'processing' | 'completed' | 'failed';
-
-export interface DownloadItem {
-  id: string;
-  type: 'export';
-  name: string;
-  status: DownloadStatus;
-  progress: number;
-  format: string;
-  size?: number;
-  createdAt: number;
-  completedAt?: number;
-  url?: string;
-  thumbnailUrl?: string;
-  downloaded?: boolean;
-  error?: string;
-}
 
 export const useDownloadStore = defineStore('download', () => {
   const downloads = ref<DownloadItem[]>([]);
@@ -29,7 +12,7 @@ export const useDownloadStore = defineStore('download', () => {
       id,
       status: 'pending',
       progress: 0,
-      createdAt: Date.now(),
+      created_at: Date.now(),
     };
     downloads.value = [download, ...downloads.value];
     return id;
@@ -42,7 +25,7 @@ export const useDownloadStore = defineStore('download', () => {
   function removeDownload(id: string) {
     const item = downloads.value.find((d) => d.id === id);
     if (item?.url) URL.revokeObjectURL(item.url);
-    if (item?.thumbnailUrl) URL.revokeObjectURL(item.thumbnailUrl);
+    if (item?.thumbnail_url) URL.revokeObjectURL(item.thumbnail_url);
     downloads.value = downloads.value.filter((d) => d.id !== id);
   }
 
@@ -52,7 +35,7 @@ export const useDownloadStore = defineStore('download', () => {
     );
     completed.forEach((d) => {
       if (d.url) URL.revokeObjectURL(d.url);
-      if (d.thumbnailUrl) URL.revokeObjectURL(d.thumbnailUrl);
+      if (d.thumbnail_url) URL.revokeObjectURL(d.thumbnail_url);
     });
     downloads.value = downloads.value.filter((d) => d.status !== 'completed' && d.status !== 'failed');
   }

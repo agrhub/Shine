@@ -1,24 +1,8 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import http from '@/utils/http';
-
-export interface Asset {
-  id: string;
-  userId?: string;
-  name: string;
-  type: 'image' | 'video' | 'audio' | 'text' | 'render';
-  ext: string;
-  size: string;
-  sizeBytes?: number;
-  categoryLabel: string;
-  categoryColor: string;
-  thumbnail?: string;
-  icon?: string;
-  aspect?: string;
-  isVideo?: boolean;
-  isAudio?: boolean;
-  createdAt?: string;
-}
+import { Asset } from '@/types/api';
+export type { Asset } from '@/types/api';
 
 export const useAssetsStore = defineStore('assets', () => {
   const assets = ref<Asset[]>([]);

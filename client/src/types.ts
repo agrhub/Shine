@@ -1,3 +1,42 @@
-import type { ViteSSGContext } from 'vite-ssg'
+import type { ViteSSGContext } from 'vite-ssg';
 
-export type UserModule = (ctx: ViteSSGContext) => void
+export type UserModule = (ctx: ViteSSGContext) => void;
+
+// Centralized Type Exports for Shine Client
+export * from './types/index.js';
+export type {
+  ApiResponse,
+  ViralTopic,
+  CharacterWardrobeVariant,
+  Character,
+  LocationAsset,
+  PropAsset,
+  ShotFrame,
+  SceneLine,
+  ScriptItem,
+  SupervisionResult,
+  StoryboardFrame,
+  SeriesOutline,
+  CompositorPayload,
+  RenderJob,
+  RenderStatusResponse,
+  ParityCheckResult,
+  VoicePreset,
+  TtsRequest,
+  WordTiming,
+  TtsResponse,
+  KaraokeStyle,
+  SpatialAudioConfig,
+  CliffhangerJob,
+  Command,
+  ChatMessage,
+  CopilotAlert,
+  CostGuardrails,
+  PatchEvent,
+  CollaboratorSession,
+  PublishJob,
+  SubscriptionTier,
+  MarketplaceTemplate,
+  VirtualActor,
+  PaywallRecommendation,
+} from './types/api.js';

@@ -14,9 +14,14 @@ mirco-drama-features.md
 **/tmp
 **/tests
 **/test-results
-**/scripts
+server/scripts
+scripts/capture-screenshots.js
+
+server/server
+server/data
 docs/reports/
 docs/UI/
+docs/scratch/
 server/package-lock.json
 package-lock.json
 client/i18n_errors.txt
@@ -25,3 +30,4 @@ client/replace_theme.cjs
 playwright.config.ts
 docs/devpost-submission-content.md
 openvideo-project-1787393848394.json
+client/scripts

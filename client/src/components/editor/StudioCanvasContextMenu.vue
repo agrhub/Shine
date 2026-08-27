@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useStudioStore } from '~/composables/useStudioStore';
 import {
   Copy,
@@ -28,6 +29,7 @@ const emit = defineEmits<{
   (e: 'close'): void;
 }>();
 
+const { t } = useI18n();
 const { state: studioState } = useStudioStore();
 const studio = computed(() => studioState.value.studio);
 const selectedClips = computed(() => studioState.value.selectedClips || []);
@@ -147,8 +149,6 @@ const handleToggleLock = () => {
   console.log('Toggle lock — TODO: connect to engine lock API');
 };
 
-// ─── Next Tick helper ─────────────────────────────────────────────────────────
-import { nextTick } from 'vue';
 </script>
 
 <template>
@@ -173,7 +173,7 @@ import { nextTick } from 'vue';
           @click="wrapClose(handleCopy)()"
         >
           <Copy class="size-3.5" />
-          <span>Copy</span>
+          <span>{{ t('editor.copy') }}</span>
           <span class="ml-auto text-muted-foreground text-[10px]">⌘ C</span>
         </button>
 
@@ -184,7 +184,7 @@ import { nextTick } from 'vue';
           @click="wrapClose(handlePaste)()"
         >
           <Clipboard class="size-3.5" />
-          <span>Paste</span>
+          <span>{{ t('editor.paste') }}</span>
           <span class="ml-auto text-muted-foreground text-[10px]">⌘ V</span>
         </button>
 
@@ -196,7 +196,7 @@ import { nextTick } from 'vue';
           @click="wrapClose(handleDuplicate)()"
         >
           <Copy class="size-3.5" />
-          <span>Duplicate</span>
+          <span>{{ t('editor.duplicate') }}</span>
         </button>
 
         <div class="-mx-1 my-1 h-px bg-border" />
@@ -207,7 +207,7 @@ import { nextTick } from 'vue';
           @click="wrapClose(handleToggleVisibility)()"
         >
           <Eye class="size-3.5" />
-          <span>Hide</span>
+          <span>{{ t('editor.hide') }}</span>
           <span class="ml-auto text-muted-foreground text-[10px]">⌘ H</span>
         </button>
 
@@ -217,7 +217,7 @@ import { nextTick } from 'vue';
           @click="wrapClose(handleToggleLock)()"
         >
           <Lock class="size-3.5" />
-          <span>Lock</span>
+          <span>{{ t('editor.lock') }}</span>
           <span class="ml-auto text-muted-foreground text-[10px]">⌘ L</span>
         </button>
 
@@ -230,7 +230,7 @@ import { nextTick } from 'vue';
             @click.stop
           >
             <FlipHorizontal class="size-3.5" />
-            <span>Flip</span>
+            <span>{{ t('editor.flip') }}</span>
             <ChevronRight class="size-3 ml-auto text-muted-foreground" />
           </button>
           <div
@@ -244,14 +244,14 @@ import { nextTick } from 'vue';
               @click="wrapClose(handleFlipH)()"
             >
               <FlipHorizontal class="size-3.5" />
-              Flip Horizontal
+              {{ t('editor.flipHorizontal') }}
             </button>
             <button
               class="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-accent text-left"
               @click="wrapClose(handleFlipV)()"
             >
               <FlipVertical class="size-3.5" />
-              Flip Vertical
+              {{ t('editor.flipVertical') }}
             </button>
           </div>
         </div>
@@ -262,7 +262,7 @@ import { nextTick } from 'vue';
           @click="wrapClose(handleRotate90)()"
         >
           <RotateCw class="size-3.5" />
-          <span>Rotate 90°</span>
+          <span>{{ t('editor.rotate90') }}</span>
         </button>
 
         <div class="-mx-1 my-1 h-px bg-border" />
@@ -273,7 +273,7 @@ import { nextTick } from 'vue';
           @click="wrapClose(handleDelete)()"
         >
           <Trash2 class="size-3.5" />
-          <span>Delete</span>
+          <span>{{ t('editor.delete') }}</span>
           <span class="ml-auto text-[10px] opacity-60">⌫</span>
         </button>
       </div>
@@ -292,7 +292,7 @@ import { nextTick } from 'vue';
           @click="wrapClose(handlePaste)()"
         >
           <Clipboard class="size-3.5" />
-          <span>Paste</span>
+          <span>{{ t('editor.paste') }}</span>
           <span class="ml-auto text-muted-foreground text-[10px]">⌘ V</span>
         </button>
       </div>

@@ -46,7 +46,7 @@ const handleGenerate = async () => {
       url,
       text: text.value,
       type: 'voiceover',
-      createdAt: Date.now(),
+      created_at: Date.now(),
     });
 
     toast.success('Voiceover generated!');

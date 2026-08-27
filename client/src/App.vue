@@ -2,11 +2,10 @@
 import { onMounted } from 'vue';
 import { Toaster } from 'vue-sonner';
 import { useAuthStore } from '@/stores/useAuthStore';
-import { useDark } from '@vueuse/core'
+import { storeToRefs } from 'pinia';
 
 const authStore = useAuthStore();
-// Automatically detects and watches class="dark" on the html element
-const isDark = useDark();
+const { isDark } = storeToRefs(authStore);
 
 onMounted(async () => {
   await authStore.fetchCurrentUser();

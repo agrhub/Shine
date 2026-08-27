@@ -1,196 +1,28 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import http from '@/utils/http';
-
-export interface ScriptScene {
-  index: number;
-  sceneNumber?: number;
-  shotNumber?: number;
-  title?: string;
-  heading: string;
-  location: string;
-  timeOfDay: string;
-  lightingMood?: string;
-  frameDescription?: string;
-  cameraMovement?: string;
-  action: string;
-  characterCostumes?: Array<{
-    character: string;
-    wardrobe: string;
-    variantId?: string;
-  }>;
-  props?: string[];
-  dialogue: Array<{
-    character: string;
-    line: string;
-    emotion?: string;
-    speechTone?: string;
-  }>;
-  durationSeconds: number;
-  bgmMood?: string;
-  sfxCues?: string[];
-  referenceAssets?: {
-    characters?: string[];
-    locations?: string[];
-    props?: string[];
-  };
-  visualPrompt?: string;
-  storyboardFrameUrl?: string;
-  videoUrl?: string;
-  voiceoverUrl?: string;
-  bgmUrl?: string;
-  captionsData?: Array<{ startMs: number; endMs: number; text: string }>;
-}
-
-export interface EpisodeScript {
-  episode: string;
-  episodeNumber: number;
-  title: string;
-  synopsis?: string;
-  screenplay?: string;
-  sceneCore?: string;
-  conflictEscalation?: string;
-  cliffhangerHook?: string;
-  totalDurationSeconds?: number;
-  scenes: ScriptScene[];
-  characters?: any[];
-  locations?: any[];
-  props?: any[];
-}
-
-export interface CharacterItem {
-  id: string;
-  seriesId?: string;
-  name: string;
-  role: string;
-  age?: number;
-  gender?: string;
-  nationality?: string;
-  voiceId?: string;
-  identity?: string;
-  traits?: string;
-  visualTraits?: string;
-  physicalCharacteristics?: string;
-  appearance?: string;
-  clothingAndAccessories?: string;
-  speechStyle?: string;
-  avatar?: string | null;
-  avatarUrl?: string | null;
-  loraModel?: string;
-  description?: string;
-  meshMatchRate?: number;
-  anchors?: Array<{
-    id: string;
-    name: string;
-    landmarkType?: string;
-    matchScore?: number;
-    status?: 'locked' | 'pending';
-    imageUrl?: string;
-  }>;
-  wardrobe?: Array<{
-    id?: string;
-    name: string;
-    category?: string;
-    status?: string;
-    thumbnailUrl?: string;
-  }>;
-  wardrobeVariants?: Array<{
-    variantId: string;
-    name: string;
-    clothingAndAccessories?: string;
-    imageUrl?: string;
-  }>;
-}
-
-export interface CaptionCue {
-  id?: string;
-  text: string;
-  startMs: number;
-  endMs: number;
-  words?: Array<{ text: string; from: number; to: number; isKeyWord?: boolean }>;
-}
-
-export interface LanguageTrack {
-  languageCode: string;  // e.g. 'vi-VN', 'en-US', 'zh-CN'
-  languageLabel: string; // e.g. 'Tiếng Việt', 'English', '中文'
-  voiceId?: string;      // Gemini voice ID for this language
-  sceneVoiceovers: Record<number, string>;      // sceneIndex -> audioUrl
-  sceneCaptions: Record<number, CaptionCue[]>;  // sceneIndex -> cues
-}
-
-export interface EpisodeItem {
-  id: string;
-  number: number;
-  episodeNumber?: number;
-  title: string;
-  synopsis?: string;
-  screenplay?: string;
-  script?: string;
-  sceneCore?: string;
-  conflictEscalation?: string;
-  cliffhangerHook?: string;
-  duration: string;
-  durationSeconds?: number;
-  scenesCount: string;
-  status: string;
-  statusClass: string;
-  thumb: string;
-  scenes?: ScriptScene[];
-  characters?: any[];
-  locations?: any[];
-  props?: any[];
-  languageTracks?: LanguageTrack[];
-  activeLanguageCode?: string;
-  videoUrlsByLang?: Record<string, string>;
-  renderUrl?: string;
-}
-
-export interface Series {
-  id: string;
-  title: string;
-  genre: string;
-  synopsis?: string;
-  description?: string;
-  visual_style?: string;
-  visual_style_prompt?: string;
-  target_audience?: string;
-  country?: string;
-  ratio?: string;
-  viral_hook?: string;
-  master_plan?: any;
-  characters?: CharacterItem[];
-  locations?: any[];
-  props?: any[];
-  episode_count: number;
-  episodes_count?: number;
-  totalEpisodes?: number;
-  status: 'DRAFT' | 'ACTIVE' | 'PUBLISHED' | 'ARCHIVED';
-  created_at?: string;
-  updated_at?: string;
-}
+import { core } from '@/utils/project';
+import { GEMINI_LANGUAGE_DEFAULTS, getLanguageByCode } from '@/constants/geminiLanguages';
+import type { Series, Episode, Character, SceneTranslation, CaptionCue, LanguageTrack } from '../types/api';
 
 export const useSeriesStore = defineStore('series', () => {
   const seriesList = ref<Series[]>([]);
   const currentSeries = ref<Series | null>(null);
-  const episodesList = ref<EpisodeItem[]>([]);
-  const charactersList = ref<CharacterItem[]>([]);
+  const episodesList = ref<Episode[]>([]);
+  const charactersList = ref<Character[] | []>([]);
   const activeEpisodeId = ref<string>('');
-  const activeLanguageCode = ref<string>('vi-VN');
-  const activeScript = ref<EpisodeScript | null>(null);
+  const activeLanguageCode = ref<string>('en-US');
+  const activeScript = ref<Episode | null>(null);
   const isLoading = ref(false);
   const isScriptLoading = ref(false);
 
-  const activeEpisode = computed(() => {
+  const activeEpisode = computed<Episode | null>(() => {
     return episodesList.value.find(ep => ep.id === activeEpisodeId.value) || episodesList.value[0] || null;
   });
 
   function setActiveLanguage(code: string) {
     if (!code) return;
     activeLanguageCode.value = code;
-    const ep = activeEpisode.value;
-    if (ep) {
-      ep.activeLanguageCode = code;
-    }
   }
 
   function formatTime(seconds: number) {
@@ -199,7 +31,7 @@ export const useSeriesStore = defineStore('series', () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
 
-  async function fetchSeriesList(params?: { userId?: string }) {
+  async function fetchSeriesList(params?: { userId?: string }): Promise<Series[]> {
     isLoading.value = true;
     try {
       const res: any = await http.get('/series', { params });
@@ -229,7 +61,7 @@ export const useSeriesStore = defineStore('series', () => {
     characters?: any[];
     locations?: any[];
     props?: any[];
-  }) {
+  }) : Promise<Series> {
     isLoading.value = true;
     try {
       const res: any = await http.post('/series', data);
@@ -252,54 +84,51 @@ export const useSeriesStore = defineStore('series', () => {
         // 1. Sync Characters
         const rawChars = res.data.series.characters || res.data.series.master_plan?.characters || [];
         if (Array.isArray(rawChars) && rawChars.length > 0) {
-          charactersList.value = rawChars.map((c: any, idx: number) => ({
+          charactersList.value = rawChars.map((c: Character, idx: number) => ({
             id: c.id || `char_${seriesId}_${idx + 1}`,
-            seriesId,
+            series_id: seriesId,
             name: c.name,
             role: c.role || 'protagonist',
             gender: c.gender || (idx === 0 ? 'male' : idx === 1 ? 'female' : 'neutral'),
             age: c.age || 25,
             nationality: c.nationality || res.data.series.country || 'Vietnam',
-            voiceId: c.voiceId || (c.gender === 'female' ? 'Kore' : 'Fenrir'),
-            identity: c.identity || c.traits || '',
+            voice_id: c.voice_id || (c.gender === 'female' ? 'Kore' : 'Fenrir'),
+            identity: c.identity || '',
             traits: c.traits || '',
-            speechStyle: c.speechStyle || c.speech_style || 'Sharp and concise',
-            // Only use real avatar URLs — no fake placeholder images
-            avatar: c.avatarUrl || c.avatar_url || c.avatar || null,
-            avatarUrl: c.avatarUrl || c.avatar_url || c.avatar || null,
-            loraModel: c.loraAnchor || c.lora_model || `lora-${(c.name || 'char').toLowerCase().replace(/\s+/g, '-')}-sdxl`,
+            visual_traits: c.visual_traits || '',
+            physical_characteristics: c.physical_characteristics || '',
+            appearance: c.appearance || '',
+            clothing_and_accessories: c.clothing_and_accessories || '',
+            speech_style: c.speech_style || 'Sharp and concise',
+            avatar: c.avatar || undefined,
+            lora_model: c.lora_model || `lora-${(c.name || 'char').toLowerCase().replace(/\s+/g, '-')}-sdxl`,
             description: c.description || '',
-            anchors: c.anchors || [],
-            meshMatchRate: c.meshMatchRate || 0,
-            wardrobe: c.wardrobe || []
           }));
         }
 
         // 2. Sync Episodes
         if (res.data.episodes && Array.isArray(res.data.episodes)) {
-          episodesList.value = res.data.episodes.map((ep: any, idx: number) => ({
+          episodesList.value = res.data.episodes.map((ep: Episode, idx: number) => ({
             id: ep.id,
             number: Number(ep.episode_number) || idx + 1,
-            episodeNumber: Number(ep.episode_number) || idx + 1,
+            episode_number: Number(ep.episode_number) || idx + 1,
             title: ep.title || `Episode ${idx + 1}`,
             synopsis: ep.synopsis || '',
             screenplay: ep.screenplay || ep.script || '',
             script: ep.script || ep.screenplay || '',
-            sceneCore: ep.scene_core || '',
-            conflictEscalation: ep.conflict_escalation || '',
-            cliffhangerHook: ep.cliffhanger_hook || '',
-            duration: ep.duration ? formatTime(ep.duration) : '1:30',
-            durationSeconds: ep.duration || 90,
-            scenesCount: `${ep.scenes?.length || 3} scenes`,
+            scene_core: ep.scene_core || '',
+            conflict_escalation: ep.conflict_escalation || '',
+            cliffhanger_hook: ep.cliffhanger_hook || '',
+            duration: ep.duration_seconds ? formatTime(ep.duration_seconds) : '1:30',
+            duration_seconds: ep.duration_seconds || 90,
+            scenes_count: `${ep.scenes?.length || 3} scenes`,
             status: ep.status === 'PUBLISHED' ? 'PUBLISHED' : ep.status === 'REVIEW' ? 'REVIEWING' : 'LIVE EDITING',
-            statusClass: ep.status === 'PUBLISHED' ? 'text-green-500 bg-green-500/10' : 'text-[var(--el-color-primary)] bg-[var(--el-color-primary-light-9)]',
-            thumb: ep.thumbnail_url || ep.cover_image || (Array.isArray(ep.scenes) && (ep.scenes[0]?.storyboardFrameUrl || ep.scenes[0]?.imageUrl || ep.scenes[0]?.videoUrl)) || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=200&h=260&fit=crop',
+            status_class: ep.status === 'PUBLISHED' ? 'text-green-500 bg-green-500/10' : 'text-[var(--el-color-primary)] bg-[var(--el-color-primary-light-9)]',
+            cover_image: ep.cover_image || (Array.isArray(ep.scenes) && (ep.scenes[0]?.storyboard_frame_url)) || '/images/dashboard/episode-thumb-default.jpg',
             scenes: ep.scenes || [],
             characters: ep.characters || res.data.series?.characters || [],
             locations: ep.locations || res.data.series?.locations || [],
             props: ep.props || res.data.series?.props || [],
-            languageTracks: ep.languageTracks || [],
-            activeLanguageCode: ep.activeLanguageCode || 'vi-VN',
           }));
 
           if (episodesList.value.length > 0) {
@@ -345,11 +174,30 @@ export const useSeriesStore = defineStore('series', () => {
           }
           if (res.data.scenes) {
             targetEp.scenes = res.data.scenes;
-            targetEp.scenesCount = `${res.data.scenes.length} scenes`;
+            targetEp.scenes_count = `${res.data.scenes.length} scenes`;
           }
-          if (res.data.languageTracks) {
-            targetEp.languageTracks = res.data.languageTracks;
+          if (res.data.dubbing_settings) {
+            targetEp.dubbing_settings = res.data.dubbing_settings;
           }
+          if (res.data.caption_settings) {
+            targetEp.caption_settings = res.data.caption_settings;
+          }
+          const capLangs = (res.data.caption_languages) as string[] | undefined;
+          if (capLangs?.length) {
+            captionLanguages.value = [...new Set<string>(capLangs)];
+          }
+          const dubLangs = (res.data.dubbing_languages) as string[] | undefined;
+          if (dubLangs?.length) {
+            dubbingLanguages.value = [...new Set<string>(dubLangs)];
+          }
+          (targetEp.scenes || []).forEach((sc: any) => {
+            if (sc.translations && typeof sc.translations === 'object') {
+              Object.keys(sc.translations).forEach((code: string) => {
+                if (!captionLanguages.value.includes(code)) captionLanguages.value.push(code);
+                if (!dubbingLanguages.value.includes(code)) dubbingLanguages.value.push(code);
+              });
+            }
+          });
         }
       }
       return activeScript.value;
@@ -391,7 +239,7 @@ export const useSeriesStore = defineStore('series', () => {
           }
           if (res.data.scenes) {
             targetEp.scenes = res.data.scenes;
-            targetEp.scenesCount = `${res.data.scenes.length} scenes`;
+            targetEp.scenes_count = `${res.data.scenes.length} scenes`;
           }
         }
       }
@@ -411,11 +259,21 @@ export const useSeriesStore = defineStore('series', () => {
   // ─── Asset Update Mutations ───────────────────────────────────────────────
 
   function updateCharacterAvatar(charId: string, avatarUrl: string) {
-    const char = charactersList.value.find(c => c.id === charId);
+    const char = charactersList.value.find(c => c.id === charId || c.name?.toLowerCase() === charId?.toLowerCase());
     if (char) {
       char.avatar = avatarUrl;
-      char.avatarUrl = avatarUrl;
     }
+    if (activeEpisode.value?.characters) {
+      const epChar = activeEpisode.value.characters.find((c: any) => c.id === charId || c.name?.toLowerCase() === charId?.toLowerCase());
+      if (epChar && epChar.wardrobe_variants?.length > 0) {
+        epChar.wardrobe_variants[0].image_url = avatarUrl;
+      }
+    }
+  }
+
+  function getCharacterById(id: string) {
+    if (!id) return undefined;
+    return charactersList.value.find(c => c.id === id || c.name?.toLowerCase().trim() === id?.toLowerCase().trim());
   }
 
   function updateSceneStoryboard(epId: string, sceneIndex: number, url: string) {
@@ -423,8 +281,7 @@ export const useSeriesStore = defineStore('series', () => {
     if (activeScript.value?.scenes) {
       const scene = activeScript.value.scenes.find(s => s.index === sceneIndex);
       if (scene) {
-        scene.storyboardFrameUrl = url;
-        (scene as any).imageUrl = url;
+        scene.storyboard_frame_url = url;
       }
     }
     // Update in episodesList scenes
@@ -433,15 +290,12 @@ export const useSeriesStore = defineStore('series', () => {
       if (ep.scenes) {
         const scene = ep.scenes.find((s: any) => s.index === sceneIndex);
         if (scene) {
-          (scene as any).storyboardFrameUrl = url;
-          (scene as any).imageUrl = url;
+          scene.storyboard_frame_url = url;
         }
       }
       // Auto-update episode thumbnail if scene 1 or no custom thumb
-      if (sceneIndex === 1 || !ep.thumb || ep.thumb.includes('unsplash.com')) {
-        ep.thumb = url;
-        (ep as any).thumbnail_url = url;
-        (ep as any).cover_image = url;
+      if (sceneIndex === 1 || !ep.cover_image) {
+        ep.cover_image = url;
       }
     }
   }
@@ -449,102 +303,526 @@ export const useSeriesStore = defineStore('series', () => {
   function updateSceneVideoUrl(epId: string, sceneIndex: number, url: string) {
     if (activeScript.value?.scenes) {
       const scene = activeScript.value.scenes.find(s => s.index === sceneIndex) as any;
-      if (scene) scene.videoUrl = url;
+      if (scene) scene.video_url = url;
     }
     const ep = episodesList.value.find(e => e.id === epId);
     if (ep) {
       if (ep.scenes) {
         const scene = ep.scenes.find((s: any) => s.index === sceneIndex) as any;
-        if (scene) scene.videoUrl = url;
+        if (scene) scene.video_url = url;
       }
-      // if (sceneIndex === 1 || !ep.thumb || ep.thumb.includes('unsplash.com')) {
-      //   ep.thumb = url;
-      //   (ep as any).thumbnail_url = url;
-      //   (ep as any).cover_image = url;
-      // }
     }
   }
 
-  function updateSceneAssets(epId: string, sceneIndex: number, assets: { voiceoverUrl?: string; bgmUrl?: string; captionsData?: any[]; voiceDurationUs?: number; voiceDurationMs?: number; [key: string]: any }) {
+  function updateSceneAssets(epId: string, sceneIndex: number, assets: { voiceover_url?: string; voiceoverUrl?: string; bgm_url?: string; bgmUrl?: string; captions_data?: any[]; captionsData?: any[]; voice_duration_us?: number; voiceDurationUs?: number; [key: string]: any }) {
+    const vUrl = assets.voiceover_url || assets.voiceoverUrl;
+    const bUrl = assets.bgm_url || assets.bgmUrl;
+    const cData = assets.captions_data || assets.captionsData;
+    const vDurUs = assets.voice_duration_us || assets.voiceDurationUs;
+
     if (activeScript.value?.scenes) {
       const scene = activeScript.value.scenes.find(s => s.index === sceneIndex) as any;
       if (scene) {
-        if (assets.voiceoverUrl) scene.voiceoverUrl = assets.voiceoverUrl;
-        if (assets.bgmUrl) scene.bgmUrl = assets.bgmUrl;
-        if (assets.captionsData) scene.captionsData = assets.captionsData;
-        if (assets.voiceDurationUs) scene.voiceDurationUs = assets.voiceDurationUs;
-        if (assets.voiceDurationMs) scene.voiceDurationMs = assets.voiceDurationMs;
+        if (vUrl) scene.voiceover_url = vUrl;
+        if (bUrl) scene.bgm_url = bUrl;
+        if (cData) scene.captions_data = cData;
+        if (vDurUs) scene.voice_duration_us = vDurUs;
       }
     }
     const ep = episodesList.value.find(e => e.id === epId);
     if (ep?.scenes) {
       const scene = ep.scenes.find((s: any) => s.index === sceneIndex) as any;
       if (scene) {
-        if (assets.voiceoverUrl) scene.voiceoverUrl = assets.voiceoverUrl;
-        if (assets.bgmUrl) scene.bgmUrl = assets.bgmUrl;
-        if (assets.captionsData) scene.captionsData = assets.captionsData;
-        if (assets.voiceDurationUs) scene.voiceDurationUs = assets.voiceDurationUs;
-        if (assets.voiceDurationMs) scene.voiceDurationMs = assets.voiceDurationMs;
+        if (vUrl) scene.voiceover_url = vUrl;
+        if (bUrl) scene.bgm_url = bUrl;
+        if (cData) scene.captions_data = cData;
+        if (vDurUs) scene.voice_duration_us = vDurUs;
       }
     }
   }
 
-  // ─── Auto-save Episode Scenes to Server ────────────────────────────────────
+  // ─── Auto-save Episode Scenes & Settings to Server ────────────────────────────
   async function saveEpisodeScenes(seriesId: string, epId: string) {
     const ep = episodesList.value.find(e => e.id === epId);
     const scenes = ep?.scenes || activeScript.value?.scenes || [];
     if (!scenes.length) return;
-    const thumbUrl = ep?.thumb || (ep as any)?.thumbnail_url || (scenes[0]?.storyboardFrameUrl || (scenes[0] as any)?.imageUrl);
+    const thumbUrl = ep?.cover_image || scenes[0]?.storyboard_frame_url || '';
     try {
       await http.put(`/series/${seriesId}/episodes/${epId}`, {
         scenes,
         title: ep?.title,
         synopsis: ep?.synopsis,
-        thumbnail_url: thumbUrl,
         cover_image: thumbUrl,
-        languageTracks: ep?.languageTracks || [],
+        dubbing_settings: ep?.dubbing_settings || {},
+        caption_settings: ep?.caption_settings || {},
+        caption_languages: captionLanguages.value,
+        dubbing_languages: dubbingLanguages.value,
       });
     } catch (err) {
       console.warn('[saveEpisodeScenes] Failed to auto-save episode scenes:', err);
     }
   }
 
-  // ─── Language Track Mutations ─────────────────────────────────────────────────
-  const LANGUAGE_DEFAULTS: Record<string, { label: string; voiceId: string }> = {
-    'vi-VN': { label: 'Tiếng Việt', voiceId: 'Kore' },
-    'en-US': { label: 'English', voiceId: 'Puck' },
-    'zh-CN': { label: '中文', voiceId: 'Charon' },
-    'ja-JP': { label: '日本語', voiceId: 'Aoede' },
-    'ko-KR': { label: '한국어', voiceId: 'Fenrir' },
-  };
+  // ─── Language Track Mutations & Sync ──────────────────────────────────────────
+  const LANGUAGE_DEFAULTS: Record<string, { label: string }> = GEMINI_LANGUAGE_DEFAULTS;
 
-  function ensureLanguageTrack(epId: string, langCode: string): LanguageTrack {
-    const ep = episodesList.value.find(e => e.id === epId);
-    if (!ep) throw new Error(`Episode ${epId} not found`);
-    if (!ep.languageTracks) ep.languageTracks = [];
-    let track = ep.languageTracks.find(t => t.languageCode === langCode);
-    if (!track) {
-      const def = LANGUAGE_DEFAULTS[langCode] || { label: langCode, voiceId: 'Puck' };
-      track = { languageCode: langCode, languageLabel: def.label, voiceId: def.voiceId, sceneVoiceovers: {}, sceneCaptions: {} };
-      ep.languageTracks.push(track);
+  const activePreviewCaptionLang = ref<string>('en-US');
+  const activePreviewVoiceLang = ref<string>('en-US');
+  const captionLanguages = ref<string[]>(['en-US']);
+  const dubbingLanguages = ref<string[]>(['en-US']);
+
+  function setCaptionLanguages(langs: string[]) {
+    captionLanguages.value = [...new Set(langs)];
+    dubbingLanguages.value = [...new Set(langs)];
+    if (activePreviewCaptionLang.value !== 'off' && !captionLanguages.value.includes(activePreviewCaptionLang.value)) {
+      setPreviewCaptionLanguage(captionLanguages.value[0] || 'off');
     }
-    return track;
+  }
+
+  function setDubbingLanguages(langs: string[]) {
+    setCaptionLanguages(langs);
+  }
+
+  function addLanguage(langCode: string) {
+    if (!captionLanguages.value.includes(langCode)) {
+      captionLanguages.value.push(langCode);
+    }
+    if (!dubbingLanguages.value.includes(langCode)) {
+      dubbingLanguages.value.push(langCode);
+    }
+    if (activeEpisodeId.value) {
+      const sId = currentSeries.value?.id;
+      if (sId) saveEpisodeScenes(sId, activeEpisodeId.value);
+    }
+  }
+
+  function removeLanguage(langCode: string) {
+    captionLanguages.value = captionLanguages.value.filter(c => c !== langCode);
+    dubbingLanguages.value = dubbingLanguages.value.filter(c => c !== langCode);
+    if (activePreviewCaptionLang.value === langCode) {
+      setPreviewCaptionLanguage(captionLanguages.value[0] || 'off');
+    }
+    if (activePreviewVoiceLang.value === langCode) {
+      setPreviewVoiceLanguage(dubbingLanguages.value[0] || 'mute');
+    }
+    if (activeEpisodeId.value) {
+      const sId = currentSeries.value?.id;
+      if (sId) saveEpisodeScenes(sId, activeEpisodeId.value);
+    }
+  }
+
+  function addCaptionLanguage(langCode: string) {
+    addLanguage(langCode);
+  }
+
+  function removeCaptionLanguage(langCode: string) {
+    removeLanguage(langCode);
+  }
+
+  function addDubbingLanguage(langCode: string) {
+    addLanguage(langCode);
+  }
+
+  function removeDubbingLanguage(langCode: string) {
+    removeLanguage(langCode);
+  }
+
+  function setPreviewCaptionLanguage(langCode: string | 'off') {
+    activePreviewCaptionLang.value = langCode;
+    try {
+      const state = core.store.getState();
+      const tracks = [...((state.tracks as any[]) || [])];
+      const clips = { ...(state.clips || {}) };
+      const safeLang = langCode !== 'off' ? langCode.replace(/[^a-zA-Z0-9_-]/g, '_') : '';
+      const targetCaptionTrackId = safeLang ? `track_caption_${safeLang}` : '';
+
+      tracks.forEach((track: any) => {
+        if (track.type === 'Caption' || track.id?.startsWith('track_caption_')) {
+          const isTarget = langCode !== 'off' && track.id === targetCaptionTrackId;
+          track.visible = isTarget;
+        }
+      });
+
+      Object.keys(clips).forEach((clipId) => {
+        const clip = clips[clipId];
+        if (clip && (clip.type === 'Caption' || clip.trackId?.startsWith('track_caption_'))) {
+          const isTarget = langCode !== 'off' && clip.trackId === targetCaptionTrackId;
+          clip.visible = isTarget;
+        }
+      });
+
+      core.store.setState({ ...state, tracks, clips });
+    } catch (err) {
+      console.warn('[setPreviewCaptionLanguage] Failed:', err);
+    }
+  }
+
+  function setPreviewVoiceLanguage(langCode: string | 'mute') {
+    activePreviewVoiceLang.value = langCode;
+    try {
+      const state = core.store.getState();
+      const tracks = [...((state.tracks as any[]) || [])];
+      const clips = { ...(state.clips || {}) };
+      const safeLang = langCode !== 'mute' ? langCode.replace(/[^a-zA-Z0-9_-]/g, '_') : '';
+      const targetVoiceTrackId = safeLang ? `track_voiceover_${safeLang}` : '';
+
+      tracks.forEach((track: any) => {
+        if (track.type === 'Audio' && track.id?.startsWith('track_voiceover_')) {
+          const isTarget = langCode !== 'mute' && track.id === targetVoiceTrackId;
+          track.muted = !isTarget;
+          track.visible = isTarget;
+        }
+      });
+
+      Object.keys(clips).forEach((clipId) => {
+        const clip = clips[clipId];
+        if (clip && clip.trackId?.startsWith('track_voiceover_')) {
+          const isTarget = langCode !== 'mute' && clip.trackId === targetVoiceTrackId;
+          clip.visible = isTarget;
+        }
+      });
+
+      core.store.setState({ ...state, tracks, clips });
+    } catch (err) {
+      console.warn('[setPreviewVoiceLanguage] Failed:', err);
+    }
+  }
+
+  function syncVoiceoverTrackToTimeline(epId: string, langCode: string) {
+    const safeLang = langCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const voiceTrackId = `track_voiceover_${safeLang}`;
+    const ep = episodesList.value.find(e => e.id === epId);
+    const scenes = ep?.scenes || activeScript.value?.scenes || [];
+
+    try {
+      const state = core.store.getState();
+      const tracks = [...((state.tracks as any[]) || [])];
+      const clips = { ...(state.clips || {}) };
+
+      let targetTrack = tracks.find((t: any) => t.id === voiceTrackId);
+      const isVoiceActive = activePreviewVoiceLang.value === langCode;
+
+      if (!targetTrack) {
+        targetTrack = {
+          id: voiceTrackId,
+          name: `Voiceover (${langCode})`,
+          type: 'Audio',
+          languageCode: langCode,
+          muted: !isVoiceActive,
+          visible: isVoiceActive,
+          clipIds: [],
+        };
+        tracks.push(targetTrack);
+      } else {
+        targetTrack.muted = !isVoiceActive;
+        targetTrack.visible = isVoiceActive;
+        targetTrack.clipIds = targetTrack.clipIds || [];
+      }
+
+      const mainLang = currentSeries.value?.language || 'en-US';
+      let currentUs = 0;
+      for (let i = 0; i < scenes.length; i++) {
+        const sc = scenes[i];
+        const scIdx = sc.index || (i + 1);
+        const vClipId = `clip_v_${epId}_s${scIdx}`;
+        const vClip: any = clips[vClipId] || Object.values(clips).find((c: any) =>
+          c.id === vClipId || ((c.type === 'Video' || c.type === 'Image') && (c.name?.includes(`Scene ${scIdx}`) || c.label?.includes(`Scene ${scIdx}`)))
+        );
+        const sceneFromUs = vClip?.timing?.display?.from ?? (vClip?.display?.from ?? currentUs);
+        const sceneDurUs = vClip?.timing?.duration ?? (vClip?.duration ?? ((sc.duration_seconds || 6) * 1_000_000));
+
+        const trans = sc.translations?.[langCode];
+        const voiceUrl = (langCode === mainLang ? sc.voiceover_url : trans?.voiceover_url) || trans?.voiceover_url;
+        const cues = (langCode === mainLang ? sc.captions_data : trans?.captions_data) || trans?.captions_data || sc.captions_data || [];
+        const firstCue = cues[0];
+        const lastCue = cues[cues.length - 1];
+
+        let voiceOffsetUs = 200_000;
+        let voiceDurationUs = trans?.voice_duration_us || Math.min(sceneDurUs - voiceOffsetUs, 3_500_000);
+
+        if (firstCue) {
+          voiceOffsetUs = firstCue.fromUs !== undefined && firstCue.fromUs > 0
+            ? firstCue.fromUs
+            : (firstCue.startMs !== undefined ? Math.round(firstCue.startMs * 1000) : 200_000);
+          if (lastCue) {
+            const lastCueEndUs = lastCue.toUs !== undefined && lastCue.toUs > 0
+              ? lastCue.toUs
+              : (lastCue.endMs !== undefined ? Math.round(lastCue.endMs * 1000) : (voiceOffsetUs + 3_000_000));
+            voiceDurationUs = Math.max(500_000, lastCueEndUs - voiceOffsetUs);
+          }
+        }
+
+        voiceDurationUs = Math.min(Math.max(100_000, voiceDurationUs), Math.max(500_000, sceneDurUs - voiceOffsetUs));
+        const fromUs = sceneFromUs + voiceOffsetUs;
+        const toUs = fromUs + voiceDurationUs;
+
+        if (voiceUrl) {
+          const clipId = `clip_vo_${epId}_s${scIdx}_${safeLang}`;
+          clips[clipId] = {
+            id: clipId,
+            trackId: voiceTrackId,
+            type: 'Audio',
+            name: `Voice #${scIdx} (${langCode})`,
+            src: voiceUrl,
+            timing: {
+              display: { from: fromUs, to: toUs },
+              trim: { from: 0, to: voiceDurationUs },
+              duration: voiceDurationUs,
+              playbackRate: 1,
+            },
+            display: { from: fromUs, to: toUs },
+            duration: voiceDurationUs,
+            visible: isVoiceActive,
+            volume: 1,
+            style: {},
+            locked: false,
+            effects: [],
+            animations: [],
+            transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+          } as any;
+          if (!targetTrack.clipIds.includes(clipId)) {
+            targetTrack.clipIds.push(clipId);
+          }
+        }
+        currentUs = sceneFromUs + sceneDurUs;
+      }
+
+      core.store.setState({ ...state, tracks, clips });
+    } catch (err) {
+      console.warn('[syncVoiceoverTrackToTimeline] Error:', err);
+    }
+  }
+
+  function syncCaptionTrackToTimeline(epId: string, langCode: string, styleOpts?: any) {
+    const safeLang = langCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const capTrackId = `track_caption_${safeLang}`;
+    const ep = episodesList.value.find(e => e.id === epId);
+    const scenes = ep?.scenes || activeScript.value?.scenes || [];
+
+    try {
+      const state = core.store.getState();
+      const tracks = [...((state.tracks as any[]) || [])];
+      const clips = { ...(state.clips || {}) };
+
+      let targetTrack = tracks.find((t: any) => t.id === capTrackId);
+      const isCapActive = activePreviewCaptionLang.value === langCode;
+
+      if (!targetTrack) {
+        const langInfo = getLanguageByCode(langCode);
+        const label = LANGUAGE_DEFAULTS[langCode]?.label || langInfo?.nativeName || langCode;
+        targetTrack = {
+          id: capTrackId,
+          name: `Captions (${label})`,
+          type: 'Caption',
+          languageCode: langCode,
+          visible: isCapActive,
+          clipIds: [],
+        };
+        tracks.push(targetTrack);
+      } else {
+        targetTrack.visible = isCapActive;
+        targetTrack.clipIds = targetTrack.clipIds || [];
+      }
+
+      const mainLang = currentSeries.value?.language || 'en-US';
+      let currentUs = 0;
+      for (let i = 0; i < scenes.length; i++) {
+        const sc = scenes[i];
+        const scIdx = sc.index || (i + 1);
+        const vClipId = `clip_v_${epId}_s${scIdx}`;
+        const vClip: any = clips[vClipId] || Object.values(clips).find((c: any) =>
+          c.id === vClipId || ((c.type === 'Video' || c.type === 'Image') && (c.name?.includes(`Scene ${scIdx}`) || c.label?.includes(`Scene ${scIdx}`)))
+        );
+        const sceneFromUs = vClip?.timing?.display?.from ?? (vClip?.display?.from ?? currentUs);
+        const sceneDurUs = vClip?.timing?.duration ?? (vClip?.duration ?? ((sc.duration_seconds || 6) * 1_000_000));
+
+        const trans = sc.translations?.[langCode];
+        const cues = (langCode === mainLang ? sc.captions_data : trans?.captions_data) || trans?.captions_data || sc.captions_data || [];
+        const words = trans?.words || sc.words;
+        const firstCue = cues[0];
+        const lastCue = cues[cues.length - 1];
+
+        let capOffsetUs = 200_000;
+        let capDurationUs = trans?.voice_duration_us || Math.min(sceneDurUs - capOffsetUs, 3_500_000);
+
+        if (firstCue) {
+          capOffsetUs = firstCue.fromUs !== undefined && firstCue.fromUs > 0
+            ? firstCue.fromUs
+            : (firstCue.startMs !== undefined ? Math.round(firstCue.startMs * 1000) : 200_000);
+          if (lastCue) {
+            const lastCueEndUs = lastCue.toUs !== undefined && lastCue.toUs > 0
+              ? lastCue.toUs
+              : (lastCue.endMs !== undefined ? Math.round(lastCue.endMs * 1000) : (capOffsetUs + 3_000_000));
+            capDurationUs = Math.max(500_000, lastCueEndUs - capOffsetUs);
+          }
+        }
+
+        capDurationUs = Math.min(Math.max(100_000, capDurationUs), Math.max(500_000, sceneDurUs - capOffsetUs));
+        const fromUs = sceneFromUs + capOffsetUs;
+        const toUs = fromUs + capDurationUs;
+
+        const lineText = Array.isArray(cues) && cues.length > 0
+          ? cues.map((c: any) => c.text).join(' ')
+          : (trans?.dialogue || trans?.translated_dialogue || (Array.isArray(sc.dialogue) ? sc.dialogue.map((d: any) => d.line).join(' ') : (sc.dialogue || '')));
+
+        if (lineText) {
+          const clipId = `clip_cap_${epId}_s${scIdx}_${safeLang}`;
+          clips[clipId] = {
+            id: clipId,
+            trackId: capTrackId,
+            type: 'Caption',
+            name: `Sub #${scIdx} (${langCode})`,
+            text: lineText,
+            mediaId: clipId,
+            wordsPerLine: 'multiple',
+            timing: {
+              display: { from: fromUs, to: toUs },
+              trim: { from: 0, to: capDurationUs },
+              duration: capDurationUs,
+              playbackRate: 1,
+            },
+            display: { from: fromUs, to: toUs },
+            duration: capDurationUs,
+            visible: isCapActive,
+            fontSize: styleOpts?.fontSize || 44,
+            fontFamily: styleOpts?.fontFamily || 'Bangers-Regular',
+            color: styleOpts?.color || '#FFFFFF',
+            outlineColor: styleOpts?.outlineColor || '#000000',
+            outlineWeight: styleOpts?.outlineWeight || 4,
+            style: {
+              fontFamily: styleOpts?.fontFamily || 'Bangers-Regular',
+              fontSize: styleOpts?.fontSize || 44,
+              color: styleOpts?.color || '#FFFFFF',
+            },
+            caption: {
+              colors: {
+                active: { color: '#FFD700' },
+                keyword: { color: '#FFD700' },
+              },
+              words: Array.isArray(words) && words.length > 0 ? words : undefined,
+            },
+            transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+          } as any;
+          if (!targetTrack.clipIds.includes(clipId)) {
+            targetTrack.clipIds.push(clipId);
+          }
+        }
+        currentUs = sceneFromUs + sceneDurUs;
+      }
+
+      core.store.setState({ ...state, tracks, clips });
+    } catch (err) {
+      console.warn('[syncCaptionTrackToTimeline] Error:', err);
+    }
+  }
+
+  function updateSceneTranslation(epId: string, sceneIndex: number, langCode: string, translationData: Partial<SceneTranslation>) {
+    const ep = episodesList.value.find(e => e.id === epId);
+    if (ep?.scenes) {
+      const scene = ep.scenes.find((s: any) => s.index === sceneIndex);
+      if (scene) {
+        if (!scene.translations) scene.translations = {};
+        scene.translations[langCode] = { ...(scene.translations[langCode] || {}), ...translationData };
+      }
+    }
+    if (activeScript.value?.scenes) {
+      const scene = activeScript.value.scenes.find((s: any) => s.index === sceneIndex);
+      if (scene) {
+        if (!scene.translations) scene.translations = {};
+        scene.translations[langCode] = { ...(scene.translations[langCode] || {}), ...translationData };
+      }
+    }
+  }
+
+  function getSceneTranslation(epId: string, sceneIndex: number, langCode: string): SceneTranslation | undefined {
+    const ep = episodesList.value.find(e => e.id === epId);
+    const scenes = ep?.scenes || activeScript.value?.scenes || [];
+    const scene = scenes.find((s: any) => s.index === sceneIndex);
+    return scene?.translations?.[langCode];
   }
 
   function updateLanguageTrackVoiceover(epId: string, langCode: string, sceneIndex: number, url: string) {
-    const track = ensureLanguageTrack(epId, langCode);
-    track.sceneVoiceovers[sceneIndex] = url;
-    updateSceneAssets(epId, sceneIndex, { voiceoverUrl: url });
+    const mainLang = currentSeries.value?.language || 'en-US';
+    updateSceneTranslation(epId, sceneIndex, langCode, { voiceover_url: url });
+    if (langCode === mainLang) {
+      updateSceneAssets(epId, sceneIndex, { voiceoverUrl: url });
+    }
+    syncVoiceoverTrackToTimeline(epId, langCode);
   }
 
-  function updateLanguageTrackCaptions(epId: string, langCode: string, sceneIndex: number, cues: CaptionCue[]) {
-    const track = ensureLanguageTrack(epId, langCode);
-    track.sceneCaptions[sceneIndex] = cues;
-    updateSceneAssets(epId, sceneIndex, { captionsData: cues });
+  function updateLanguageTrackCaptions(epId: string, langCode: string, sceneIndex: number, cues: CaptionCue[], words?: any[]) {
+    const mainLang = currentSeries.value?.language || 'en-US';
+    updateSceneTranslation(epId, sceneIndex, langCode, { captions_data: cues, ...(words ? { words } : {}) });
+    if (langCode === mainLang) {
+      updateSceneAssets(epId, sceneIndex, { captionsData: cues, ...(words ? { words } : {}) });
+    }
+    syncCaptionTrackToTimeline(epId, langCode);
+  }
+
+  function updateLanguageTrackDialogue(epId: string, langCode: string, sceneIndex: number, text: string) {
+    updateSceneTranslation(epId, sceneIndex, langCode, { dialogue: text, translated_dialogue: text });
+  }
+
+  function getLanguageTrackDialogue(epId: string, langCode: string, sceneIndex: number): string | null {
+    const trans = getSceneTranslation(epId, sceneIndex, langCode);
+    return trans?.dialogue || trans?.translated_dialogue || null;
+  }
+
+  function updateEpisodeDubbingSettings(epId: string, settings: any) {
+    const ep = episodesList.value.find(e => e.id === epId);
+    if (ep) {
+      ep.dubbing_settings = { ...(ep.dubbing_settings || {}), ...settings };
+    }
+  }
+
+  function updateEpisodeCaptionSettings(epId: string, settings: any) {
+    const ep = episodesList.value.find(e => e.id === epId);
+    if (ep) {
+      ep.caption_settings = { ...(ep.caption_settings || {}), ...settings };
+    }
   }
 
   function getLanguageTracks(epId: string): LanguageTrack[] {
-    return episodesList.value.find(e => e.id === epId)?.languageTracks || [];
+    const ep = episodesList.value.find(e => e.id === epId);
+    const scenes = ep?.scenes || activeScript.value?.scenes || [];
+    const mainLang = currentSeries.value?.language || 'en-US';
+    const allLangs = [...new Set([...captionLanguages.value, ...dubbingLanguages.value, mainLang])];
+
+    return allLangs.map(langCode => {
+      const langInfo = getLanguageByCode(langCode);
+      const label = LANGUAGE_DEFAULTS[langCode]?.label || langInfo?.nativeName || langCode;
+      const sceneVoiceovers: Record<number, string> = {};
+      const sceneCaptions: Record<number, any[]> = {};
+      const sceneDialogues: Record<number, string> = {};
+
+      scenes.forEach((sc: any) => {
+        const scIdx = sc.index;
+        if (langCode === mainLang) {
+          const vUrl = sc.voiceover_url || sc.voiceoverUrl;
+          const cData = sc.captions_data || sc.captionsData;
+          if (vUrl) sceneVoiceovers[scIdx] = vUrl;
+          if (cData) sceneCaptions[scIdx] = cData;
+          if (sc.dialogue) sceneDialogues[scIdx] = Array.isArray(sc.dialogue) ? sc.dialogue.map((d: any) => d.line).join(' ') : sc.dialogue;
+        } else if (sc.translations?.[langCode]) {
+          const trans = sc.translations[langCode];
+          const vUrl = trans.voiceover_url || trans.voiceoverUrl;
+          const cData = trans.captions_data || trans.captionsData;
+          if (vUrl) sceneVoiceovers[scIdx] = vUrl;
+          if (cData) sceneCaptions[scIdx] = cData;
+          if (trans.dialogue || trans.translated_dialogue || trans.translatedDialogue) {
+            sceneDialogues[scIdx] = trans.dialogue || trans.translated_dialogue || trans.translatedDialogue;
+          }
+        }
+      });
+
+      return {
+        language_code: langCode,
+        language_label: label,
+        scene_voiceovers: sceneVoiceovers,
+        scene_captions: sceneCaptions,
+        scene_dialogues: sceneDialogues,
+      };
+    });
   }
 
   // ─── Auto-save Character Avatars to Server ─────────────────────────────────
@@ -609,7 +887,7 @@ export const useSeriesStore = defineStore('series', () => {
     }
   }
 
-  async function updateCharacter(charId: string, updates: Partial<CharacterItem>) {
+  async function updateCharacter(charId: string, updates: Partial<Character>) {
     const char = charactersList.value.find(c => c.id === charId || c.name === charId);
     if (char) {
       Object.assign(char, updates);
@@ -648,6 +926,7 @@ export const useSeriesStore = defineStore('series', () => {
     selectEpisode,
     generateScriptForEpisode,
     deleteSeries,
+    getCharacterById,
     updateCharacter,
     updateCharacterAvatar,
     updateSceneStoryboard,
@@ -657,9 +936,27 @@ export const useSeriesStore = defineStore('series', () => {
     saveCharacterAvatars,
     updateLanguageTrackVoiceover,
     updateLanguageTrackCaptions,
+    updateLanguageTrackDialogue,
+    getLanguageTrackDialogue,
+    updateEpisodeDubbingSettings,
+    updateEpisodeCaptionSettings,
     getLanguageTracks,
     activeLanguageCode,
     setActiveLanguage,
     LANGUAGE_DEFAULTS,
+    activePreviewCaptionLang,
+    activePreviewVoiceLang,
+    captionLanguages,
+    dubbingLanguages,
+    setCaptionLanguages,
+    setDubbingLanguages,
+    addCaptionLanguage,
+    removeCaptionLanguage,
+    addDubbingLanguage,
+    removeDubbingLanguage,
+    setPreviewCaptionLanguage,
+    setPreviewVoiceLanguage,
+    syncVoiceoverTrackToTimeline,
+    syncCaptionTrackToTimeline,
   };
 });

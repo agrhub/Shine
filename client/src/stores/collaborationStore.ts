@@ -20,7 +20,7 @@ export const useCollaborationStore = defineStore('collaboration', {
       this.wsComposable = ws;
 
       ws.connect(seriesId, {
-        userId: `user-${Math.random().toString(36).substr(2, 5)}`,
+        user_id: `user-${Math.random().toString(36).substr(2, 5)}`,
         name: `Editor ${Math.floor(Math.random() * 100)}`,
       });
 
@@ -35,7 +35,7 @@ export const useCollaborationStore = defineStore('collaboration', {
       const timelineStore = useTimelineStore();
       if (event.commands && Array.isArray(event.commands)) {
         event.commands.forEach((cmd: Command) => {
-          if (cmd.targetModule === 'timeline') {
+          if (cmd.target_module === 'timeline') {
             if (cmd.type === 'MOVE_CLIP' || cmd.type === 'clip.update') {
               const startSec = cmd.payload.newStartTime ?? cmd.payload.startTime ?? 5;
               const durationSec = cmd.payload.duration ?? 5;
@@ -49,7 +49,7 @@ export const useCollaborationStore = defineStore('collaboration', {
         });
       }
 
-      const toastMessage = i18n.global.t('toast.collaboratorJoined', { name: `Editor (${event.userId.substring(0, 4)})` });
+      const toastMessage = i18n.global.t('toast.collaboratorJoined', { name: `Editor (${event.user_id.substring(0, 4)})` });
       ElNotification({
         title: 'Real-time Patch Received',
         message: toastMessage,

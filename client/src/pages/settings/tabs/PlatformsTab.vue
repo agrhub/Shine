@@ -63,7 +63,7 @@ async function loadConfig() {
       };
     }
   } catch (err: any) {
-    toast.error('Failed to load platform settings');
+    toast.error(t('toast.userDirectoryLoadError'));
   } finally {
     isLoading.value = false;
   }
@@ -122,11 +122,11 @@ onMounted(() => {
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center text-lg">
-                <i class="fa-brands fa-youtube"></i>
+                <el-icon :size="20"><VideoPlay /></el-icon>
               </div>
               <div>
-                <h4 class="font-bold text-sm text-[var(--el-text-color-primary)]">YouTube Shorts</h4>
-                <p class="text-[11px] text-[var(--el-text-color-secondary)]">Google Cloud OAuth</p>
+                <h4 class="font-bold text-sm text-[var(--el-text-color-primary)]">{{ t('settings.youtubeShorts') }}</h4>
+                <p class="text-[11px] text-[var(--el-text-color-secondary)]">{{ t('settings.googleCloudOAuth') }}</p>
               </div>
             </div>
             <el-switch v-model="platformConfig.publishing.youtube.enabled" size="small" />
@@ -135,7 +135,7 @@ onMounted(() => {
           <div class="space-y-3 pt-2">
             <div>
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1">
-                Client ID
+                {{ t('common.clientId') }}
               </label>
               <input
                 v-model="platformConfig.publishing.youtube.clientId"
@@ -146,7 +146,7 @@ onMounted(() => {
             </div>
             <div>
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1">
-                Client Secret
+                {{ t('common.clientSecret') }}
               </label>
               <input
                 v-model="platformConfig.publishing.youtube.clientSecret"
@@ -157,7 +157,7 @@ onMounted(() => {
             </div>
             <div>
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1">
-                Redirect Callback URI
+                {{ t('common.redirectUri') }}
               </label>
               <input
                 v-model="platformConfig.publishing.youtube.redirectUri"
@@ -173,11 +173,11 @@ onMounted(() => {
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center text-lg">
-                <i class="fa-brands fa-tiktok"></i>
+                <el-icon :size="20"><Film /></el-icon>
               </div>
               <div>
-                <h4 class="font-bold text-sm text-[var(--el-text-color-primary)]">TikTok for Creators</h4>
-                <p class="text-[11px] text-[var(--el-text-color-secondary)]">TikTok Open API</p>
+                <h4 class="font-bold text-sm text-[var(--el-text-color-primary)]">{{ t('settings.tiktokForCreators') }}</h4>
+                <p class="text-[11px] text-[var(--el-text-color-secondary)]">{{ t('settings.tiktokOpenApi') }}</p>
               </div>
             </div>
             <el-switch v-model="platformConfig.publishing.tiktok.enabled" size="small" />
@@ -186,7 +186,7 @@ onMounted(() => {
           <div class="space-y-3 pt-2">
             <div>
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1">
-                Client Key
+                {{ t('common.clientKey') }}
               </label>
               <input
                 v-model="platformConfig.publishing.tiktok.clientKey"
@@ -197,7 +197,7 @@ onMounted(() => {
             </div>
             <div>
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1">
-                Client Secret
+                {{ t('common.clientSecret') }}
               </label>
               <input
                 v-model="platformConfig.publishing.tiktok.clientSecret"
@@ -208,7 +208,7 @@ onMounted(() => {
             </div>
             <div>
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1">
-                Redirect Callback URI
+                {{ t('common.redirectUri') }}
               </label>
               <input
                 v-model="platformConfig.publishing.tiktok.redirectUri"
@@ -224,11 +224,11 @@ onMounted(() => {
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-xl bg-blue-600/10 text-blue-500 flex items-center justify-center text-lg">
-                <i class="fa-brands fa-facebook"></i>
+                <el-icon :size="20"><Share /></el-icon>
               </div>
               <div>
-                <h4 class="font-bold text-sm text-[var(--el-text-color-primary)]">Meta Reels</h4>
-                <p class="text-[11px] text-[var(--el-text-color-secondary)]">Facebook Graph API</p>
+                <h4 class="font-bold text-sm text-[var(--el-text-color-primary)]">{{ t('platforms.metaReels') }}</h4>
+                <p class="text-[11px] text-[var(--el-text-color-secondary)]">{{ t('platforms.facebookGraphApi') }}</p>
               </div>
             </div>
             <el-switch v-model="platformConfig.publishing.facebook.enabled" size="small" />
@@ -237,7 +237,7 @@ onMounted(() => {
           <div class="space-y-3 pt-2">
             <div>
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1">
-                App ID
+                {{ t('common.appId') }}
               </label>
               <input
                 v-model="platformConfig.publishing.facebook.appId"
@@ -248,7 +248,7 @@ onMounted(() => {
             </div>
             <div>
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1">
-                App Secret
+                {{ t('common.appSecret') }}
               </label>
               <input
                 v-model="platformConfig.publishing.facebook.appSecret"
@@ -259,7 +259,7 @@ onMounted(() => {
             </div>
             <div>
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1">
-                Redirect Callback URI
+                {{ t('common.redirectUri') }}
               </label>
               <input
                 v-model="platformConfig.publishing.facebook.redirectUri"
@@ -289,11 +289,11 @@ onMounted(() => {
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center text-lg">
-                <i class="fa-brands fa-google"></i>
+                <el-icon :size="20"><Platform /></el-icon>
               </div>
               <div>
-                <h4 class="font-bold text-sm text-[var(--el-text-color-primary)]">Google SSO</h4>
-                <p class="text-[11px] text-[var(--el-text-color-secondary)]">Sign in with Google</p>
+                <h4 class="font-bold text-sm text-[var(--el-text-color-primary)]">{{ t('settings.googleSSO') }}</h4>
+                <p class="text-[11px] text-[var(--el-text-color-secondary)]">{{ t('platforms.signInGoogle') }}</p>
               </div>
             </div>
             <el-switch v-model="platformConfig.sso.google.enabled" size="small" />
@@ -302,7 +302,7 @@ onMounted(() => {
           <div class="space-y-3 pt-2">
             <div>
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1">
-                Client ID
+                {{ t('common.clientId') }}
               </label>
               <input
                 v-model="platformConfig.sso.google.clientId"
@@ -313,7 +313,7 @@ onMounted(() => {
             </div>
             <div>
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1">
-                Client Secret
+                {{ t('common.clientSecret') }}
               </label>
               <input
                 v-model="platformConfig.sso.google.clientSecret"
@@ -329,12 +329,12 @@ onMounted(() => {
         <div class="p-5 bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-2xl shadow-soft space-y-4">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center text-lg">
-                <i class="fa-brands fa-github"></i>
+              <div class="w-10 h-10 rounded-xl bg-[var(--el-fill-color-light)] text-[var(--el-color-primary)] flex items-center justify-center text-lg border border-[var(--el-border-color)]">
+                <el-icon :size="20"><Connection /></el-icon>
               </div>
               <div>
-                <h4 class="font-bold text-sm text-[var(--el-text-color-primary)]">GitHub SSO</h4>
-                <p class="text-[11px] text-[var(--el-text-color-secondary)]">Sign in with GitHub</p>
+                <h4 class="font-bold text-sm text-[var(--el-text-color-primary)]">{{ t('settings.githubSSO') }}</h4>
+                <p class="text-[11px] text-[var(--el-text-color-secondary)]">{{ t('platforms.signInGithub') }}</p>
               </div>
             </div>
             <el-switch v-model="platformConfig.sso.github.enabled" size="small" />
@@ -343,7 +343,7 @@ onMounted(() => {
           <div class="space-y-3 pt-2">
             <div>
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1">
-                Client ID
+                {{ t('common.clientId') }}
               </label>
               <input
                 v-model="platformConfig.sso.github.clientId"
@@ -354,7 +354,7 @@ onMounted(() => {
             </div>
             <div>
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1">
-                Client Secret
+                {{ t('common.clientSecret') }}
               </label>
               <input
                 v-model="platformConfig.sso.github.clientSecret"
@@ -371,11 +371,11 @@ onMounted(() => {
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-xl bg-blue-600/10 text-blue-500 flex items-center justify-center text-lg">
-                <i class="fa-brands fa-facebook"></i>
+                <el-icon :size="20"><Share /></el-icon>
               </div>
               <div>
-                <h4 class="font-bold text-sm text-[var(--el-text-color-primary)]">Facebook SSO</h4>
-                <p class="text-[11px] text-[var(--el-text-color-secondary)]">Sign in with Facebook</p>
+                <h4 class="font-bold text-sm text-[var(--el-text-color-primary)]">{{ t('settings.facebookSSO') }}</h4>
+                <p class="text-[11px] text-[var(--el-text-color-secondary)]">{{ t('platforms.signInFacebook') }}</p>
               </div>
             </div>
             <el-switch v-model="platformConfig.sso.facebook.enabled" size="small" />
@@ -384,7 +384,7 @@ onMounted(() => {
           <div class="space-y-3 pt-2">
             <div>
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1">
-                App ID
+                {{ t('common.appId') }}
               </label>
               <input
                 v-model="platformConfig.sso.facebook.appId"
@@ -395,7 +395,7 @@ onMounted(() => {
             </div>
             <div>
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1">
-                App Secret
+                {{ t('common.appSecret') }}
               </label>
               <input
                 v-model="platformConfig.sso.facebook.appSecret"

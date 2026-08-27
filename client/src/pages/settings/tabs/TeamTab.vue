@@ -65,15 +65,15 @@ onMounted(() => {
         </p>
       </div>
       <el-button type="primary" round size="small" @click="isInviteModalOpen = true">
-        <i class="fa-solid fa-user-plus mr-1.5 text-xs"></i> {{ t('settings.inviteMember') }}
+        <el-icon class="mr-1.5"><Plus /></el-icon> {{ t('settings.inviteMember') }}
       </el-button>
     </div>
 
     <!-- Team Members Table -->
     <div class="bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-2xl overflow-hidden shadow-soft">
       <el-table :data="teamMembers.length ? teamMembers : [
-        { id: '1', name: 'Tan Do (You)', email: 'dmtan90@gmail.com', role: 'Owner', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=160&h=160&fit=crop&crop=faces' },
-        { id: '2', name: 'Creative Assistant', email: 'ai-editor@shine.studio', role: 'Editor', avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=160&h=160&fit=crop&crop=faces' },
+        { id: '1', name: 'Tan Do (You)', email: 'dmtan90@gmail.com', role: 'Owner', avatar: '/images/avatars/avatar-default.jpg' },
+        { id: '2', name: 'Creative Assistant', email: 'ai-editor@shine.studio', role: 'Editor', avatar: '/images/avatars/avatar-assistant.jpg' },
       ]" style="width: 100%">
         <el-table-column label="Member" min-width="240">
           <template #default="{ row }">

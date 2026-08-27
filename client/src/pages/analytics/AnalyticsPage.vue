@@ -13,7 +13,7 @@ const seriesStore = useSeriesStore();
 const authStore = useAuthStore();
 const { isDark } = storeToRefs(authStore);
 
-const selectedSeriesId = ref<string>('srs_01');
+const selectedSeriesId = ref<string>('');
 const selectedTimeframe = ref<string>('30d');
 const isLoading = ref<boolean>(false);
 
@@ -24,9 +24,9 @@ let retentionChartInstance: ApexCharts | null = null;
 let demoChartInstance: ApexCharts | null = null;
 
 const timeframes = computed(() => [
-  { id: '7d', label: t('analytics.last7Days') || 'Last 7 Days' },
-  { id: '30d', label: t('analytics.last30Days') || 'Last 30 Days' },
-  { id: '90d', label: t('analytics.last90Days') || 'Last 90 Days' },
+  { id: '7d', label: t('analytics.last7Days') },
+  { id: '30d', label: t('analytics.last30Days') },
+  { id: '90d', label: t('analytics.last90Days') },
 ]);
 
 const seriesOptions = computed(() => {
@@ -40,64 +40,31 @@ const seriesOptions = computed(() => {
 });
 
 const stats = ref({
-  avgRetention: '68.2%',
-  retentionChange: '+4.2%',
-  watchTime: '1,240',
-  watchTimeChange: '+12.8%',
-  completionRate: '42.1%',
-  completionChange: '-1.4%',
-  peakConcurrent: '8.4k',
-  peakChange: '+22%',
+  avgRetention: '0.0%',
+  retentionChange: '0.0%',
+  watchTime: '0',
+  watchTimeChange: '0.0%',
+  completionRate: '0.0%',
+  completionChange: '0.0%',
+  peakConcurrent: '0',
+  peakChange: '0.0%',
 });
 
 const chartData = ref({
   categories: ['0:00', '0:15', '0:30', '0:45', '1:00', '1:15', '1:30', '1:45', '2:00', '2:15', '2:30', '2:45', '3:00', '3:15', '3:30'],
-  currentSeries: [100, 95, 82, 78, 80, 72, 68, 65, 70, 75, 62, 58, 61, 68, 64],
-  benchmark: [100, 88, 75, 68, 60, 55, 52, 48, 45, 42, 40, 38, 35, 32, 30],
+  currentSeries: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  benchmark: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 });
 
 const demographics = ref({
-  series: [62, 24, 14],
+  series: [0, 0, 0],
   labels: ['18-24', '25-34', '35+'],
-  topRegion: 'North America',
-  coreAge: '18 - 24 (62%)',
-  coreGroup: 'Gen Z',
+  topRegion: 'N/A',
+  coreAge: 'N/A',
+  coreGroup: 'None',
 });
 
-const rawHeatmap = ref([
-  {
-    time: '0:12 - 0:18',
-    titleKey: 'sceneRevelation',
-    descKey: 'spikeFocus',
-    trend: 'up',
-    badgeClass: 'text-[#3bcf8a] dark:text-[#72e3ad]',
-    icon: 'fa-solid fa-arrow-trend-up text-[#3bcf8a] dark:text-[#72e3ad]',
-  },
-  {
-    time: '0:45 - 0:52',
-    titleKey: 'sceneTransition',
-    descKey: 'stableEngagement',
-    trend: 'neutral',
-    badgeClass: 'text-[var(--el-text-color-primary)]',
-    icon: 'fa-solid fa-minus text-[var(--el-text-color-secondary)]',
-  },
-  {
-    time: '1:12 - 1:20',
-    titleKey: 'sceneSetup',
-    descKey: 'viewerDropOff',
-    trend: 'down',
-    badgeClass: 'text-amber-500 dark:text-amber-400',
-    icon: 'fa-solid fa-arrow-trend-down text-amber-500 dark:text-amber-400',
-  },
-  {
-    time: '1:55 - 2:00',
-    titleKey: 'sceneCliffhanger',
-    descKey: 'peakRewatch',
-    trend: 'up',
-    badgeClass: 'text-[#3bcf8a] dark:text-[#72e3ad]',
-    icon: 'fa-solid fa-arrow-trend-up text-[#3bcf8a] dark:text-[#72e3ad]',
-  },
-]);
+const rawHeatmap = ref<any[]>([]);
 
 const heatmapPoints = computed(() => {
   return rawHeatmap.value.map(item => ({
@@ -123,8 +90,8 @@ function renderRetentionChart() {
 
   const retentionOptions: ApexCharts.ApexOptions = {
     series: [
-      { name: t('analytics.currentSeries') || 'Current Series', data: chartData.value.currentSeries },
-      { name: t('analytics.globalBenchmark') || 'Global Benchmark', data: chartData.value.benchmark },
+      { name: t('analytics.currentSeries'), data: chartData.value.currentSeries },
+      { name: t('analytics.globalBenchmark'), data: chartData.value.benchmark },
     ],
     chart: {
       height: 340,
@@ -240,7 +207,7 @@ async function fetchAnalytics() {
       params: {
         seriesId: selectedSeriesId.value,
         timeframe: selectedTimeframe.value,
-        userId: authStore.user?.id || 'usr_default',
+        userId: authStore.user?.id || '',
       },
     });
 
@@ -278,8 +245,8 @@ function handleSceneHighlightClick(item: any) {
 }
 
 onMounted(async () => {
-  await seriesStore.fetchSeriesList();
-  if (seriesStore.seriesList.length > 0) {
+  await seriesStore.fetchSeriesList({ userId: authStore.user?.id });
+  if (Array.isArray(seriesStore.seriesList) && seriesStore.seriesList.length > 0) {
     selectedSeriesId.value = seriesStore.seriesList[0].id;
   }
   await fetchAnalytics();
@@ -310,7 +277,7 @@ watch(isDark, async () => {
         <!-- Series Selector -->
         <el-select
           v-model="selectedSeriesId"
-          placeholder="Select Series"
+          :placeholder="t('analytics.selectSeries')"
           class="!w-[220px]"
           size="default"
         >
@@ -327,7 +294,7 @@ watch(isDark, async () => {
         <!-- Timeframe Selector -->
         <el-select
           v-model="selectedTimeframe"
-          placeholder="Period"
+          :placeholder="t('analytics.period')"
           class="!w-[150px]"
           size="default"
         >
@@ -345,7 +312,7 @@ watch(isDark, async () => {
           round
           @click="handleExportReport"
         >
-          <i class="fa-solid fa-download mr-1.5 text-xs"></i>
+          <el-icon class="mr-1.5 text-xs"><Download /></el-icon>
           <span>{{ t('analytics.exportReport') }}</span>
         </el-button>
       </div>
@@ -362,7 +329,7 @@ watch(isDark, async () => {
           {{ stats.avgRetention }}
         </div>
         <div class="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-[#3bcf8a] dark:text-[#72e3ad]">
-          <i class="fa-solid fa-caret-up"></i> {{ stats.retentionChange }}
+          <el-icon><CaretTop /></el-icon> {{ stats.retentionChange }}
         </div>
       </div>
 
@@ -375,7 +342,7 @@ watch(isDark, async () => {
           {{ stats.watchTime }} <span class="text-sm text-[var(--el-text-color-secondary)] font-normal">{{ t('analytics.hrs') }}</span>
         </div>
         <div class="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-[#3bcf8a] dark:text-[#72e3ad]">
-          <i class="fa-solid fa-caret-up"></i> {{ stats.watchTimeChange }}
+          <el-icon><CaretTop /></el-icon> {{ stats.watchTimeChange }}
         </div>
       </div>
 
@@ -388,7 +355,7 @@ watch(isDark, async () => {
           {{ stats.completionRate }}
         </div>
         <div class="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-amber-500 dark:text-amber-400">
-          <i class="fa-solid fa-caret-down"></i> {{ stats.completionChange }}
+          <el-icon><CaretBottom /></el-icon> {{ stats.completionChange }}
         </div>
       </div>
 
@@ -401,7 +368,7 @@ watch(isDark, async () => {
           {{ stats.peakConcurrent }}
         </div>
         <div class="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-[#3bcf8a] dark:text-[#72e3ad]">
-          <i class="fa-solid fa-caret-up"></i> {{ stats.peakChange }}
+          <el-icon><CaretTop /></el-icon> {{ stats.peakChange }}
         </div>
       </div>
     </section>
@@ -482,7 +449,7 @@ watch(isDark, async () => {
         </span>
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div v-if="heatmapPoints.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <div
           v-for="point in heatmapPoints"
           :key="point.time"
@@ -493,7 +460,7 @@ watch(isDark, async () => {
             <span :class="['text-xs font-bold', point.badgeClass]">
               {{ point.time }}
             </span>
-            <i :class="point.icon"></i>
+            <el-icon :class="point.badgeClass"><component :is="point.icon" /></el-icon>
           </div>
           <p class="text-sm font-medium mb-1 truncate text-[var(--el-text-color-primary)]">
             {{ point.title }}
@@ -502,6 +469,9 @@ watch(isDark, async () => {
             {{ point.desc }}
           </p>
         </div>
+      </div>
+      <div v-else class="py-8 text-center text-xs text-[var(--el-text-color-secondary)]">
+        {{ t('analytics.noSeriesDesc') }}
       </div>
     </section>
   </div>

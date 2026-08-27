@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '@/stores/useAuthStore';
 import LanguageSelect from '@/components/shared/LanguageSelect.vue';
 import SeriesWizardModal from '@/components/modals/SeriesWizardModal.vue';
-import { Sunny, Moon, User, Lock, SwitchButton } from '@element-plus/icons-vue';
+import { Sunny, Moon, User, Lock, SwitchButton, Fold, Expand, Plus, Right, Bell } from '@element-plus/icons-vue';
 import { storeToRefs } from 'pinia';
 
 const { t } = useI18n();
@@ -16,6 +16,12 @@ const { isDark } = storeToRefs(authStore);
 
 const isWizardOpen = ref(false);
 const searchQuery = ref('');
+const isCollapsed = ref(localStorage.getItem('shine_sidebar_collapsed') === 'true');
+
+function toggleSidebar() {
+  isCollapsed.value = !isCollapsed.value;
+  localStorage.setItem('shine_sidebar_collapsed', String(isCollapsed.value));
+}
 
 function toggleTheme() {
   authStore.toggleDark();
@@ -36,10 +42,10 @@ function handleLogout() {
 }
 
 const navItems = computed(() => [
-  { label: t('nav.series') || 'Projects', icon: 'fa-solid fa-layer-group', href: '/dashboard' },
-  { label: t('editor.assetLibrary') || 'Assets', icon: 'fa-solid fa-cube', href: '/assets' },
-  { label: t('nav.analytics') || 'Analytics', icon: 'fa-solid fa-chart-line', href: '/analytics' },
-  { label: t('settings.title') || 'Settings', icon: 'fa-solid fa-gear', href: '/settings' },
+  { label: t('nav.series') || 'Projects', icon: 'Files', href: '/dashboard' },
+  { label: t('editor.assetLibrary') || 'Assets', icon: 'Folder', href: '/assets' },
+  { label: t('nav.analytics') || 'Analytics', icon: 'TrendCharts', href: '/analytics' },
+  { label: t('settings.title') || 'Settings', icon: 'Setting', href: '/settings' },
 ]);
 
 function isNavActive(itemHref: string) {
@@ -50,50 +56,127 @@ function isNavActive(itemHref: string) {
 }
 
 function handleWizardCreated(id: string) {
-  router.push(`/projects/${id}`);
+  router.push(`/project/${id}`);
 }
 </script>
 
 <template>
   <div id="app-layout" class="bg-[var(--el-bg-color-page)] text-[var(--el-text-color-primary)] font-sans antialiased min-h-screen flex overflow-hidden selection:bg-[var(--el-color-primary)] selection:text-[var(--el-text-color-primary)] w-full">
     <!-- Left Sidebar -->
-    <aside class="w-[280px] lg:w-[300px] bg-[var(--el-bg-color)] border-r border-[var(--el-border-color)] flex flex-col relative z-20 shrink-0 h-screen justify-between">
+    <aside
+      class="bg-[var(--el-bg-color)] border-r border-[var(--el-border-color)] flex flex-col relative z-20 shrink-0 h-screen justify-between transition-all duration-300 ease-in-out select-none"
+      :class="isCollapsed ? 'w-[76px]' : 'w-[280px] lg:w-[300px]'"
+    >
       <div>
-        <!-- Logo & Studio Tag -->
-        <div class="pt-8 pb-7 px-8">
-          <div class="flex items-center gap-3 mb-1">
-            <span class="text-[11px] font-medium tracking-[0.25em] uppercase text-[var(--el-text-color-secondary)]">Studio</span>
-            <span class="w-1.5 h-1.5 rounded-full bg-[var(--el-color-primary)] ring-4 ring-[var(--el-color-primary)]/20"></span>
+        <!-- Logo & Studio Tag & Collapse Toggle -->
+        <div class="pt-8 pb-7" :class="isCollapsed ? 'px-3 flex flex-col items-center' : 'px-8'">
+          <div v-if="!isCollapsed" class="flex items-center justify-between mb-1">
+            <div class="flex items-center gap-3">
+              <span class="text-[11px] font-medium tracking-[0.25em] uppercase text-[var(--el-text-color-secondary)]">{{ t('common.studio') }}</span>
+              <span class="w-1.5 h-1.5 rounded-full bg-[var(--el-color-primary)] ring-4 ring-[var(--el-color-primary)]/20"></span>
+            </div>
+            <!-- Collapse Button (Expanded) -->
+            <button
+              @click="toggleSidebar"
+              class="w-7 h-7 rounded-lg flex items-center justify-center text-[var(--el-text-color-secondary)] hover:text-[var(--el-text-color-primary)] hover:bg-[var(--el-fill-color-light)] transition-colors cursor-pointer"
+              :title="t('common.collapse')"
+            >
+              <el-icon :size="16"><Fold /></el-icon>
+            </button>
           </div>
-          <router-link to="/dashboard" class="text-3xl font-semibold tracking-tight hover:opacity-90 transition-opacity text-[var(--el-text-color-primary)]">
-            Shine.
-          </router-link>
+
+          <div v-if="!isCollapsed">
+            <router-link to="/dashboard" class="flex items-center gap-2.5 hover:opacity-90 transition-opacity">
+              <img src="/logo.png" alt="Shine Logo" class="h-8 w-auto object-contain shrink-0" />
+              <span class="text-3xl font-semibold tracking-tight text-[var(--el-text-color-primary)]">{{ t('common.brandName') }}.</span>
+            </router-link>
+          </div>
+
+          <!-- Collapsed Header -->
+          <div v-else class="flex flex-col items-center gap-3">
+            <button
+              @click="toggleSidebar"
+              class="w-10 h-10 rounded-xl flex items-center justify-center text-[var(--el-text-color-secondary)] hover:text-[var(--el-text-color-primary)] hover:bg-[var(--el-fill-color-light)] transition-colors cursor-pointer"
+              :title="t('common.expand')"
+            >
+              <el-icon :size="18"><Expand /></el-icon>
+            </button>
+            <router-link to="/dashboard" class="flex items-center justify-center hover:opacity-90 transition-opacity" title="Shine Studio">
+              <img src="/logo.png" alt="Shine Logo" class="h-9 w-9 object-contain rounded-lg" />
+            </router-link>
+          </div>
         </div>
 
         <!-- Navigation items -->
-        <nav class="px-5 space-y-1.5">
-          <router-link
-            v-for="item in navItems"
-            :key="item.href"
-            :to="item.href"
-            class="flex items-center gap-4 px-4 py-3 rounded-2xl transition-all relative font-medium text-sm"
-            :class="isNavActive(item.href)
-              ? 'bg-[var(--el-card-bg-color)] shadow-sm border border-[var(--el-border-color)] text-[var(--el-text-color-primary)]'
-              : 'text-[var(--el-text-color-secondary)] hover:bg-[var(--el-card-bg-color)]/60 hover:text-[var(--el-text-color-primary)]'"
-          >
-            <span
-              v-if="isNavActive(item.href)"
-              class="absolute left-0 top-1/2 -translate-y-1/2 -ml-5 w-1.5 h-7 bg-[var(--el-color-primary)] rounded-r-full"
-            ></span>
-            <i :class="[item.icon, isNavActive(item.href) ? 'text-[var(--el-text-color-regular)]' : 'text-[var(--el-text-color-secondary)]', 'w-5 text-center text-base']"></i>
-            <span>{{ item.label }}</span>
-          </router-link>
+        <nav :class="isCollapsed ? 'px-2 space-y-2' : 'px-5 space-y-1.5'">
+          <template v-for="item in navItems" :key="item.href">
+            <!-- Collapsed with Tooltip -->
+            <el-tooltip
+              v-if="isCollapsed"
+              :content="item.label"
+              placement="right"
+              :show-after="100"
+            >
+              <router-link
+                :to="item.href"
+                class="flex items-center justify-center w-12 h-12 mx-auto rounded-2xl transition-all relative font-medium text-sm"
+                :class="isNavActive(item.href)
+                  ? 'bg-[var(--el-card-bg-color)] shadow-sm border border-[var(--el-border-color)] text-[var(--el-color-primary)]'
+                  : 'text-[var(--el-text-color-secondary)] hover:bg-[var(--el-card-bg-color)]/60 hover:text-[var(--el-text-color-primary)]'"
+              >
+                <span
+                  v-if="isNavActive(item.href)"
+                  class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-[var(--el-color-primary)] rounded-r-full"
+                ></span>
+                <el-icon :size="20" :class="isNavActive(item.href) ? 'text-[var(--el-color-primary)]' : 'text-[var(--el-text-color-secondary)]'">
+                  <component :is="item.icon" />
+                </el-icon>
+              </router-link>
+            </el-tooltip>
+
+            <!-- Expanded Nav Link -->
+            <router-link
+              v-else
+              :to="item.href"
+              class="flex items-center gap-4 px-4 py-3 rounded-2xl transition-all relative font-medium text-sm"
+              :class="isNavActive(item.href)
+                ? 'bg-[var(--el-card-bg-color)] shadow-sm border border-[var(--el-border-color)] text-[var(--el-text-color-primary)]'
+                : 'text-[var(--el-text-color-secondary)] hover:bg-[var(--el-card-bg-color)]/60 hover:text-[var(--el-text-color-primary)]'"
+            >
+              <span
+                v-if="isNavActive(item.href)"
+                class="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-7 bg-[var(--el-color-primary)] rounded-r-full"
+              ></span>
+              <el-icon :size="18" :class="isNavActive(item.href) ? 'text-[var(--el-text-color-regular)]' : 'text-[var(--el-text-color-secondary)]'">
+                <component :is="item.icon" />
+              </el-icon>
+              <span>{{ item.label }}</span>
+            </router-link>
+          </template>
         </nav>
       </div>
 
       <!-- Footer: Launch New Series -->
-      <div class="p-6">
+      <div :class="isCollapsed ? 'p-3 flex justify-center' : 'p-6'">
+        <!-- Collapsed New Series Icon Button -->
+        <el-tooltip
+          v-if="isCollapsed"
+          :content="t('dashboard.newSeriesBtn')"
+          placement="right"
+          :show-after="100"
+        >
+          <button
+            id="launch-new-series-btn-collapsed"
+            @click="isWizardOpen = true"
+            class="w-12 h-12 rounded-2xl bg-[var(--el-color-primary)] hover:bg-[var(--el-color-primary-light-3)] text-white flex items-center justify-center shadow-md transition-transform active:scale-95 cursor-pointer"
+          >
+            <el-icon :size="20"><Plus /></el-icon>
+          </button>
+        </el-tooltip>
+
+        <!-- Expanded Full Button -->
         <el-button
+          v-else
           id="launch-new-series-btn"
           type="primary"
           round
@@ -102,7 +185,7 @@ function handleWizardCreated(id: string) {
           @click="isWizardOpen = true"
         >
           <span>{{ t('dashboard.newSeriesBtn') }}</span>
-          <i class="fa-solid fa-arrow-right -rotate-45 text-sm ml-2"></i>
+          <el-icon class="-rotate-45 text-sm ml-2"><Right /></el-icon>
         </el-button>
       </div>
     </aside>
@@ -112,13 +195,6 @@ function handleWizardCreated(id: string) {
       <!-- Top Header -->
       <header class="h-20 px-8 lg:px-10 flex items-center justify-between shrink-0 border-b border-[var(--el-border-color)]/40 bg-[var(--el-bg-color-page)]/80 backdrop-blur-sm z-10">
         <div class="relative w-full max-w-[360px]">
-          <!-- <i class="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-[var(--el-text-color-secondary)] text-sm"></i>
-          <input
-            v-model="searchQuery"
-            type="text"
-            :placeholder="t('dashboard.searchPlaceholder')"
-            class="w-full bg-transparent pl-11 pr-4 py-2.5 text-sm outline-none text-[var(--el-text-color-primary)] placeholder:text-[var(--el-text-color-secondary)] border-b border-[var(--el-border-color)] focus:border-[var(--el-color-primary)] transition-colors font-sans"
-          /> -->
         </div>
 
         <div class="flex items-center gap-3">
@@ -138,7 +214,7 @@ function handleWizardCreated(id: string) {
             class="w-10 h-10 rounded-full bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] flex items-center justify-center text-[var(--el-text-color-regular)] hover:text-[var(--el-text-color-primary)] transition-colors shadow-soft hover:shadow cursor-pointer"
             title="Notifications"
           >
-            <i class="fa-regular fa-bell"></i>
+            <el-icon :size="16"><Bell /></el-icon>
           </button>
 
           <!-- Profile avatar with Popover Menu -->
@@ -151,7 +227,7 @@ function handleWizardCreated(id: string) {
             <template #reference>
               <div class="relative cursor-pointer select-none">
                 <img
-                  :src="authStore.user?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80&h=80&fit=crop&crop=faces'"
+                  :src="authStore.user?.avatar || '/images/avatars/avatar-default.jpg'"
                   alt="avatar"
                   class="w-10 h-10 rounded-full object-cover ring-1 ring-[var(--el-border-color)] shadow-soft hover:ring-[var(--el-color-primary)] transition-all"
                 />
@@ -160,7 +236,7 @@ function handleWizardCreated(id: string) {
 
             <div class="p-4 border-b border-[var(--el-border-color)] flex items-center gap-3">
               <img
-                :src="authStore.user?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80&h=80&fit=crop&crop=faces'"
+                :src="authStore.user?.avatar || '/images/avatars/avatar-default.jpg'"
                 alt="avatar"
                 class="w-10 h-10 rounded-full object-cover ring-1 ring-[var(--el-border-color)]"
               />
@@ -176,7 +252,7 @@ function handleWizardCreated(id: string) {
                 class="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-xl text-[var(--el-text-color-regular)] hover:text-[var(--el-text-color-primary)] hover:bg-[var(--el-bg-color)] transition-colors cursor-pointer text-left"
               >
                 <el-icon :size="16"><User /></el-icon>
-                <span>Profile</span>
+                <span>{{ t('common.profile') }}</span>
               </button>
 
               <button
@@ -184,7 +260,7 @@ function handleWizardCreated(id: string) {
                 class="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-xl text-[var(--el-text-color-regular)] hover:text-[var(--el-text-color-primary)] hover:bg-[var(--el-bg-color)] transition-colors cursor-pointer text-left"
               >
                 <el-icon :size="16"><Lock /></el-icon>
-                <span>Change Password</span>
+                <span>{{ t('auth.changePassword') }}</span>
               </button>
 
               <div class="my-1 border-t border-[var(--el-border-color)]"></div>
@@ -194,7 +270,7 @@ function handleWizardCreated(id: string) {
                 class="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-xl text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer text-left font-medium"
               >
                 <el-icon :size="16"><SwitchButton /></el-icon>
-                <span>Logout</span>
+                <span>{{ t('auth.logout') }}</span>
               </button>
             </div>
           </el-popover>

@@ -12,10 +12,10 @@ export const usePersonaStore = defineStore('persona', {
   }),
 
   actions: {
-    async fetchCharacters(seriesId?: string) {
+    async fetchCharacters(series_id?: string) {
       this.isLoading = true;
       try {
-        const res = await http.get('/characters', { params: { seriesId } }) as any;
+        const res = await http.get('/characters', { params: { series_id } }) as any;
         if (res.data) {
           this.characters = res.data;
           if (this.characters.length > 0 && !this.activeCharacter) {
@@ -28,7 +28,7 @@ export const usePersonaStore = defineStore('persona', {
       }
     },
 
-    async createCharacter(payload: { name: string; role: 'protagonist' | 'antagonist' | 'supporter' | 'supporting'; personality?: string; visualTraits?: string; description?: string; seriesId?: string; avatarUrl?: string }) {
+    async createCharacter(payload: { name: string; role: 'protagonist' | 'antagonist' | 'supporter' | 'supporting'; personality?: string; visual_traits?: string; description?: string; series_id?: string; avatar?: string }) {
       this.isLoading = true;
       try {
         const res = await http.post('/characters', payload) as any;
@@ -43,20 +43,18 @@ export const usePersonaStore = defineStore('persona', {
       }
     },
 
-    async generatePortrait(characterId: string, payload: { seriesId?: string; name?: string; visualTraits?: string; prompt?: string; style?: string }) {
+    async generatePortrait(characterId: string, payload: { series_id?: string; name?: string; visual_traits?: string; prompt?: string; style?: string }) {
       this.isGeneratingPortrait = true;
       try {
         const res = await http.post(`/characters/${characterId}/portrait`, payload) as any;
         const data = res.data?.data || res.data;
-        if (data?.url || data?.imageUrl) {
-          const avatarUrl = data.url || data.imageUrl;
+        if (data?.image_url) {
+          const avatarUrl = data.image_url;
           const idx = this.characters.findIndex(c => c.id === characterId);
           if (idx !== -1) {
-            this.characters[idx].avatarUrl = avatarUrl;
             this.characters[idx].avatar = avatarUrl;
           }
           if (this.activeCharacter?.id === characterId) {
-            this.activeCharacter.avatarUrl = avatarUrl;
             this.activeCharacter.avatar = avatarUrl;
           }
         }
@@ -66,7 +64,7 @@ export const usePersonaStore = defineStore('persona', {
       }
     },
 
-    async extractFacialAnchors(characterId: string, payload: { seriesId?: string; name?: string; visualTraits?: string } = {}) {
+    async extractFacialAnchors(characterId: string, payload: { series_id?: string; name?: string; visual_traits?: string } = {}) {
       this.isExtractingAnchors = true;
       try {
         const res = await http.post(`/characters/${characterId}/anchors`, payload) as any;
@@ -86,22 +84,22 @@ export const usePersonaStore = defineStore('persona', {
       }
     },
 
-    async addWardrobeOutfit(characterId: string, item: { name: string; category: string; seriesId?: string; thumbnailUrl?: string; tags?: string[] }) {
-      try {
-        const res = await http.post(`/characters/${characterId}/wardrobe`, item) as any;
-        const newOutfit = res.data?.data || res.data;
-        if (newOutfit) {
-          const char = this.characters.find(c => c.id === characterId);
-          if (char) {
-            if (!Array.isArray(char.wardrobe)) char.wardrobe = [];
-            char.wardrobe.push(newOutfit);
-          }
-        }
-        return newOutfit;
-      } catch (err) {
-        throw err;
-      }
-    },
+    // async addWardrobeOutfit(characterId: string, item: { name: string; category: string; seriesId?: string; thumbnailUrl?: string; tags?: string[] }) {
+    //   try {
+    //     const res = await http.post(`/characters/${characterId}/wardrobe`, item) as any;
+    //     const newOutfit = res.data?.data || res.data;
+    //     if (newOutfit) {
+    //       const char = this.characters.find(c => c.id === characterId);
+    //       if (char) {
+    //         if (!Array.isArray(char.wardrobe)) char.wardrobe = [];
+    //         char.wardrobe.push(newOutfit);
+    //       }
+    //     }
+    //     return newOutfit;
+    //   } catch (err) {
+    //     throw err;
+    //   }
+    // },
 
     setActiveCharacter(character: Character) {
       this.activeCharacter = character;

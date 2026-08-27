@@ -12,10 +12,10 @@ export const useBillingStore = defineStore('billing', {
     return {
       currentTier: {
         tier: isEnterprise ? 'enterprise' : (authStore.user?.tier?.toLowerCase() || 'free'),
-        creditBalance: authStore.user?.credits ?? 100,
-        creditQuota: isEnterprise ? 10000 : 1000,
+        credit_balance: authStore.user?.credits ?? 100,
+        credit_quota: isEnterprise ? 10000 : 1000,
         features: ['series.create', 'script.generate', 'voice.tts', 'publish.multi'],
-        monthlyPriceUsd: isEnterprise ? 299 : 0,
+        monthly_price_usd: isEnterprise ? 299 : 0,
       } as SubscriptionTier,
       loading: false,
       checkoutLoading: false,
@@ -24,8 +24,8 @@ export const useBillingStore = defineStore('billing', {
 
   getters: {
     isCreditsLow(): boolean {
-      if (!this.currentTier || !this.currentTier.creditQuota) return false;
-      return (this.currentTier.creditBalance / this.currentTier.creditQuota) < 0.1;
+      if (!this.currentTier || !this.currentTier.credit_quota) return false;
+      return (this.currentTier.credit_balance / this.currentTier.credit_quota) < 0.1;
     },
   },
 
@@ -38,12 +38,12 @@ export const useBillingStore = defineStore('billing', {
         if (res.data && res.data.data) {
           this.currentTier = res.data.data;
           if (authStore.user) {
-            authStore.user.credits = this.currentTier.creditBalance;
+            authStore.user.credits = this.currentTier.credit_balance;
             localStorage.setItem('shine_user', JSON.stringify(authStore.user));
           }
           if (this.isCreditsLow) {
             ElMessage.warning(
-              i18n.global.t('toast.creditsLow', { count: this.currentTier.creditBalance })
+              i18n.global.t('toast.creditsLow', { count: this.currentTier.credit_balance })
             );
           }
           return this.currentTier;
@@ -81,12 +81,12 @@ export const useBillingStore = defineStore('billing', {
         const res = await http.get('/billing/tier');
         if (res.data && res.data.data) {
           this.currentTier = res.data.data;
-          return this.currentTier.creditBalance;
+          return this.currentTier.credit_balance;
         }
-        return this.currentTier.creditBalance;
+        return this.currentTier.credit_balance;
       } catch (err) {
         console.error('Failed to fetch credit balance', err);
-        return this.currentTier.creditBalance;
+        return this.currentTier.credit_balance;
       }
     },
   },

@@ -145,17 +145,30 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (unsubCore) {
-    unsubCore();
+    try{
+      unsubCore();
+    }catch(err){
+
+    }
     unsubCore = null;
   }
 
   if (resizeObserver) {
-    resizeObserver.disconnect();
+    try{
+      resizeObserver.disconnect();
+    }catch(err){
+
+    }
+    
     resizeObserver = null;
   }
 
   if (studioRef.value) {
-    studioRef.value.destroy();
+    try {
+      studioRef.value.destroy();
+    } catch (err) {
+      console.error('Failed to destroy studio:', err);
+    }
     studioRef.value = null;
     setStudio(null);
   }

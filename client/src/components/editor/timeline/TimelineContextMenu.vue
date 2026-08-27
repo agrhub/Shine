@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useStudioStore } from '~/composables/useStudioStore';
+
+const { t } = useI18n();
 import {
   Copy,
   Clipboard,
@@ -169,7 +172,7 @@ const handleToggleMute = () => {
             @click="wrapClose(handleCopy)()"
           >
             <Copy class="size-3.5" />
-            <span>Copy</span>
+            <span>{{ t('editor.copy') }}</span>
             <span class="ml-auto text-muted-foreground text-[10px]">⌘ C</span>
           </button>
 
@@ -179,7 +182,7 @@ const handleToggleMute = () => {
             @click="wrapClose(handlePaste)()"
           >
             <Clipboard class="size-3.5" />
-            <span>Paste</span>
+            <span>{{ t('editor.paste') }}</span>
             <span class="ml-auto text-muted-foreground text-[10px]">⌘ V</span>
           </button>
 
@@ -188,7 +191,7 @@ const handleToggleMute = () => {
             @click="wrapClose(handleDuplicate)()"
           >
             <Copy class="size-3.5" />
-            <span>Duplicate</span>
+            <span>{{ t('editor.duplicate') }}</span>
             <span class="ml-auto text-muted-foreground text-[10px]">⌘ D</span>
           </button>
 
@@ -200,7 +203,7 @@ const handleToggleMute = () => {
             @click="wrapClose(handleSplit)()"
           >
             <Scissors class="size-3.5" />
-            <span>Split at Playhead</span>
+            <span>{{ t('editor.split') }}</span>
             <span class="ml-auto text-muted-foreground text-[10px]">⌘ K</span>
           </button>
         </template>
@@ -214,7 +217,7 @@ const handleToggleMute = () => {
         >
           <Volume2 v-if="isMuted" class="size-3.5" />
           <VolumeX v-else class="size-3.5" />
-          <span>{{ isMuted ? 'Unmute' : 'Mute' }}</span>
+          <span>{{ isMuted ? t('editor.unmute') : t('editor.mute') }}</span>
           <span class="ml-auto text-muted-foreground text-[10px]">⌘ ⇧ M</span>
         </button>
 
@@ -225,7 +228,7 @@ const handleToggleMute = () => {
         >
           <LockOpen v-if="isLocked" class="size-3.5" />
           <Lock v-else class="size-3.5" />
-          <span>{{ isLocked ? 'Unlock' : 'Lock' }}</span>
+          <span>{{ isLocked ? t('editor.unlock') : t('editor.lock') }}</span>
           <span class="ml-auto text-muted-foreground text-[10px]">⌘ L</span>
         </button>
 
@@ -237,7 +240,7 @@ const handleToggleMute = () => {
             @click="wrapClose(handleDelete)()"
           >
             <Trash2 class="size-3.5" />
-            <span>Delete</span>
+            <span>{{ t('editor.delete') }}</span>
             <span class="ml-auto text-[10px] opacity-60">⌫</span>
           </button>
         </template>
@@ -257,7 +260,7 @@ const handleToggleMute = () => {
           @click="wrapClose(handlePaste)()"
         >
           <Clipboard class="size-3.5" />
-          <span>Paste at Playhead</span>
+          <span>{{ t('editor.pasteAtPlayhead') }}</span>
           <span class="ml-auto text-muted-foreground text-[10px]">⌘ V</span>
         </button>
       </div>

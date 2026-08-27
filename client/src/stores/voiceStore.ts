@@ -51,10 +51,10 @@ export const useVoiceStore = defineStore('voice', {
       }
     },
 
-    async reAlignDubbing(episodeId: string, audioUrl: string) {
+    async reAlignDubbing(episode_id: string, audio_url: string) {
       this.loading = true;
       try {
-        const res = await http.post('/voices/dubbing/re-align', { episodeId, audioUrl });
+        const res = await http.post('/voices/dubbing/re-align', { episode_id, audio_url });
         if (res.data && res.data.data && res.data.data.commands) {
           const timelineStore = useTimelineStore();
           if (timelineStore.executeMany) {
@@ -70,12 +70,12 @@ export const useVoiceStore = defineStore('voice', {
       }
     },
 
-    async steerEmotion(voiceId: string, emotionTag: string, intensityLevel: number) {
+    async steerEmotion(voice_id: string, emotion_tag: string, intensity_level: number) {
       try {
         const res = await http.post('/voices/steer-emotion', {
-          voiceId,
-          emotionTag,
-          intensityLevel,
+          voice_id,
+          emotion_tag,
+          intensity_level,
         });
         return res.data?.data;
       } catch (err) {

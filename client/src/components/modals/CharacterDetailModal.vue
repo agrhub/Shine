@@ -84,18 +84,18 @@ const selectedPreviewLabel = ref<string>('');
 
 watch(() => props.character, (char) => {
   if (char) {
-    renderPromptOverride.value = char.identity || char.visualTraits || char.physicalCharacteristics || char.appearance || '';
+    renderPromptOverride.value = char.identity || char.visual_traits || char.physical_characteristics || char.appearance || '';
     editableIdentity.value = char.identity || '';
     editableTraits.value = char.traits || '';
-    editableVisualTraits.value = char.visualTraits || char.physicalCharacteristics || char.appearance || char.description || '';
+    editableVisualTraits.value = char.visual_traits || char.physical_characteristics || char.appearance || char.description || '';
     selectedGender.value = (char.gender as any) || 'male';
     selectedAge.value = Number(char.age) || 25;
     selectedNationality.value = char.nationality || 'Vietnam';
-    selectedVoiceId.value = char.voiceId || (selectedGender.value === 'female' ? 'Kore' : 'Fenrir');
-    selectedPreviewUrl.value = char.avatarUrl || char.avatar || '';
+    selectedVoiceId.value = char.voice_id || (selectedGender.value === 'female' ? 'Kore' : 'Fenrir');
+    selectedPreviewUrl.value = char.avatar || '';
     selectedPreviewLabel.value = 'Primary Frontal';
 
-    const activeW = Array.isArray(char.wardrobe) && char.wardrobe.length > 0 ? char.wardrobe[0] : null;
+    const activeW = Array.isArray((char as any).wardrobe) && (char as any).wardrobe.length > 0 ? (char as any).wardrobe[0] : null;
     activeOutfitName.value = activeW?.name || `${char.name} Default Costume`;
     activeOutfitCategory.value = activeW?.category || 'Main Outfit';
     activeOutfitTags.value = Array.isArray(activeW?.tags) ? activeW.tags.join(', ') : (activeW?.tags || 'signature character costume, continuity locked');
@@ -103,7 +103,7 @@ watch(() => props.character, (char) => {
 }, { immediate: true });
 
 function selectAnchorPreview(anc: any) {
-  selectedPreviewUrl.value = anc.imageUrl || props.character?.avatarUrl;
+  selectedPreviewUrl.value = anc.image_url || props.character?.avatar || '';
   selectedPreviewLabel.value = anc.name || 'Facial Anchor';
 }
 
@@ -120,7 +120,7 @@ function playVoiceSample(voiceId: string) {
     voiceAudioPlayer.pause();
   }
   const matched = pipelineStore.voicePresets.find(v => v.id === voiceId);
-  const sampleUrl = matched?.audioSampleUrl || `https://gstatic.com/aistudio/voices/samples/${voiceId}.wav`;
+  const sampleUrl = matched?.audio_sample_url || `https://gstatic.com/aistudio/voices/samples/${voiceId}.wav`;
   voiceAudioPlayer = new Audio(sampleUrl);
   isPlayingVoice.value = true;
   voiceAudioPlayer.play().catch(() => {
@@ -141,15 +141,14 @@ async function saveCharacterSettings() {
     await seriesStore.updateCharacter(props.character.id, {
       identity: editableIdentity.value,
       traits: editableTraits.value,
-      visualTraits: resolvedVisual,
-      physicalCharacteristics: resolvedVisual,
+      visual_traits: resolvedVisual,
+      physical_characteristics: resolvedVisual,
       appearance: resolvedVisual,
       description: resolvedVisual || editableTraits.value || '',
       age: selectedAge.value,
       gender: selectedGender.value,
       nationality: selectedNationality.value,
-      voiceId: selectedVoiceId.value,
-      avatarUrl: props.character.avatarUrl,
+      voice_id: selectedVoiceId.value,
       avatar: props.character.avatar,
     });
     if (sId) await seriesStore.saveCharacterAvatars(sId);
@@ -161,173 +160,171 @@ async function saveCharacterSettings() {
   }
 }
 
-async function handleExtractFacialAnchors() {
-  if (!props.character) return;
-  isExtractingAnchors.value = true;
-  try {
-    toast.info(t('workspace.extractingAnchorsToast'));
-    const sId = seriesStore.currentSeries?.id;
-    const currentStyle = seriesStore.currentSeries?.visual_style || 'realistic';
-    const styleObj = getVisualStyleById(currentStyle);
+// async function handleExtractFacialAnchors() {
+//   if (!props.character) return;
+//   isExtractingAnchors.value = true;
+//   try {
+//     toast.info(t('workspace.extractingAnchorsToast'));
+//     const sId = seriesStore.currentSeries?.id;
+//     const currentStyle = seriesStore.currentSeries?.visual_style || 'realistic';
+//     const styleObj = getVisualStyleById(currentStyle);
 
-    const res: any = await http.post(`/characters/${props.character.id}/anchors`, {
-      seriesId: sId,
-      name: props.character.name,
-      age: selectedAge.value,
-      gender: selectedGender.value,
-      visualTraits: editableVisualTraits.value || editableIdentity.value || renderPromptOverride.value,
-      wardrobeDesc: activeOutfitTags.value || activeOutfitName.value,
-      visualStyle: currentStyle,
-      visualStylePrompt: styleObj.promptModifier,
-    });
+//     const res: any = await http.post(`/characters/${props.character.id}/anchors`, {
+//       seriesId: sId,
+//       name: props.character.name,
+//       age: selectedAge.value,
+//       gender: selectedGender.value,
+//       visual_traits: editableVisualTraits.value || editableIdentity.value || renderPromptOverride.value,
+//       wardrobe_desc: activeOutfitTags.value || activeOutfitName.value,
+//       visual_style: currentStyle,
+//       visual_style_prompt: styleObj.promptModifier,
+//     });
 
-    const updatedChar = res?.data?.data || res?.data;
-    if (updatedChar) {
-      if (updatedChar.avatarUrl) {
-        seriesStore.updateCharacterAvatar(props.character.id, updatedChar.avatarUrl);
-      }
-      await seriesStore.updateCharacter(props.character.id, {
-        anchors: updatedChar.anchors || [],
-        loraModel: updatedChar.loraModel || props.character.loraModel,
-        meshMatchRate: updatedChar.meshMatchRate || 98.5,
-      });
-      if (sId) await seriesStore.saveCharacterAvatars(sId);
-      toast.success(t('workspace.anchorsLockedToast'));
-    }
-  } catch (err: any) {
-    toast.error(t('workspace.failedToExtractAnchors', { error: err.message || 'Error' }));
-  } finally {
-    isExtractingAnchors.value = false;
-  }
-}
+//     const updatedChar = res?.data?.data || res?.data;
+//     if (updatedChar) {
+//       if (updatedChar.avatarUrl) {
+//         seriesStore.updateCharacterAvatar(props.character.id, updatedChar.avatarUrl);
+//       }
+//       await seriesStore.updateCharacter(props.character.id, {
+//         lora_model: updatedChar.lora_model || props.character.lora_model,
+//       });
+//       if (sId) await seriesStore.saveCharacterAvatars(sId);
+//       toast.success(t('workspace.anchorsLockedToast'));
+//     }
+//   } catch (err: any) {
+//     toast.error(t('workspace.failedToExtractAnchors', { error: err.message || 'Error' }));
+//   } finally {
+//     isExtractingAnchors.value = false;
+//   }
+// }
 
 // Regenerate a single anchor without touching the others
-async function handleRegenerateSingleAnchor(anc: any) {
-  if (!props.character || !anc.id) return;
-  regeneratingAnchorId.value = anc.id;
-  try {
-    toast.info(t('workspace.regeneratingAngleToast', { name: anc.name }));
-    const sId = seriesStore.currentSeries?.id;
-    const currentStyle = seriesStore.currentSeries?.visual_style || 'realistic';
-    const styleObj = getVisualStyleById(currentStyle);
+// async function handleRegenerateSingleAnchor(anc: any) {
+//   if (!props.character || !anc.id) return;
+//   regeneratingAnchorId.value = anc.id;
+//   try {
+//     toast.info(t('workspace.regeneratingAngleToast', { name: anc.name }));
+//     const sId = seriesStore.currentSeries?.id;
+//     const currentStyle = seriesStore.currentSeries?.visual_style || 'realistic';
+//     const styleObj = getVisualStyleById(currentStyle);
 
-    const res: any = await http.post(`/characters/${props.character.id}/anchors/${anc.id}`, {
-      seriesId: sId,
-      name: props.character.name,
-      age: selectedAge.value,
-      gender: selectedGender.value,
-      visualTraits: editableVisualTraits.value || editableIdentity.value,
-      wardrobeDesc: activeOutfitTags.value || activeOutfitName.value,
-      visualStyle: currentStyle,
-      visualStylePrompt: styleObj.promptModifier,
-    });
+//     const res: any = await http.post(`/characters/${props.character.id}/anchors/${anc.id}`, {
+//       seriesId: sId,
+//       name: props.character.name,
+//       age: selectedAge.value,
+//       gender: selectedGender.value,
+//       visualTraits: editableVisualTraits.value || editableIdentity.value,
+//       wardrobeDesc: activeOutfitTags.value || activeOutfitName.value,
+//       visualStyle: currentStyle,
+//       visualStylePrompt: styleObj.promptModifier,
+//     });
 
-    const data = res?.data?.data || res?.data;
-    if (data?.anchors) {
-      await seriesStore.updateCharacter(props.character.id, {
-        anchors: data.anchors,
-      });
-      if (data.anchor?.imageUrl) {
-        selectedPreviewUrl.value = data.anchor.imageUrl;
-        selectedPreviewLabel.value = data.anchor.name;
-      }
-      if (sId) await seriesStore.saveCharacterAvatars(sId);
-      toast.success(t('workspace.angleRegeneratedToast', { name: anc.name }));
-    }
-  } catch (err: any) {
-    toast.error(t('workspace.failedToRegenerateAngle', { error: err.message || 'Error' }));
-  } finally {
-    regeneratingAnchorId.value = null;
-  }
-}
+//     const data = res?.data?.data || res?.data;
+//     if (data?.anchors) {
+//       await seriesStore.updateCharacter(props.character.id, {
+//         anchors: data.anchors,
+//       });
+//       if (data.anchor?.imageUrl) {
+//         selectedPreviewUrl.value = data.anchor.imageUrl;
+//         selectedPreviewLabel.value = data.anchor.name;
+//       }
+//       if (sId) await seriesStore.saveCharacterAvatars(sId);
+//       toast.success(t('workspace.angleRegeneratedToast', { name: anc.name }));
+//     }
+//   } catch (err: any) {
+//     toast.error(t('workspace.failedToRegenerateAngle', { error: err.message || 'Error' }));
+//   } finally {
+//     regeneratingAnchorId.value = null;
+//   }
+// }
 
 // AI Generate Outfit suitable for active Episode
-async function handleGenerateEpisodeOutfit() {
-  if (!props.character) return;
-  isGeneratingEpisodeOutfit.value = true;
-  try {
-    toast.info(t('workspace.designingCostumeToast', { episode: activeEpisodeTitle.value }));
-    const sId = seriesStore.currentSeries?.id;
-    const epId = seriesStore.activeEpisodeId;
-    const res: any = await http.post(`/characters/${props.character.id}/wardrobe`, {
-      seriesId: sId,
-      episodeId: epId,
-      category: activeOutfitCategory.value || 'Main Outfit',
-      prompt: `Episode outfit for ${activeEpisodeTitle.value}`,
-    });
+// async function handleGenerateEpisodeOutfit() {
+//   if (!props.character) return;
+//   isGeneratingEpisodeOutfit.value = true;
+//   try {
+//     toast.info(t('workspace.designingCostumeToast', { episode: activeEpisodeTitle.value }));
+//     const sId = seriesStore.currentSeries?.id;
+//     const epId = seriesStore.activeEpisodeId;
+//     const res: any = await http.post(`/characters/${props.character.id}/wardrobe`, {
+//       series_id: sId,
+//       episode_id: epId,
+//       category: activeOutfitCategory.value || 'Main Outfit',
+//       prompt: `Episode outfit for ${activeEpisodeTitle.value}`,
+//     });
 
-    const newOutfit = res?.data?.data || res?.data;
-    if (newOutfit) {
-      activeOutfitName.value = newOutfit.name;
-      activeOutfitTags.value = Array.isArray(newOutfit.tags) ? newOutfit.tags.join(', ') : newOutfit.tags;
-      const currentWardrobe = Array.isArray(props.character.wardrobe) ? [...props.character.wardrobe] : [];
-      currentWardrobe.unshift(newOutfit);
-      await seriesStore.updateCharacter(props.character.id, { wardrobe: currentWardrobe });
-      if (sId) await seriesStore.saveCharacterAvatars(sId);
-      toast.success(t('workspace.outfitLockedForEpisodeToast', { name: newOutfit.name, episode: activeEpisodeTitle.value }));
-    }
-  } catch (err: any) {
-    toast.error(t('workspace.failedToGenerateWardrobe', { error: err.message || 'Error' }));
-  } finally {
-    isGeneratingEpisodeOutfit.value = false;
-  }
-}
+//     const newOutfit = res?.data?.data || res?.data;
+//     if (newOutfit) {
+//       activeOutfitName.value = newOutfit.name;
+//       activeOutfitTags.value = Array.isArray(newOutfit.tags) ? newOutfit.tags.join(', ') : newOutfit.tags;
+//       const currentWardrobe = Array.isArray(props.character.wardrobe) ? [...props.character.wardrobe] : [];
+//       currentWardrobe.unshift(newOutfit);
+//       await seriesStore.updateCharacter(props.character.id, { wardrobe: currentWardrobe });
+//       if (sId) await seriesStore.saveCharacterAvatars(sId);
+//       toast.success(t('workspace.outfitLockedForEpisodeToast', { name: newOutfit.name, episode: activeEpisodeTitle.value }));
+//     }
+//   } catch (err: any) {
+//     toast.error(t('workspace.failedToGenerateWardrobe', { error: err.message || 'Error' }));
+//   } finally {
+//     isGeneratingEpisodeOutfit.value = false;
+//   }
+// }
 
-async function handleLockWardrobe() {
-  if (!props.character) return;
-  isLockingOutfit.value = true;
-  try {
-    const sId = seriesStore.currentSeries?.id;
-    const tagsArray = activeOutfitTags.value.split(',').map(s => s.trim()).filter(Boolean);
-    const res: any = await http.post(`/characters/${props.character.id}/wardrobe`, {
-      seriesId: sId,
-      name: activeOutfitName.value || `${props.character.name} Default Costume`,
-      category: activeOutfitCategory.value || 'Main Outfit',
-      tags: tagsArray.length > 0 ? tagsArray : ['tailored outfit', 'continuity-locked'],
-      status: 'locked',
-    });
+// async function handleLockWardrobe() {
+//   if (!props.character) return;
+//   isLockingOutfit.value = true;
+//   try {
+//     const sId = seriesStore.currentSeries?.id;
+//     const tagsArray = activeOutfitTags.value.split(',').map(s => s.trim()).filter(Boolean);
+//     const res: any = await http.post(`/characters/${props.character.id}/wardrobe`, {
+//       seriesId: sId,
+//       name: activeOutfitName.value || `${props.character.name} Default Costume`,
+//       category: activeOutfitCategory.value || 'Main Outfit',
+//       tags: tagsArray.length > 0 ? tagsArray : ['tailored outfit', 'continuity-locked'],
+//       status: 'locked',
+//     });
 
-    const newOutfit = res?.data?.data || res?.data;
-    if (newOutfit) {
-      const currentWardrobe = Array.isArray(props.character.wardrobe) ? [...props.character.wardrobe] : [];
-      currentWardrobe.unshift(newOutfit);
-      await seriesStore.updateCharacter(props.character.id, { wardrobe: currentWardrobe });
-      if (sId) await seriesStore.saveCharacterAvatars(sId);
-      toast.success(t('workspace.outfitContinuityLockedToast'));
-    }
-  } catch (err: any) {
-    toast.error(t('workspace.failedToLockWardrobe', { error: err.message || 'Error' }));
-  } finally {
-    isLockingOutfit.value = false;
-  }
-}
+//     const newOutfit = res?.data?.data || res?.data;
+//     if (newOutfit) {
+//       const currentWardrobe = Array.isArray(props.character.wardrobe) ? [...props.character.wardrobe] : [];
+//       currentWardrobe.unshift(newOutfit);
+//       await seriesStore.updateCharacter(props.character.id, { wardrobe: currentWardrobe });
+//       if (sId) await seriesStore.saveCharacterAvatars(sId);
+//       toast.success(t('workspace.outfitContinuityLockedToast'));
+//     }
+//   } catch (err: any) {
+//     toast.error(t('workspace.failedToLockWardrobe', { error: err.message || 'Error' }));
+//   } finally {
+//     isLockingOutfit.value = false;
+//   }
+// }
 
 async function handleRender() {
   if (!props.character) return;
   try {
     toast.info(t('workspace.renderingCharacter'));
     const charWithOverride = renderPromptOverride.value
-      ? { ...props.character, identity: renderPromptOverride.value, visualTraits: editableVisualTraits.value }
-      : { ...props.character, visualTraits: editableVisualTraits.value };
+      ? { ...props.character, identity: renderPromptOverride.value, visual_traits: editableVisualTraits.value }
+      : { ...props.character, visual_traits: editableVisualTraits.value };
     await pipelineStore.renderCharacter({
       ...charWithOverride,
       age: selectedAge.value,
       gender: selectedGender.value,
       nationality: selectedNationality.value,
-      voiceId: selectedVoiceId.value,
+      voice_id: selectedVoiceId.value,
       style: renderStyle.value,
-    });
+    } as any);
     toast.success(t('toast.characterRendered'));
   } catch {
     toast.error(t('toast.failedToRenderChar'));
   }
 }
 
-const styleOptions = computed(() => [
-  { value: 'photorealistic', label: t('workspace.photorealistic') },
-  { value: 'anime', label: t('workspace.anime') },
-  { value: 'cinematic', label: t('workspace.cinematic') },
-]);
+// const styleOptions = computed(() => [
+//   { value: 'photorealistic', label: t('workspace.photorealistic') },
+//   { value: 'anime', label: t('workspace.anime') },
+//   { value: 'cinematic', label: t('workspace.cinematic') },
+// ]);
 </script>
 
 <template>
@@ -353,10 +350,10 @@ const styleOptions = computed(() => [
             style="border-color: var(--el-border-color); background-color: var(--el-fill-color-darker);"
           >
             <el-image
-              v-if="character.avatarUrl"
-              :src="character.avatarUrl"
+              v-if="character.avatar"
+              :src="character.avatar"
               :alt="character.name"
-              :preview-src-list="[character.avatarUrl]"
+              :preview-src-list="[character.avatar]"
               fit="cover"
               class="w-full h-full object-cover cursor-pointer"
             />
@@ -383,7 +380,7 @@ const styleOptions = computed(() => [
             :disabled="!!regeneratingAnchorId"
             @click="handleRender"
           >
-            {{ character.avatarUrl ? t('workspace.rerenderAvatar') : t('workspace.renderCharacter') }}
+            {{ character.avatar ? t('workspace.rerenderAvatar') : t('workspace.renderCharacter') }}
           </el-button>
         </div>
 
@@ -535,88 +532,6 @@ const styleOptions = computed(() => [
         </div>
       </div>
 
-      <!-- Episode Wardrobe & Outfit Continuity Card -->
-      <div class="p-3.5 rounded-2xl border space-y-3" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color);">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-1.5">
-            <el-icon style="color: var(--el-color-success);"><Lock /></el-icon>
-            <span class="text-xs font-bold uppercase tracking-wider" style="color: var(--el-color-success);">
-              {{ t('workspace.episodeWardrobeContinuity') }}
-            </span>
-          </div>
-          <div class="flex items-center gap-2">
-            <el-button
-              type="success"
-              plain
-              size="small"
-              round
-              :icon="MagicStick"
-              :loading="isGeneratingEpisodeOutfit"
-              :disabled="!!regeneratingAnchorId"
-              @click="handleGenerateEpisodeOutfit"
-              class="!font-bold"
-            >
-              {{ t('workspace.designOutfitForEpisode', { episode: activeEpisodeTitle }) }}
-            </el-button>
-            <el-button
-              size="small"
-              type="primary"
-              round
-              :icon="Check"
-              :loading="isLockingOutfit"
-              :disabled="!!regeneratingAnchorId"
-              @click="handleLockWardrobe"
-              class="!font-bold"
-            >
-              {{ t('workspace.lockOutfit') }}
-            </el-button>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <div>
-            <label class="block text-[11px] font-semibold mb-1" style="color: var(--el-text-color-secondary);">{{ t('workspace.outfitTitle') }}</label>
-            <el-input v-model="activeOutfitName" size="small" placeholder="Dark Olive Field Jacket & Black Tee" />
-          </div>
-          <div>
-            <label class="block text-[11px] font-semibold mb-1" style="color: var(--el-text-color-secondary);">{{ t('workspace.outfitCategory') }}</label>
-            <el-select v-model="activeOutfitCategory" size="small" class="w-full">
-              <el-option value="Main Outfit" :label="t('workspace.outfitMain')" />
-              <el-option value="Action / Tactical" :label="t('workspace.outfitAction')" />
-              <el-option value="Formal / Evening" :label="t('workspace.outfitFormal')" />
-              <el-option value="Casual Daily" :label="t('workspace.outfitCasual')" />
-              <el-option value="Stealth / Night" :label="t('workspace.outfitStealth')" />
-            </el-select>
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-[11px] font-semibold mb-1" style="color: var(--el-text-color-secondary);">
-            {{ t('workspace.visualContinuityTags') }}
-          </label>
-          <el-input v-model="activeOutfitTags" size="small" :placeholder="t('workspace.visualContinuityTagsPlaceholder')" />
-        </div>
-
-        <!-- Locked Wardrobes Badge List -->
-        <div v-if="characterWardrobe.length > 0" class="pt-2 border-t border-border/40 space-y-1.5">
-          <span class="text-[11px] font-semibold block" style="color: var(--el-text-color-secondary);">{{ t('workspace.savedOutfitsLibrary') }}</span>
-          <div class="flex flex-wrap gap-1.5">
-            <el-tag
-              v-for="item in characterWardrobe"
-              :key="item.id || item.name"
-              type="info"
-              effect="dark"
-              round
-              size="small"
-              class="cursor-pointer hover:opacity-80"
-              @click="activeOutfitName = item.name; activeOutfitTags = Array.isArray(item.tags) ? item.tags.join(', ') : item.tags"
-            >
-              <el-icon class="mr-1"><Check /></el-icon> {{ item.name }}
-            </el-tag>
-          </div>
-        </div>
-      </div>
-
       <!-- LoRA Model & 8 Facial Anchors Section -->
       <div class="p-3.5 rounded-2xl border space-y-3" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color);">
         <div class="flex items-center justify-between">
@@ -627,98 +542,8 @@ const styleOptions = computed(() => [
               <p class="text-xs font-mono font-bold" style="color: var(--el-text-color-primary);">{{ character.loraModel || `lora-${(character.name || 'char').toLowerCase().replace(/\s+/g, '-')}-sdxl` }}</p>
             </div>
           </div>
-          <div class="flex items-center gap-2">
-            <el-button
-              type="primary"
-              size="small"
-              round
-              :icon="MagicStick"
-              :loading="isExtractingAnchors"
-              :disabled="!!regeneratingAnchorId"
-              @click="handleExtractFacialAnchors"
-              class="!font-bold"
-            >
-              {{ t('workspace.extractAll8Anchors') }}
-            </el-button>
-          </div>
-        </div>
-
-        <!-- Facial Anchors List / Grid with Individual Re-generate Action -->
-        <div v-if="characterAnchors.length > 0" class="pt-2 border-t border-border/40 space-y-2">
-          <div class="flex items-center justify-between text-[11px]">
-            <span class="font-semibold text-xs" style="color: var(--el-text-color-primary);">{{ t('workspace.multiAngleAnchors', { count: characterAnchors.length }) }}</span>
-            <span class="text-primary font-bold">{{ t('workspace.meshMatch', { score: character.meshMatchRate || 98.5 }) }}</span>
-          </div>
-          <div class="grid grid-cols-3 gap-2">
-            <div
-              v-for="anc in characterAnchors"
-              :key="anc.id || anc.name"
-              @click="selectAnchorPreview(anc)"
-              class="rounded-xl overflow-hidden border p-1 bg-background/60 flex flex-col items-center cursor-pointer transition-all hover:scale-102 relative group"
-              :class="selectedPreviewUrl === (anc.imageUrl || character.avatarUrl) ? 'border-primary ring-2 ring-primary/40' : 'border-border/60'"
-            >
-              <div v-loading="regeneratingAnchorId === anc.id" class="w-full aspect-square rounded-lg overflow-hidden mb-1 bg-neutral-900 flex items-center justify-center relative">
-                <img :src="anc.imageUrl || character.avatarUrl" :alt="anc.name" class="w-full h-full object-cover" />
-                <!-- Regenerate individual angle button -->
-                <el-button
-                  circle
-                  size=""
-                  type="primary"
-                  :icon="Refresh"
-                  :loading="regeneratingAnchorId === anc.id"
-                  :disabled="!!regeneratingAnchorId"
-                  @click.stop="handleRegenerateSingleAnchor(anc)"
-                  class="!absolute top-1.5 right-1.5 opacity-80 group-hover:opacity-100 shadow-md scale-85"
-                  :title="t('workspace.regenerateThisAngle')"
-                />
-              </div>
-              <span class="text-[10px] font-medium text-center truncate w-full" style="color: var(--el-text-color-primary);">{{ anc.name || 'Anchor' }}</span>
-              <el-tag size="small" type="success" effect="plain" round class="!text-[9px] scale-90">{{ t('workspace.locked') }} {{ anc.matchScore || 98.5 }}%</el-tag>
-            </div>
-          </div>
         </div>
       </div>
-
-      <!-- Render Section -->
-      <!-- <div class="border rounded-2xl p-4 space-y-3" style="border-color: var(--el-border-color); background-color: var(--el-card-bg-color);">
-        <h4 class="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style="color: var(--el-color-primary);">
-          <el-icon :size="14"><Picture /></el-icon>
-          {{ t('workspace.renderCharacter') }}
-        </h4>
-
-        <div class="space-y-2">
-          <label class="text-[11px] font-semibold" style="color: var(--el-text-color-secondary);">{{ t('workspace.promptOverride') }}</label>
-          <el-input
-            v-model="renderPromptOverride"
-            type="textarea"
-            :rows="2"
-            :placeholder="`${character.name}, ${character.role}...`"
-            size="small"
-          />
-        </div>
-
-        <div class="space-y-2">
-          <label class="text-[11px] font-semibold" style="color: var(--el-text-color-secondary);">{{ t('workspace.stylePresets', 'Style') }}</label>
-          <el-segmented
-            v-model="renderStyle"
-            :options="styleOptions"
-            block
-            size="small"
-          />
-        </div>
-
-        <el-button
-          type="primary"
-          round
-          class="w-full !font-bold"
-          icon="Picture" size="small"
-          :loading="charStatus === 'running'"
-          :disabled="!!regeneratingAnchorId"
-          @click="handleRender"
-        >
-          {{ charStatus === 'running' ? t('workspace.renderingCharacter') : t('workspace.renderCharacter') }}
-        </el-button>
-      </div> -->
     </div>
 
     <template #footer>

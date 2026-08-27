@@ -3,20 +3,7 @@ import { ref, computed } from 'vue';
 import { useDark, useToggle } from '@vueuse/core';
 import http from '@/utils/http';
 import i18n from '@/i18n';
-
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  avatar: string;
-  role?: string;
-  tier?: string;
-  credits?: number;
-  theme?: 'dark' | 'light' | string;
-  language?: string;
-  two_factor_enabled?: boolean;
-  connected_channels?: any;
-}
+import { User } from '@/types/api';
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(

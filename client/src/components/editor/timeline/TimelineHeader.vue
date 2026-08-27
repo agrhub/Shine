@@ -19,11 +19,24 @@ import {
   SkipForward,
   Scissors,
   Camera,
+  MessageSquare,
+  Mic,
+  VolumeX,
+  EyeOff,
+  ChevronDown,
 } from 'lucide-vue-next';
 import { useStudioStore } from '@/stores/useStudioStore';
 import { usePlaybackStore } from '@/composables/usePlaybackStore';
 import { useProjectStore } from '@/stores/useProjectStore';
+import { useSeriesStore } from '@/stores/useSeriesStore';
+import CountryFlag from '@/components/common/CountryFlag.vue';
+import {
+  getMainLanguageForCountry,
+  getLanguageByCode,
+} from '@/constants/geminiLanguages';
 import { core } from '@/utils/project';
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 
 const props = defineProps<{
   zoomLevel: number;
@@ -34,6 +47,7 @@ const emit = defineEmits<{
 }>();
 
 const studioStore = useStudioStore();
+const seriesStore = useSeriesStore();
 const { state: playbackState, play, pause, seek } = usePlaybackStore();
 const { canvasSize } = useProjectStore();
 
@@ -41,6 +55,32 @@ const selectedClips = computed(() => studioStore.selectedClips);
 const isPlaying = computed(() => playbackState.value.isPlaying);
 const currentTime = computed(() => playbackState.value.currentTime);
 const duration = computed(() => playbackState.value.duration);
+
+const activePreviewCaptionLang = computed(() => seriesStore.activePreviewCaptionLang);
+const activePreviewVoiceLang = computed(() => seriesStore.activePreviewVoiceLang);
+const mainLang = computed(() => getMainLanguageForCountry(seriesStore.currentSeries?.country));
+
+const availableCaptionLanguages = computed(() => {
+  const codes = new Set<string>();
+  if (mainLang.value?.code) codes.add(mainLang.value.code);
+  (seriesStore.captionLanguages || []).forEach(c => codes.add(c));
+  return Array.from(codes).map(c => getLanguageByCode(c));
+});
+
+const availableVoiceLanguages = computed(() => {
+  const codes = new Set<string>();
+  if (mainLang.value?.code) codes.add(mainLang.value.code);
+  (seriesStore.dubbingLanguages || []).forEach(c => codes.add(c));
+  return Array.from(codes).map(c => getLanguageByCode(c));
+});
+
+function selectCaptionLanguage(langCode: string) {
+  seriesStore.setPreviewCaptionLanguage(langCode);
+}
+
+function selectVoiceLanguage(langCode: string) {
+  seriesStore.setPreviewVoiceLanguage(langCode);
+}
 
 const formatTime = (seconds: number) => {
   const m = Math.floor(seconds / 60);
@@ -179,39 +219,126 @@ const setZoom = (val: number) => emit('update:zoomLevel', val);
         </div>
       </div>
 
-      <!-- Right zoom controls -->
-      <div class="flex items-center justify-end gap-1 px-2">
-        <Button type="button" variant="ghost" size="icon" class="h-7 w-7 text-muted-foreground hover:text-foreground" @click="zoomOut">
-          <Minus class="size-4" />
-        </Button>
+      <!-- Right preview language & zoom controls -->
+      <div class="flex items-center justify-end gap-2 px-2">
+        <!-- CC Subtitles Selector -->
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
-            <span class="text-xs font-mono font-medium text-foreground/80 cursor-pointer min-w-[40px] text-center">
-              {{ Math.round(zoomLevel * 100) }}%
-            </span>
+            <button
+              class="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold hover:bg-muted/80 transition-colors border shadow-2xs cursor-pointer"
+              :class="activePreviewCaptionLang !== 'off'
+                ? 'bg-primary/10 border-primary/40 text-primary'
+                : 'bg-muted/50 border-border text-muted-foreground'"
+              :title="`Subtitle (CC): ${activePreviewCaptionLang === 'off' ? 'Off' : getLanguageByCode(activePreviewCaptionLang).nativeName}`"
+            >
+              <MessageSquare class="size-3.5" />
+              <span class="text-[10px] font-bold">{{ t('editor.ccLabel') }}</span>
+              <span class="text-[10px] font-medium">
+                {{ activePreviewCaptionLang === 'off' ? 'Off' : getLanguageByCode(activePreviewCaptionLang).countryCode.toUpperCase() }}
+              </span>
+              <ChevronDown class="size-3 opacity-60 ml-0.5" />
+            </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" class="w-44 text-xs">
-            <DropdownMenuItem @click="zoomIn">
-              <span>Zoom in</span>
-              <DropdownMenuShortcut>⌘=</DropdownMenuShortcut>
+          <DropdownMenuContent align="end" class="w-48 max-h-64 overflow-y-auto text-xs">
+            <DropdownMenuItem @click="selectCaptionLanguage('off')" :class="{ 'font-bold bg-primary/10': activePreviewCaptionLang === 'off' }">
+              <div class="flex items-center gap-2">
+                <EyeOff class="size-3.5 text-muted-foreground" />
+                <span>{{ t('editor.offHideSubtitles') }}</span>
+              </div>
             </DropdownMenuItem>
-            <DropdownMenuItem @click="zoomOut">
-              <span>Zoom out</span>
-              <DropdownMenuShortcut>⌘-</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem @click="setZoom(1.0)">
-              <span>100%</span>
-              <DropdownMenuShortcut>⌘0</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem @click="setZoom(0.5)">
-              <span>Fit in view</span>
-              <DropdownMenuShortcut>⌥⌘1</DropdownMenuShortcut>
+            <DropdownMenuItem
+              v-for="l in availableCaptionLanguages"
+              :key="`cc_${l.code}`"
+              @click="selectCaptionLanguage(l.code)"
+              :class="{ 'font-bold bg-primary/10': l.code === activePreviewCaptionLang }"
+            >
+              <div class="flex items-center justify-between gap-2 w-full">
+                <div class="flex items-center gap-2">
+                  <CountryFlag :code="l.countryCode" :flag="l.flag" size="small" />
+                  <span>{{ l.nativeName }}</span>
+                </div>
+                <span v-if="l.code === mainLang?.code" class="text-[9px] px-1 py-0.2 bg-emerald-500/10 text-emerald-600 rounded">{{ t('editor.mainTrack') }}</span>
+              </div>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button type="button" variant="ghost" size="icon" class="h-7 w-7 text-muted-foreground hover:text-foreground" @click="zoomIn">
-          <Plus class="size-4" />
-        </Button>
+
+        <!-- Voice Dubbing Selector -->
+        <DropdownMenu>
+          <DropdownMenuTrigger as-child>
+            <button
+              class="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold hover:bg-muted/80 transition-colors border shadow-2xs cursor-pointer"
+              :class="activePreviewVoiceLang !== 'mute'
+                ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-600'
+                : 'bg-muted/50 border-border text-muted-foreground'"
+              :title="`Voiceover: ${activePreviewVoiceLang === 'mute' ? 'Mute' : getLanguageByCode(activePreviewVoiceLang).nativeName}`"
+            >
+              <Mic class="size-3.5" />
+              <span class="text-[10px] font-bold">{{ t('editor.voiceLabel') }}</span>
+              <span class="text-[10px] font-medium">
+                {{ activePreviewVoiceLang === 'mute' ? 'Mute' : getLanguageByCode(activePreviewVoiceLang).countryCode.toUpperCase() }}
+              </span>
+              <ChevronDown class="size-3 opacity-60 ml-0.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" class="w-48 max-h-64 overflow-y-auto text-xs">
+            <DropdownMenuItem @click="selectVoiceLanguage('mute')" :class="{ 'font-bold bg-emerald-500/10': activePreviewVoiceLang === 'mute' }">
+              <div class="flex items-center gap-2">
+                <VolumeX class="size-3.5 text-muted-foreground" />
+                <span>{{ t('editor.muteVoiceTrack') }}</span>
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              v-for="l in availableVoiceLanguages"
+              :key="`vo_${l.code}`"
+              @click="selectVoiceLanguage(l.code)"
+              :class="{ 'font-bold bg-emerald-500/10': l.code === activePreviewVoiceLang }"
+            >
+              <div class="flex items-center justify-between gap-2 w-full">
+                <div class="flex items-center gap-2">
+                  <CountryFlag :code="l.countryCode" :flag="l.flag" size="small" />
+                  <span>{{ l.nativeName }}</span>
+                </div>
+                <span v-if="l.code === mainLang?.code" class="text-[9px] px-1 py-0.2 bg-emerald-500/10 text-emerald-600 rounded">{{ t('editor.mainTrack') }}</span>
+              </div>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <!-- Zoom controls -->
+        <div class="flex items-center gap-1 border-l pl-2 ml-1">
+          <Button type="button" variant="ghost" size="icon" class="h-7 w-7 text-muted-foreground hover:text-foreground" @click="zoomOut">
+            <Minus class="size-4" />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger as-child>
+              <span class="text-xs font-mono font-medium text-foreground/80 cursor-pointer min-w-[36px] text-center">
+                {{ Math.round(zoomLevel * 100) }}%
+              </span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" class="w-44 text-xs">
+              <DropdownMenuItem @click="zoomIn">
+                <span>{{ t('editor.zoomIn') }}</span>
+                <DropdownMenuShortcut>⌘=</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuItem @click="zoomOut">
+                <span>{{ t('editor.zoomOut') }}</span>
+                <DropdownMenuShortcut>⌘-</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuItem @click="setZoom(1.0)">
+                <span>100%</span>
+                <DropdownMenuShortcut>⌘0</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuItem @click="setZoom(0.5)">
+                <span>{{ t('editor.fitInView') }}</span>
+                <DropdownMenuShortcut>⌥⌘1</DropdownMenuShortcut>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button type="button" variant="ghost" size="icon" class="h-7 w-7 text-muted-foreground hover:text-foreground" @click="zoomIn">
+            <Plus class="size-4" />
+          </Button>
+        </div>
       </div>
     </div>
   </div>

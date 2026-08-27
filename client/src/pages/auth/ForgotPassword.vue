@@ -18,7 +18,7 @@ function handleSendReset() {
   setTimeout(() => {
     isLoading.value = false;
     isSubmitted.value = true;
-    ElMessage.success('Password reset instructions sent to your email.');
+    ElMessage.success(t('toast.resetSent'));
   }, 1000);
 }
 </script>
@@ -27,10 +27,10 @@ function handleSendReset() {
   <div id="forgot-password-page" class="space-y-8 font-['Outfit',sans-serif]">
     <!-- Header -->
     <div class="space-y-1">
-      <h2 class="text-3xl font-extrabold tracking-tight text-[#1c1b1b] dark:text-white">
+      <h2 class="text-3xl font-extrabold tracking-tight text-[var(--el-text-color-primary)]">
         {{ t('auth.forgotPasswordHeader') }}
       </h2>
-      <p class="text-sm text-gray-500 dark:text-on-surface-variant">
+      <p class="text-sm text-[var(--el-text-color-secondary)]">
         {{ t('auth.forgotPasswordSubtitle') }}
       </p>
     </div>
@@ -38,15 +38,15 @@ function handleSendReset() {
     <div v-if="!isSubmitted">
       <form class="space-y-5" @submit.prevent="handleSendReset">
         <div>
-          <label class="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-on-surface-variant mb-1.5">
-            Email address
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1.5">
+            {{ t('auth.email') }}
           </label>
           <input
             id="forgot-email"
             v-model="email"
             type="email"
             placeholder="jane@shinedrama.com"
-            class="w-full bg-[#f3f3f3] dark:bg-[#1f2029] border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-sm text-[#1c1b1b] dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all"
+            class="w-full bg-[var(--el-fill-color-blank)] border border-[var(--el-border-color)] rounded-xl px-4 py-3 text-sm text-[var(--el-text-color-primary)] placeholder-[var(--el-text-color-placeholder)] focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all shadow-sm"
             required
           />
         </div>
@@ -65,15 +65,15 @@ function handleSendReset() {
     </div>
 
     <div v-else class="bg-primary/10 border border-[var(--el-color-primary)]/30 rounded-2xl p-6 text-center space-y-3">
-      <div class="w-12 h-12 rounded-full bg-primary/20 text-on-primary-container flex items-center justify-center mx-auto">
+      <div class="w-12 h-12 rounded-full bg-primary/20 text-primary flex items-center justify-center mx-auto">
         <el-icon class="text-2xl"><Message /></el-icon>
       </div>
-      <h3 class="font-bold text-base text-[#1c1b1b] dark:text-white">Check your inbox</h3>
-      <p class="text-xs text-gray-500 dark:text-on-surface-variant">We have sent password recovery instructions to {{ email }}.</p>
+      <h3 class="font-bold text-base text-[var(--el-text-color-primary)]">{{ t('auth.checkInbox') }}</h3>
+      <p class="text-xs text-[var(--el-text-color-secondary)]">{{ t('auth.checkInboxDesc', { email }) }}</p>
     </div>
 
     <div class="text-center pt-2">
-      <router-link to="/auth/login" class="text-xs font-extrabold text-on-primary-container dark:text-primary hover:underline inline-flex items-center gap-1">
+      <router-link to="/auth/login" class="text-xs font-extrabold text-primary hover:underline inline-flex items-center gap-1">
         <el-icon><ArrowLeft /></el-icon>
         <span>{{ t('auth.backToLogin') }}</span>
       </router-link>

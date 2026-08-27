@@ -1,7 +1,5 @@
 import path from 'node:path'
 import Vue from '@vitejs/plugin-vue'
-
-import Unocss from 'unocss/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import Components from 'unplugin-vue-components/vite'
 import VueRouter from 'unplugin-vue-router/vite'
@@ -48,10 +46,6 @@ export default defineConfig({
       ],
       dts: 'src/components.d.ts',
     }),
-
-    // https://github.com/antfu/unocss
-    // see uno.config.ts for config
-    Unocss(),
   ] as any[],
 
   ssr: {

@@ -132,7 +132,7 @@ const addItemToCanvas = async (asset: PexelsVideo) => {
 
       <div v-else-if="videos.length === 0" class="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
         <Film :size="32" class="opacity-50" />
-        <span class="text-sm">No videos found</span>
+        <span class="text-sm">{{ $t('editor.noVideosFound') }}</span>
       </div>
 
       <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-2">

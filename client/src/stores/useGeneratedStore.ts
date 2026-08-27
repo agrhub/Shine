@@ -1,13 +1,6 @@
+import { GeneratedAsset } from '@/types/api';
 import { defineStore } from 'pinia';
 import { ref, watch } from 'vue';
-
-export interface GeneratedAsset {
-  id: string;
-  url: string;
-  text: string;
-  type: 'voiceover' | 'sfx' | 'music';
-  createdAt: number;
-}
 
 export const useGeneratedStore = defineStore('generated', () => {
   // Load from localStorage if present

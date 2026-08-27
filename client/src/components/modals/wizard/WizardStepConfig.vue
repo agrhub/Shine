@@ -93,10 +93,10 @@ const genresList = computed(() => {
       <div class="flex items-center justify-between">
         <div>
           <h2 class="text-sm font-black uppercase tracking-wider flex items-center gap-2" style="color: var(--el-text-color-primary);">
-            <i class="fa-solid fa-masks-theater text-primary text-base"></i>
-            {{ t('wizard.genre') }} & Story Archetype
+            <el-icon class="text-primary"><Film /></el-icon>
+            {{ t('wizard.genreAndArchetype') }}
           </h2>
-          <p class="text-xs text-[var(--el-text-color-secondary)] mt-0.5">Select your narrative core theme and psychological hook</p>
+          <p class="text-xs text-[var(--el-text-color-secondary)] mt-0.5">{{ t('wizard.themeSubtitle') }}</p>
         </div>
         <el-tag size="small" type="primary" effect="plain" round class="font-bold">
           {{ formData.genre }}
@@ -160,24 +160,24 @@ const genresList = computed(() => {
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 class="text-sm font-black uppercase tracking-wider flex items-center gap-2" style="color: var(--el-text-color-primary);">
-            <i class="fa-solid fa-wand-magic-sparkles text-amber-500 text-base"></i>
-            AI Video Visual Style ({{ filteredVisualStyles.length }} Styles)
+            <el-icon class="text-amber-500"><MagicStick /></el-icon>
+            {{ t('wizard.visualStyleHeading', { count: filteredVisualStyles.length }) }}
           </h2>
           <p class="text-xs text-[var(--el-text-color-secondary)] mt-0.5">
-            Select the core rendering aesthetic and character style for AI video generation
+            {{ t('wizard.visualStyleSubtitle') }}
           </p>
         </div>
 
         <!-- Search Style Input -->
         <el-input
           v-model="styleSearchQuery"
-          placeholder="Search styles (e.g. anime, 3d, cyberpunk, oil)..."
+          :placeholder="t('wizard.searchStylesPlaceholder')"
           clearable
           size="small"
           style="max-width: 280px"
         >
           <template #prefix>
-            <i class="fa-solid fa-magnifying-glass text-xs text-gray-400"></i>
+            <el-icon class="text-gray-400"><Search /></el-icon>
           </template>
         </el-input>
       </div>
@@ -260,10 +260,10 @@ const genresList = computed(() => {
       <!-- Aspect Ratio -->
       <div class="space-y-3">
         <h3 class="text-xs font-black uppercase tracking-wider flex items-center gap-1.5" style="color: var(--el-text-color-secondary);">
-          <i class="fa-solid fa-expand text-xs"></i>
+          <el-icon class="text-xs"><FullScreen /></el-icon>
           {{ t('wizard.aspectRatio') }}
         </h3>
-        <p class="text-[11px] text-[var(--el-text-color-secondary)]">Framing for broadcast platform</p>
+        <p class="text-[11px] text-[var(--el-text-color-secondary)]">{{ t('wizard.framingSubtitle') }}</p>
         <div class="grid grid-cols-2 gap-2">
           <el-button
             v-for="r in ratioOptions"
@@ -283,10 +283,10 @@ const genresList = computed(() => {
       <!-- Target Episodes -->
       <div class="space-y-3">
         <h3 class="text-xs font-black uppercase tracking-wider flex items-center gap-1.5" style="color: var(--el-text-color-secondary);">
-          <i class="fa-solid fa-layer-group text-xs"></i>
+          <el-icon class="text-xs"><Files /></el-icon>
           {{ t('wizard.episodesLabel', { count: formData.targetEpisodes }) }}
         </h3>
-        <p class="text-[11px] text-[var(--el-text-color-secondary)]">Total story chapters to plan</p>
+        <p class="text-[11px] text-[var(--el-text-color-secondary)]">{{ t('wizard.totalChaptersSubtitle') }}</p>
         <el-slider v-model="formData.targetEpisodes" :min="10" :max="100" :step="2" />
         <div class="flex justify-between text-[10px] font-semibold" style="color: var(--el-text-color-placeholder);">
           <span>{{ t('wizard.episodesShortArc') }}</span><span>{{ t('wizard.episodesEpic') }}</span>
@@ -296,10 +296,10 @@ const genresList = computed(() => {
       <!-- Episode Duration -->
       <div class="space-y-3">
         <h3 class="text-xs font-black uppercase tracking-wider flex items-center gap-1.5" style="color: var(--el-text-color-secondary);">
-          <i class="fa-solid fa-stopwatch text-xs"></i>
+          <el-icon class="text-xs"><Timer /></el-icon>
           {{ t('wizard.durationPerEpHeading') }}: <span style="color: var(--el-color-primary);">{{ formatDuration(formData.episodeDurationSeconds) }}</span>
         </h3>
-        <p class="text-[11px] text-[var(--el-text-color-secondary)]">Target pace per episode</p>
+        <p class="text-[11px] text-[var(--el-text-color-secondary)]">{{ t('wizard.targetPaceSubtitle') }}</p>
         <el-slider
           v-model="formData.episodeDurationSeconds"
           :min="30"
@@ -318,12 +318,9 @@ const genresList = computed(() => {
       <div class="space-y-2">
         <div class="flex items-center justify-between">
           <label class="text-[11px] font-black uppercase tracking-wider block" style="color: var(--el-text-color-secondary);">
-            <i class="fa-solid fa-language text-primary mr-1"></i>
-            Language
+            <el-icon class="text-primary mr-1"><ChatDotRound /></el-icon>
+            {{ t('wizard.language') }}
           </label>
-          <!-- <span class="text-[10px] font-bold text-primary">
-            TTS Voice: {{ formData.language }}
-          </span> -->
         </div>
         <el-select
           v-model="formData.language"
@@ -352,13 +349,12 @@ const genresList = computed(() => {
           </el-option>
         </el-select>
         <p class="text-[10px] text-[var(--el-text-color-secondary)] mt-1 flex items-center justify-between">
-          <span>AI Narration & Script: <strong class="text-primary">{{ selectedLanguageObj?.nativeName || 'Tiếng Việt' }}</strong></span>
-          <!-- <span class="font-mono text-gray-400">ISO: {{ selectedCountryObj.code.toUpperCase() }}</span> -->
+          <span>{{ t('wizard.aiNarrationScript') }}: <strong class="text-primary">{{ selectedLanguageObj?.nativeName || 'English' }}</strong></span>
         </p>
       </div>
       <div class="space-y-2">
         <label class="text-[11px] font-black uppercase tracking-wider block" style="color: var(--el-text-color-secondary);">{{ t('wizard.storyDescription') }}</label>
-        <el-input v-model="formData.description" type="textarea" :rows="3" :placeholder="t('wizard.storyDescPlaceholder')" />
+        <el-input v-model="formData.synopsis" type="textarea" :rows="3" :placeholder="t('wizard.storyDescPlaceholder')" />
       </div>
     </div>
 

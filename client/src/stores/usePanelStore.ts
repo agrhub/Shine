@@ -1,8 +1,6 @@
+import { ActiveTab, EditorMode } from '@/types/api';
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-
-export type ActiveTab = 'uploads' | 'pexels' | 'text' | 'audio' | 'elements' | 'assistant' | 'captions' | 'assets' | 'images' | 'videos' | 'music' | 'effects' | 'voiceovers' | 'sfx' | 'transitions';
-export type EditorMode = 'editor' | 'agent' | 'playground';
 
 export const usePanelStore = defineStore('panel', () => {
   // Original Vue panel properties

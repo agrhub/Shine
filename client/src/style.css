@@ -10,6 +10,12 @@
   --color-input: var(--input-border);
   --color-primary: var(--primary-green);
   --color-primary-foreground: #002112;
+  --color-on-primary: #002112;
+  --color-on-primary-container: #006c45;
+  --color-surface: var(--el-bg-color-page);
+  --color-surface-container: var(--el-bg-color);
+  --color-surface-container-high: var(--el-bg-color-overlay);
+  --color-on-surface-variant: var(--text-secondary);
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
@@ -281,7 +287,7 @@ body.dark,
 }
 
 /* Stitch Design Utilities */
-.bg-stitch-bg {
+/* .bg-stitch-bg {
   background-color: var(--el-bg-color-page);
 }
 .bg-stitch-surface {
@@ -292,7 +298,7 @@ body.dark,
 }
 .text-stitch-green {
   color: var(--el-color-primary);
-}
+} */
 
 /* Layer 6: Visual Feedback & UI Glow Highlight for AI Chatbot Edits */
 @keyframes pulse-glow {
@@ -332,5 +338,56 @@ body.dark,
   stroke: var(--el-border-color) !important;
 }
 
+
+.el-tag {
+  height: auto;
+  padding: 5px;
+  white-space: normal !important;
+}
+
+.el-tag > .el-tag__content {
+  white-space: normal !important;
+}
+
+/* Shine Landing Page Modern Effects */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  display: inline-flex;
+  width: max-content;
+  animation: marquee 25s linear infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.text-outline {
+  -webkit-text-stroke: 1.5px var(--el-text-color-primary);
+  color: transparent;
+}
+
+.nav-link-shine::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 1.5px;
+  background-color: var(--el-text-color-primary);
+  transition: width 0.3s ease;
+}
+
+.nav-link-shine:hover::after {
+  width: 100%;
+}
 
 

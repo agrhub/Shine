@@ -6,20 +6,20 @@ export const useCaptionStore = defineStore('caption', {
   state: () => ({
     currentStyle: {
       preset: 'pop',
-      emojiSentiment: true,
-      bassSync: true,
-      textColor: '#FFFFFF',
-      fontSizePx: 42,
-      verticalPosPct: 80,
-      outlineWeightPx: 3,
-      autoHighlight: true,
+      emoji_sentiment: true,
+      bass_sync: true,
+      text_color: '#FFFFFF',
+      font_size_px: 42,
+      vertical_pos_pct: 80,
+      outline_weight_px: 3,
+      auto_highlight: true,
       language: 'en-US',
     } as KaraokeStyle,
 
     spatialConfig: {
-      trackPans: { dialogue: 0, music: -0.2, sfx: 0.3 },
-      reverbProfile: 'penthouse',
-      autoDucking: true,
+      track_pans: { dialogue: 0, music: -0.2, sfx: 0.3 },
+      reverb_profile: 'penthouse',
+      auto_ducking: true,
     } as SpatialAudioConfig,
 
     cliffhangerJob: null as CliffhangerJob | null,

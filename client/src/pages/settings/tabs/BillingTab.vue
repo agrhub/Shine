@@ -71,11 +71,11 @@ onMounted(() => {
           {{ t('settings.billingPlan') }}
         </h2>
         <p class="text-xs text-[var(--el-text-color-secondary)] mt-1">
-          Manage your active AI processing tier, quota usage and invoices.
+          {{ t('settings.billingPlanDesc') }}
         </p>
       </div>
       <el-tag type="success" size="small" round effect="dark" class="uppercase">
-        Current: {{ billingData.tier }}
+        {{ t('settings.currentPrefix') }} {{ billingData.tier }}
       </el-tag>
     </div>
 
@@ -83,9 +83,9 @@ onMounted(() => {
     <div class="p-6 bg-gradient-to-br from-primary/10 via-[var(--el-card-bg-color)] to-[var(--el-card-bg-color)] border border-primary/20 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
       <div>
         <span class="text-[10px] font-bold tracking-wider text-primary uppercase">{{ t('settings.activeSubscription') }}</span>
-        <h3 class="text-2xl font-bold text-[var(--el-text-color-primary)] mt-1">{{ billingData.tier.toUpperCase() }} PLAN</h3>
+        <h3 class="text-2xl font-bold text-[var(--el-text-color-primary)] mt-1">{{ billingData.tier.toUpperCase() }} {{ t('settings.planTag') }}</h3>
         <p class="text-xs text-[var(--el-text-color-secondary)] mt-1">
-          Renews next billing cycle. Includes high-priority queue.
+          {{ t('settings.renewsNextCycle') }}
         </p>
       </div>
       <div class="w-full md:w-64 space-y-2">
@@ -123,8 +123,8 @@ onMounted(() => {
               <span class="text-xs text-[var(--el-text-color-secondary)]"> / {{ t('settings.mo') }}</span>
             </div>
             <p class="text-xs text-[var(--el-text-color-secondary)]">{{ plan.desc }}</p>
-            <div class="pt-2 text-xs font-semibold text-primary">
-              <i class="fa-solid fa-coins mr-1.5"></i> {{ plan.credits.toLocaleString() }} {{ t('settings.credits') }}
+            <div class="pt-2 text-xs font-semibold text-primary flex items-center">
+              <el-icon class="mr-1.5 text-amber-500"><Coin /></el-icon> {{ plan.credits.toLocaleString() }} {{ t('settings.credits') }}
             </div>
           </div>
           <el-button
@@ -145,14 +145,11 @@ onMounted(() => {
     <div class="space-y-4">
       <h3 class="text-sm font-semibold text-[var(--el-text-color-primary)]">{{ t('settings.invoicesHistory') }}</h3>
       <div class="bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-2xl overflow-hidden shadow-soft">
-        <el-table :data="usageHistory.length ? usageHistory : [
-          { date: '2026-08-01', description: 'Creator Pro Plan - Monthly', amount: '$29.00', status: 'Paid' },
-          { date: '2026-07-01', description: 'Creator Pro Plan - Monthly', amount: '$29.00', status: 'Paid' },
-        ]" style="width: 100%">
+        <el-table :data="usageHistory" style="width: 100%">
           <el-table-column prop="date" :label="t('common.date')" width="140" />
           <el-table-column prop="description" :label="t('common.description')" />
           <el-table-column prop="amount" :label="t('common.amount')" width="130" />
-          <el-table-column prop="status" label="Status" width="110">
+          <el-table-column prop="status" :label="t('common.status')" width="110">
             <template #default="{ row }">
               <el-tag size="small" type="success" round effect="plain">{{ row.status }}</el-tag>
             </template>

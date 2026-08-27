@@ -3,7 +3,7 @@ import { ref, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import http from '@/utils/http';
 import CountryFlag from '@/components/common/CountryFlag.vue';
-import { WORLD_COUNTRIES, findCountry, type WorldCountry } from '@/constants/countries';
+import { WORLD_COUNTRIES, TOP_COUNTRIES, findCountry, type WorldCountry } from '@/constants/countries';
 import { getLanguageByCode } from '@/constants/geminiLanguages';
 import { WizardFormData } from './types';
 import { Check, TrendCharts, MagicStick } from '@element-plus/icons-vue';
@@ -18,7 +18,7 @@ const viralTopics = ref<any[]>([]);
 const isFetchingTrends = ref(false);
 const trendsError = ref('');
 
-const popularCountries = computed(() => WORLD_COUNTRIES.filter((c) => c.isPopular));
+const popularCountries = computed(() => TOP_COUNTRIES.filter((c) => c.isPopular));
 const allCountries = WORLD_COUNTRIES;
 
 const selectedCountryObj = computed(() => findCountry(props.formData.country));
@@ -42,7 +42,7 @@ async function fetchViralTrends() {
   trendsError.value = '';
   const currentLang = locale.value || localStorage.getItem('shine_language') || localStorage.getItem('shine_locale') || 'en';
   try {
-    const targetCountry = props.formData.country || 'Vietnam';
+    const targetCountry = props.formData.country || 'United States';
     const res: any = await http.get(`/ai/trends/viral-topics?region=${encodeURIComponent(targetCountry)}&lang=${currentLang}`);
     viralTopics.value = res?.data || [];
     if (viralTopics.value.length === 0) trendsError.value = t('wizard.noTrendsMsg');
@@ -57,7 +57,7 @@ async function fetchViralTrends() {
 function selectTrend(topic: any) {
   props.formData.selectedTrend = topic;
   props.formData.title = topic.topic || topic.title;
-  props.formData.description = topic.description || topic.synopsis || topic.trope || '';
+  props.formData.synopsis = topic.description || topic.synopsis || topic.trope || '';
   if (topic.genre) props.formData.genre = topic.genre;
   if (topic.targetEpisodes) props.formData.targetEpisodes = topic.targetEpisodes;
   if (topic.country) {
@@ -122,11 +122,11 @@ function selectTrend(topic: any) {
       <div class="space-y-3">
         <div class="flex items-center justify-between">
           <h2 class="text-lg font-black flex items-center gap-2" style="color: var(--el-text-color-primary);">
-            <i class="fa-solid fa-language text-primary text-base"></i>
-            Main Language & Target Country
+            <el-icon class="text-primary"><ChatDotRound /></el-icon>
+            {{ t('wizard.mainLangAndCountry') }}
           </h2>
           <span class="text-xs text-[var(--el-text-color-secondary)]">
-            Language & Market: <strong class="text-primary">{{ selectedLanguageObj?.nativeName || 'Tiếng Việt' }} ({{ formData.country }})</strong>
+            {{ t('wizard.langAndMarket') }}: <strong class="text-primary">{{ selectedLanguageObj?.nativeName || 'English' }} ({{ formData.country }})</strong>
           </span>
         </div>
 
@@ -149,7 +149,7 @@ function selectTrend(topic: any) {
           <div class="flex-1 min-w-[220px] max-w-[340px]">
             <el-select
               v-model="formData.country"
-              placeholder="Search main language & country..."
+              :placeholder="t('wizard.searchLangPlaceholder')"
               filterable
               size="default"
               class="w-full"
@@ -207,7 +207,7 @@ function selectTrend(topic: any) {
       <div v-else-if="viralTopics.length > 0">
         <h3 class="text-sm font-black mb-4 uppercase tracking-wider flex items-center gap-2" style="color: var(--el-text-color-primary);">
           <span class="inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
-          LIVE TRENDS — {{ formData.country.toUpperCase() }} MARKET
+          {{ t('wizard.liveTrendsMarket', { country: formData.country.toUpperCase() }) }}
         </h3>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
           <div
@@ -240,7 +240,7 @@ function selectTrend(topic: any) {
       </div>
 
       <div v-else>
-        <el-empty :description="`Select ${formData.country} and click Fetch Trends`" />
+        <el-empty :description="t('wizard.selectCountryAndFetch', { country: formData.country })" />
       </div>
     </div>
 
@@ -252,7 +252,7 @@ function selectTrend(topic: any) {
       </div>
       <div>
         <label class="text-[11px] font-black uppercase tracking-wider block mb-1.5" style="color: var(--el-text-color-secondary);">{{ t('wizard.descriptionTopic') }}</label>
-        <el-input v-model="formData.description" type="textarea" :rows="4" :placeholder="t('wizard.descriptionPlaceholder')" />
+        <el-input v-model="formData.synopsis" type="textarea" :rows="4" :placeholder="t('wizard.descriptionPlaceholder')" />
       </div>
     </div>
   </div>

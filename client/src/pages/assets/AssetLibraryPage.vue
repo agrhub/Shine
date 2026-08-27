@@ -34,7 +34,7 @@ const filteredAssets = computed(() => {
     const matchQuery = !q ||
       item.name.toLowerCase().includes(q) ||
       item.ext.toLowerCase().includes(q) ||
-      item.categoryLabel.toLowerCase().includes(q);
+      (item.category_label && item.category_label.toLowerCase().includes(q));
     return matchCat && matchQuery;
   });
 });
@@ -72,7 +72,7 @@ async function handleFileChange(e: Event) {
   let type: Asset['type'] = 'text';
   let catLabel = t('assets.texts') || 'Text';
   let catColor = 'text-indigo-500 dark:text-indigo-400';
-  let icon = 'fa-solid fa-file-lines';
+  let icon = 'Document';
   let thumbnail: string | undefined;
   let isVideo = false;
   let isAudio = false;
@@ -81,25 +81,25 @@ async function handleFileChange(e: Event) {
     type = 'image';
     catLabel = t('assets.images') || 'Image';
     catColor = 'text-pink-500 dark:text-pink-400';
-    icon = 'fa-solid fa-image';
+    icon = 'Picture';
     thumbnail = URL.createObjectURL(file);
   } else if (['.MP4', '.MOV', '.WEBM', '.MKV', '.AVI'].includes(ext)) {
     type = 'video';
     catLabel = t('assets.videos') || 'Video';
     catColor = 'text-blue-500 dark:text-blue-400';
-    icon = 'fa-solid fa-video';
+    icon = 'VideoPlay';
     isVideo = true;
   } else if (['.MP3', '.WAV', '.AAC', '.OGG', '.FLAC', '.M4A'].includes(ext)) {
     type = 'audio';
     catLabel = t('assets.audio') || 'Audio';
     catColor = 'text-amber-500 dark:text-amber-400';
-    icon = 'fa-solid fa-music';
+    icon = 'Headset';
     isAudio = true;
   } else if (['.TXT', '.DOC', '.DOCX', '.PDF', '.JSON', '.MD', '.SRT', '.VTT'].includes(ext)) {
     type = 'text';
     catLabel = t('assets.texts') || 'Text';
     catColor = 'text-indigo-500 dark:text-indigo-400';
-    icon = 'fa-solid fa-file-lines';
+    icon = 'Document';
   }
 
   const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
@@ -111,14 +111,14 @@ async function handleFileChange(e: Event) {
       type,
       ext,
       size: sizeStr,
-      sizeBytes: file.size,
-      categoryLabel: catLabel,
-      categoryColor: catColor,
+      size_bytes: file.size,
+      category_label: catLabel,
+      category_color: catColor,
       icon,
       thumbnail,
-      isVideo,
-      isAudio,
-      userId: authStore.user?.id || 'usr_default',
+      is_video: isVideo,
+      is_audio: isAudio,
+      user_id: authStore.user?.id || 'usr_default',
     });
     toast.success(t('assets.uploadedSuccess', { name: file.name }));
   } catch {
@@ -202,6 +202,7 @@ onMounted(() => {
               : 'text-[var(--el-text-color-secondary)] hover:text-[var(--el-text-color-primary)]'"
             class="px-4 py-1.5 rounded-lg text-xs transition-colors cursor-pointer"
           >
+            <el-icon class="ml-1"><Grid /></el-icon>
             {{ t('assets.grid') }}
           </button>
           <button
@@ -211,6 +212,7 @@ onMounted(() => {
               : 'text-[var(--el-text-color-secondary)] hover:text-[var(--el-text-color-primary)]'"
             class="px-4 py-1.5 rounded-lg text-xs transition-colors cursor-pointer"
           >
+            <el-icon class="ml-1"><Files /></el-icon>
             {{ t('assets.list') }}
           </button>
         </div>
@@ -221,8 +223,8 @@ onMounted(() => {
           round
           :loading="assetsStore.isUploading"
           @click="triggerFileUpload"
+          icon="Upload"
         >
-          <i v-if="!assetsStore.isUploading" class="fa-solid fa-arrow-up mr-1 text-xs"></i>
           <span>{{ assetsStore.isUploading ? t('assets.uploading') : t('assets.uploadBtn') }}</span>
         </el-button>
       </div>
@@ -245,14 +247,17 @@ onMounted(() => {
       </div>
 
       <div class="relative min-w-[200px] max-w-[260px]">
-        <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[var(--el-text-color-secondary)] text-xs"></i>
-        <input
+        <el-input
           v-model="searchFilter"
           @input="handleSearchChange"
           type="text"
           :placeholder="t('assets.filterPlaceholder')"
-          class="w-full bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-full pl-8 pr-3 py-1.5 text-xs text-[var(--el-text-color-primary)] placeholder:text-[var(--el-text-color-secondary)] outline-none focus:border-[var(--el-color-primary)] transition-colors"
-        />
+          class="w-full bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-full p-1 placeholder:text-[var(--el-text-color-secondary)] outline-none focus:border-[var(--el-color-primary)] transition-colors"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
       </div>
     </div>
 
@@ -283,13 +288,13 @@ onMounted(() => {
               class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
             />
             <div class="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-              <i v-if="asset.isVideo" class="fa-solid fa-play text-white text-3xl drop-shadow-md"></i>
+              <el-icon v-if="asset.is_video" class="text-white text-3xl drop-shadow-md"><VideoPlay /></el-icon>
             </div>
           </template>
 
           <template v-else>
             <div class="w-full h-full rounded-2xl bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)]/60 flex items-center justify-center text-[var(--el-text-color-secondary)] group-hover:scale-105 transition-transform duration-700">
-              <i :class="[asset.icon || 'fa-solid fa-file', 'text-4xl opacity-30']"></i>
+              <el-icon :size="36" class="opacity-30"><component :is="asset.icon || 'Document'" /></el-icon>
             </div>
           </template>
 
@@ -304,7 +309,7 @@ onMounted(() => {
             class="absolute top-4 left-4 w-7 h-7 rounded-full bg-red-500/80 hover:bg-red-600 text-white flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm shadow cursor-pointer"
             title="Delete Asset"
           >
-            <i class="fa-solid fa-trash text-[10px]"></i>
+            <el-icon class="text-[10px]"><Delete /></el-icon>
           </button>
         </div>
 
@@ -315,7 +320,7 @@ onMounted(() => {
           </h4>
           <div class="flex items-center justify-between mt-2">
             <span class="text-xs text-[var(--el-text-color-secondary)]">{{ asset.size }}</span>
-            <span :class="['text-xs font-medium', asset.categoryColor]">{{ asset.categoryLabel }}</span>
+            <span :class="['text-xs font-medium', asset.category_color]">{{ asset.category_label }}</span>
           </div>
         </div>
       </div>
@@ -326,7 +331,7 @@ onMounted(() => {
         class="group border-2 border-dashed border-[var(--el-border-color)] hover:border-[var(--el-color-primary)] rounded-[24px] flex flex-col items-center justify-center p-8 transition-all cursor-pointer bg-[var(--el-fill-color-lighter)]/50 aspect-square"
       >
         <div class="w-12 h-12 rounded-full bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] flex items-center justify-center text-[var(--el-text-color-secondary)] mb-4 group-hover:text-[var(--el-color-primary)] group-hover:border-[var(--el-color-primary)] transition-all">
-          <i class="fa-solid fa-plus text-lg"></i>
+          <el-icon :size="20"><Plus /></el-icon>
         </div>
         <p class="text-xs font-medium text-[var(--el-text-color-secondary)] group-hover:text-[var(--el-text-color-primary)] text-center">
           {{ t('assets.dropPlaceholder') }}
@@ -345,7 +350,7 @@ onMounted(() => {
         >
           <div class="flex items-center gap-4">
             <div class="w-10 h-10 rounded-xl bg-[var(--el-fill-color-light)] border border-[var(--el-border-color)] flex items-center justify-center shrink-0">
-              <i :class="[asset.icon || (asset.thumbnail ? 'fa-solid fa-image' : 'fa-solid fa-file'), 'text-sm text-[var(--el-text-color-secondary)]']"></i>
+              <el-icon :size="16" class="text-[var(--el-text-color-secondary)]"><component :is="asset.icon || (asset.thumbnail ? 'Picture' : 'Document')" /></el-icon>
             </div>
             <div>
               <p class="text-sm font-medium text-[var(--el-text-color-primary)]">{{ asset.name }}</p>
@@ -353,15 +358,15 @@ onMounted(() => {
             </div>
           </div>
           <div class="flex items-center gap-4">
-            <span :class="['text-xs font-semibold px-3 py-1 rounded-full bg-[var(--el-fill-color-light)]', asset.categoryColor]">
-              {{ asset.categoryLabel }}
+            <span :class="['text-xs font-semibold px-3 py-1 rounded-full bg-[var(--el-fill-color-light)]', asset.category_color]">
+              {{ asset.category_label }}
             </span>
             <button
               @click="handleDeleteAsset($event, asset)"
               class="text-[var(--el-text-color-secondary)] hover:text-red-500 p-2 rounded-lg transition-colors cursor-pointer"
               title="Delete"
             >
-              <i class="fa-solid fa-trash text-xs"></i>
+              <el-icon class="text-xs"><Delete /></el-icon>
             </button>
           </div>
         </div>
@@ -398,7 +403,7 @@ onMounted(() => {
         <div class="w-full bg-[var(--el-fill-color-light)] rounded-2xl overflow-hidden flex items-center justify-center min-h-[260px] max-h-[420px] relative border border-[var(--el-border-color)]/60">
           <template v-if="selectedAsset.thumbnail">
             <img
-              v-if="!selectedAsset.isVideo"
+              v-if="!selectedAsset.is_video"
               :src="selectedAsset.thumbnail"
               :alt="selectedAsset.name"
               class="max-h-[400px] w-auto object-contain"
@@ -413,7 +418,7 @@ onMounted(() => {
           </template>
           <template v-else>
             <div class="flex flex-col items-center justify-center p-10 text-[var(--el-text-color-secondary)]">
-              <i :class="[selectedAsset.icon || 'fa-solid fa-file', 'text-6xl opacity-40 mb-3']"></i>
+              <el-icon :size="64" class="opacity-40 mb-3"><component :is="selectedAsset.icon || 'Document'" /></el-icon>
               <p class="text-xs">{{ t('assets.noPreview') }}</p>
             </div>
           </template>
@@ -432,8 +437,8 @@ onMounted(() => {
 
           <div class="flex items-center justify-between border-b border-[var(--el-border-color)]/40 pb-2">
             <span class="text-xs text-[var(--el-text-color-secondary)] font-medium">{{ t('assets.fileType') }}</span>
-            <span :class="['text-xs font-semibold px-2.5 py-0.5 rounded-full bg-[var(--el-fill-color-light)]', selectedAsset.categoryColor]">
-              {{ selectedAsset.categoryLabel }}
+            <span :class="['text-xs font-semibold px-2.5 py-0.5 rounded-full bg-[var(--el-fill-color-light)]', selectedAsset.category_color]">
+              {{ selectedAsset.category_label }}
             </span>
           </div>
 
@@ -457,7 +462,7 @@ onMounted(() => {
             link
             @click="handleDeleteAsset($event, selectedAsset); isViewModalOpen = false;"
           >
-            <i class="fa-solid fa-trash mr-1.5 text-xs"></i>
+            <el-icon class="mr-1.5 text-xs"><Delete /></el-icon>
             <span>Delete</span>
           </el-button>
           <div class="flex items-center gap-2 ml-auto">
@@ -470,7 +475,7 @@ onMounted(() => {
               round
               @click="handleDownload(selectedAsset)"
             >
-              <i class="fa-solid fa-download mr-1.5 text-xs"></i>
+              <el-icon class="mr-1.5 text-xs"><Download /></el-icon>
               {{ t('assets.download') }}
             </el-button>
           </div>

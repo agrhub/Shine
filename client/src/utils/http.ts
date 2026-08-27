@@ -1,6 +1,6 @@
 import axios from 'axios';
 import i18n from '@/i18n';
-import { ElMessage } from 'element-plus';
+import { toast } from 'vue-sonner';
 
 const http = axios.create({
   baseURL: '/api',
@@ -28,7 +28,7 @@ http.interceptors.response.use(
     const res = response.data;
     // Standardized envelope check: { code: 200/201, data, message, error }
     if (res && typeof res.code === 'number' && res.code !== 200 && res.code !== 201) {
-      ElMessage.error(res.message || i18n.global.t('toast.serverError'));
+      toast.error(res.message || i18n.global.t('toast.serverError'));
       return Promise.reject(new Error(res.message || 'API Error'));
     }
     return res;
@@ -37,18 +37,18 @@ http.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('shine_token');
       localStorage.removeItem('shine_user');
-      ElMessage.error(i18n.global.t('toast.sessionExpired'));
+      toast.error(i18n.global.t('toast.sessionExpired'));
       if (window.location.pathname !== '/auth/login') {
         window.location.href = '/auth/login';
       }
     } else if (error.response?.status === 422) {
       const details = error.response?.data?.details || error.response?.data?.message || 'Validation failed';
       const msg = typeof details === 'object' ? Object.values(details).join(', ') : details;
-      ElMessage.error(msg);
+      toast.error(msg);
     } else if (error.response?.status === 500) {
-      ElMessage.error(error.response?.data?.message || 'Server error occurred. Please try again.');
+      toast.error(error.response?.data?.message || 'Server error occurred. Please try again.');
     } else {
-      ElMessage.error(error.response?.data?.message || i18n.global.t('toast.serverError'));
+      toast.error(error.response?.data?.message || i18n.global.t('toast.serverError'));
     }
     return Promise.reject(error);
   }

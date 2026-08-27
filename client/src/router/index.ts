@@ -6,6 +6,19 @@ import AppLayout from '@/layouts/AppLayout.vue';
 
 const router = createRouter({
   history: createWebHistory(),
+  scrollBehavior(to, _from, savedPosition) {
+    if (to.hash) {
+      return {
+        el: to.hash,
+        behavior: 'smooth',
+        top: 80,
+      };
+    }
+    if (savedPosition) {
+      return savedPosition;
+    }
+    return { top: 0, behavior: 'smooth' };
+  },
   routes: [
     // 1. Home Layout (Marketing Landing)
     {
@@ -121,6 +134,10 @@ const router = createRouter({
       name: 'project-detail',
       component: () => import('@/pages/projects/ProjectWorkspacePage.vue'),
       meta: { requiresAuth: true, layout: 'DefaultLayout' },
+    },
+    {
+      path: '/projects/:id',
+      redirect: (to) => `/project/${to.params.id}`,
     },
 
     // Fallback catch-all redirect to home

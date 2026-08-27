@@ -10,40 +10,9 @@ import { generateCaptionClips } from '@/utils/caption-generator';
 
 import { normalizeTransitionKey } from '@/constants/transitions';
 import { normalizeEffectKey } from '@/constants/effects';
+import { VoicePreset } from '@/types';
+import { CaptionCue, CaptionsData, Character, CharacterEpisode, LocationAsset, PipelineStep, PropAsset, Scene, SceneRenderStatus, StepStatus } from '@/types/api';
 export { normalizeTransitionKey, normalizeEffectKey };
-
-export type StepStatus = 'idle' | 'running' | 'done' | 'error';
-
-export interface PipelineStep {
-  id: string;
-  label: string;
-  icon: string;
-  status: StepStatus;
-}
-
-export interface SceneRenderStatus {
-  sceneIndex: number;
-  bgStatus: StepStatus;
-  endFrameStatus?: StepStatus;
-  videoStatus: StepStatus;
-  voiceoverStatus: StepStatus;
-  bgmStatus: StepStatus;
-  captionStatus: StepStatus;
-  storyboardUrl?: string;
-  endFrameUrl?: string;
-  videoUrl?: string;
-  voiceoverUrl?: string;
-  bgmUrl?: string;
-}
-
-export interface VoicePreset {
-  id: string;
-  name: string;
-  gender: 'male' | 'female' | 'neutral' | string;
-  language?: string;
-  description?: string;
-  audioSampleUrl?: string;
-}
 
 export const usePipelineStore = defineStore('pipeline', () => {
   const seriesStore = useSeriesStore();
@@ -71,18 +40,14 @@ export const usePipelineStore = defineStore('pipeline', () => {
     return voicePresets.value;
   }
 
-  // ─── 10-Step Pipeline ─────────────────────────────────────────────────────
+  // ─── 6-Step Pipeline ─────────────────────────────────────────────────────
   const pipelineSteps = ref<PipelineStep[]>([
     { id: 'b1', label: 'Cast Render', icon: 'UserFilled', status: 'idle' },
     { id: 'b2', label: 'Assets & Storyboard', icon: 'Picture', status: 'idle' },
     { id: 'b3', label: 'Storyboard to Video', icon: 'Film', status: 'idle' },
-    // { id: 'b4', label: 'Voiceover TTS (B4)', icon: 'Microphone', status: 'idle' },
-    // { id: 'b5', label: 'AI Music & BGM (B5)', icon: 'Headset', status: 'idle' },
-    // { id: 'b6', label: 'AI Captions (B6)', icon: 'ChatSquare', status: 'idle' },
-    { id: 'b7', label: 'Preview Video', icon: 'VideoPlay', status: 'idle' },
-    { id: 'b8', label: 'Export Video', icon: 'Cpu', status: 'idle' },
-    // { id: 'b9', label: 'Upload Episode', icon: 'Upload', status: 'idle' },
-    // { id: 'b10', label: 'Publish', icon: 'Promotion', status: 'idle' },
+    { id: 'b4', label: 'Dubbing', icon: 'Microphone', status: 'idle' },
+    { id: 'b5', label: 'Subtitle', icon: 'ChatSquare', status: 'idle' },
+    { id: 'b6', label: 'Export Video', icon: 'Cpu', status: 'idle' },
   ]);
 
   // ─── Per-Scene Render Status ───────────────────────────────────────────────
@@ -97,6 +62,38 @@ export const usePipelineStore = defineStore('pipeline', () => {
   const currentRenderingPercent = ref(0);
   const currentRenderingScene = ref<number | null>(null);
 
+  // ─── Live Copilot / Agent Active Item Progress ─────────────────────────────
+  const activeRenderingItem = ref<string | null>(null);
+  const activeRenderingStep = ref<string | null>(null);
+  const activeRenderingProgress = ref<{ step: string; item: string; current: number; total: number; message: string } | null>(null);
+
+  function setActiveProgress(progress: { step: string; item: string; current: number; total: number; message: string } | null) {
+    activeRenderingProgress.value = progress;
+    activeRenderingItem.value = progress?.item || null;
+    activeRenderingStep.value = progress?.step || null;
+    if (progress) {
+      isRendering.value = true;
+      currentRenderingMessage.value = progress.message || '';
+    } else {
+      isRendering.value = false;
+      currentRenderingMessage.value = '';
+    }
+  }
+
+  function isItemRendering(target: string | number | undefined | null): boolean {
+    if (!target || !activeRenderingItem.value) return false;
+    const active = String(activeRenderingItem.value).toLowerCase().trim();
+    const str = String(target).toLowerCase().trim();
+    if (active === str) return true;
+    if (active.includes(str) || str.includes(active)) return true;
+    // Check scene numbers (e.g. "Scene #9" vs 9)
+    if (typeof target === 'number' || /^\d+$/.test(str)) {
+      const match = active.match(/scene\s*#?(\d+)/i);
+      if (match && match[1] === String(target)) return true;
+    }
+    return false;
+  }
+
   // ─── Computed ─────────────────────────────────────────────────────────────
   const doneStepsCount = computed(() => pipelineSteps.value.filter(s => s.status === 'done').length);
 
@@ -109,12 +106,12 @@ export const usePipelineStore = defineStore('pipeline', () => {
   function getSceneStatus(sceneIndex: number): SceneRenderStatus {
     if (!sceneRenderStatuses.value.has(sceneIndex)) {
       sceneRenderStatuses.value.set(sceneIndex, {
-        sceneIndex,
-        bgStatus: 'idle',
-        videoStatus: 'idle',
-        voiceoverStatus: 'idle',
-        bgmStatus: 'idle',
-        captionStatus: 'idle',
+        scene_index: sceneIndex,
+        bg_status: 'idle',
+        video_status: 'idle',
+        voiceover_status: 'idle',
+        bgm_status: 'idle',
+        caption_status: 'idle',
       });
     }
     return sceneRenderStatuses.value.get(sceneIndex)!;
@@ -135,45 +132,47 @@ export const usePipelineStore = defineStore('pipeline', () => {
     const scenes = episode.scenes || [];
     if (!scenes.length) return;
 
-    const langTracks = episode.languageTracks || [];
-    const activeLang = seriesStore.activeLanguageCode || 'vi-VN';
-    const track = langTracks.find((t: any) => t.languageCode === activeLang) || langTracks[0];
+    const mainLang = seriesStore.currentSeries?.language || 'en-US';
+    const activeLang = seriesStore.activePreviewCaptionLang || mainLang;
 
-    const allHaveBg = scenes.every((s: any) => s.storyboardFrameUrl);
-    const allHaveVideo = scenes.every((s: any) => s.videoUrl);
-    const allHaveVoiceover = scenes.every((s: any) => s.voiceoverUrl || track?.sceneVoiceovers?.[s.index]);
-    const allHaveBgm = scenes.every((s: any) => s.bgmUrl);
-    const allHaveCaptions = scenes.every((s: any) => s.captionsData?.length || track?.sceneCaptions?.[s.index]?.length);
+    const allHaveBg = scenes.every((s: Scene) => s.storyboard_frame_url);
+    const allHaveVideo = scenes.every((s: Scene) => s.video_url);
+    const allHaveVoiceover = scenes.every((s: Scene) => (activeLang === mainLang ? s.voiceover_url : s.translations?.[activeLang]?.voiceover_url) || s.voiceover_url);
+    const allHaveBgm = scenes.every((s: Scene) => s.bgm_url);
+    const allHaveCaptions = scenes.every((s: Scene) => {
+      const cues = (activeLang === mainLang ? s.captions_data : s.translations?.[activeLang]?.captions_data) || s.captions_data;
+      return cues && cues.length > 0;
+    });
 
     const chars = (Array.isArray(characters) && characters.length > 0) ? characters : (seriesStore.charactersList || []);
-    const allCharsDone = chars.length > 0 && chars.every((c: any) => c.avatar || c.avatarUrl);
+    const allCharsDone = chars.length > 0 && chars.every((c: Character) => c.avatar);
 
     setStepStatus('b1', allCharsDone ? 'done' : 'idle');
     setStepStatus('b2', allHaveBg ? 'done' : 'idle');
     setStepStatus('b3', allHaveVideo ? 'done' : 'idle');
     setStepStatus('b4', allHaveVoiceover ? 'done' : 'idle');
-    setStepStatus('b5', allHaveBgm ? 'done' : 'idle');
-    setStepStatus('b6', allHaveCaptions ? 'done' : 'idle');
+    setStepStatus('b5', allHaveCaptions ? 'done' : 'idle');
 
-    scenes.forEach((s: any) => {
-      const voiceSrc = track?.sceneVoiceovers?.[s.index] || s.voiceoverUrl;
-      const capData = track?.sceneCaptions?.[s.index] || s.captionsData;
+    scenes.forEach((s: Scene) => {
+      const trans = s.translations?.[activeLang];
+      const voiceSrc = (activeLang === mainLang ? s.voiceover_url : trans?.voiceover_url) || s.voiceover_url;
+      const capData = (activeLang === mainLang ? s.captions_data : trans?.captions_data) || s.captions_data;
       updateSceneStatus(s.index, {
-        bgStatus: s.storyboardFrameUrl ? 'done' : 'idle',
-        videoStatus: s.videoUrl ? 'done' : 'idle',
-        voiceoverStatus: voiceSrc ? 'done' : 'idle',
-        bgmStatus: s.bgmUrl ? 'done' : 'idle',
-        captionStatus: (capData && capData.length > 0) ? 'done' : 'idle',
-        storyboardUrl: s.storyboardFrameUrl,
-        videoUrl: s.videoUrl,
-        voiceoverUrl: voiceSrc,
-        bgmUrl: s.bgmUrl,
+        bg_status: s.storyboard_frame_url ? 'done' : 'idle',
+        video_status: s.video_url ? 'done' : 'idle',
+        voiceover_status: voiceSrc ? 'done' : 'idle',
+        bgm_status: s.bgm_url ? 'done' : 'idle',
+        caption_status: (capData && capData.length > 0) ? 'done' : 'idle',
+        storyboard_url: s.storyboard_frame_url,
+        video_url: s.video_url,
+        voiceover_url: voiceSrc,
+        bgm_url: s.bgm_url,
       });
     });
   }
 
   // ─── B1: Character Render & Persona Lock ─────────────────────────────────────
-  async function renderCharacter(char: any) {
+  async function renderCharacter(char: Character) {
     characterRenderStatuses.value.set(char.id, 'running');
     setStepStatus('b1', 'running');
     isRendering.value = true;
@@ -188,17 +187,17 @@ export const usePipelineStore = defineStore('pipeline', () => {
       const styleObj = getVisualStyleById(currentStyle);
 
       const res: any = await http.post(`/characters/${char.id}/portrait`, {
-        seriesId: sId,
-        characterId: char.id,
+        series_id: sId,
+        character_id: char.id,
         name: char.name,
-        visualTraits: char.visualTraits || char.identity || `${char.name}, role: ${char.role || 'lead'}, ${char.personality || 'intense expression'}, ${seriesGenre}`,
+        visual_traits: char.visual_traits || char.identity || `${char.name}, role: ${char.role || 'lead'}, ${char.nationality || 'intense expression'}, ${seriesGenre}`,
         style: styleObj.promptModifier,
-        visualStyle: currentStyle,
-        visualStylePrompt: styleObj.promptModifier,
-        aspectRatio: targetAspect,
+        visual_style: currentStyle,
+        visual_style_prompt: styleObj.promptModifier,
+        aspect_ratio: targetAspect,
       });
 
-      const url = res?.data?.imageUrl || res?.data?.url;
+      const url = res?.data?.image_url || res?.data?.url;
       if (url) {
         characterRenderStatuses.value.set(char.id, 'done');
         seriesStore.updateCharacterAvatar(char.id, url);
@@ -226,7 +225,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
     isRendering.value = true;
     let hasError = false;
     console.log(`[Pipeline] Rendering ${characters.length} characters...`);
-    const toRender = characters.filter(c => !c.avatar && !c.avatarUrl);
+    const toRender = characters.filter(c => !c.avatar);
     const total = toRender.length || 1;
 
     for (let i = 0; i < toRender.length; i++) {
@@ -248,7 +247,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
     const epId = seriesStore.activeEpisodeId;
     if (!epId) return;
 
-    updateSceneStatus(sceneIndex, { bgStatus: 'running' });
+    updateSceneStatus(sceneIndex, { bg_status: 'running' });
     setStepStatus('b2', 'running');
     isRendering.value = true;
     currentRenderingScene.value = sceneIndex;
@@ -267,32 +266,32 @@ export const usePipelineStore = defineStore('pipeline', () => {
         : (sceneData.dialogue || []).map((d: any) => d.character).filter(Boolean);
 
       const res: any = await http.post('/assets/image-generate', {
-        seriesId: sId,
-        episodeId: epId,
-        sceneIndex,
-        sceneId: `scene_${String(sceneIndex).padStart(2, '0')}`,
-        prompt: sceneData.visualPrompt || sceneData.description || undefined,
-        sceneData,
-        aspectRatio: targetAspect,
-        visualStyle: currentStyle,
-        visualStylePrompt: styleObj.promptModifier,
-        style: sceneData.lightingMood || styleObj.promptModifier,
+        series_id: sId,
+        episode_id: epId,
+        scene_index: sceneIndex,
+        scene_id: `scene_${String(sceneIndex).padStart(2, '0')}`,
+        prompt: sceneData.visual_prompt || sceneData.description || undefined,
+        scene_data: sceneData,
+        aspect_ratio: targetAspect,
+        visual_style: currentStyle,
+        visual_style_prompt: styleObj.promptModifier,
+        style: sceneData.lighting_mood || styleObj.promptModifier,
         characters: sceneChars,
       });
 
-      const url = res?.data?.imageUrl || res?.data?.url;
+      const url = res?.data?.image_url || res?.data?.url;
       if (url) {
-        updateSceneStatus(sceneIndex, { bgStatus: 'done', storyboardUrl: url });
+        updateSceneStatus(sceneIndex, { bg_status: 'done', storyboard_url: url });
         seriesStore.updateSceneStoryboard(epId, sceneIndex, url);
         // Auto-save scene assets immediately
         if (sId) await seriesStore.saveEpisodeScenes(sId, epId);
         if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pipeline-asset-updated'));
       } else {
-        updateSceneStatus(sceneIndex, { bgStatus: 'done' });
+        updateSceneStatus(sceneIndex, { bg_status: 'done' });
       }
       currentRenderingPercent.value = 100;
     } catch (err) {
-      updateSceneStatus(sceneIndex, { bgStatus: 'error' });
+      updateSceneStatus(sceneIndex, { bg_status: 'error' });
       setStepStatus('b2', 'error');
       throw err;
     } finally {
@@ -307,7 +306,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
 
     const allScenes = seriesStore.activeScript?.scenes || seriesStore.activeEpisode?.scenes || [];
     // Skip scenes that already have a background or video
-    const scenes = allScenes.filter((s: any) => !s.storyboardFrameUrl && !s.videoUrl);
+    const scenes = allScenes.filter((s: Scene) => !s.storyboard_frame_url && !s.video_url);
 
     if (allScenes.length === 0) {
       toast.warning(i18n.global.t('toast.noScenesAvailableToRender'));
@@ -339,12 +338,238 @@ export const usePipelineStore = defineStore('pipeline', () => {
     isRendering.value = false;
   }
 
+  // ─── B2: Assets & Storyboard (Sequentially Render Characters/Wardrobes, Locations, Props, and Scenes) ───
+  async function renderAllAssetsAndStoryboard() {
+    const epId = seriesStore.activeEpisodeId;
+    const sId = seriesStore.currentSeries?.id;
+    if (!epId || !sId) return;
+
+    setStepStatus('b2', 'running');
+    isRendering.value = true;
+    let hasError = false;
+
+    try {
+      const ep = seriesStore.activeEpisode as any;
+      const sc = seriesStore.activeScript as any;
+
+      const characters : CharacterEpisode[] = (sc?.characters && sc.characters.length > 0)
+        ? sc.characters
+        : (ep?.characters && ep.characters.length > 0 ? ep.characters : (seriesStore.currentSeries?.characters || seriesStore.charactersList || []));
+
+      const locations : LocationAsset[] = (sc?.locations && sc.locations.length > 0)
+        ? sc.locations
+        : (ep?.locations && ep.locations.length > 0 ? ep.locations : (seriesStore.currentSeries?.locations || []));
+
+      const props : PropAsset[] = (sc?.props && sc.props.length > 0)
+        ? sc.props
+        : (ep?.props && ep.props.length > 0 ? ep.props : (seriesStore.currentSeries?.props || []));
+
+      const scenes = sc?.scenes || ep?.scenes || [];
+
+      // Calculate total work items for smooth percentage (only unrendered items)
+      let totalItems = 0;
+      characters.forEach((c: CharacterEpisode) => {
+        const hasCharImage = !!seriesStore.getCharacterById(c.id)?.avatar;
+        if (c.wardrobe_variants && c.wardrobe_variants.length > 0) {
+          totalItems += c.wardrobe_variants.filter((v: any) => !v.image_url && !(c.wardrobe_variants.length === 1 && hasCharImage)).length;
+        } else if (!hasCharImage) {
+          totalItems++;
+        }
+      });
+      totalItems += locations.filter((l: any) => !l.image_url).length;
+      totalItems += props.filter((p: any) => !p.image_url).length;
+      totalItems += scenes.filter((s: any) => !(s.storyboard_frame_url || s.video_url || sceneRenderStatuses.value.get(s.index)?.storyboard_url)).length;
+
+      if (totalItems === 0) {
+        toast.info(i18n.global.t('toast.allAssetsAlreadyRendered', 'All assets and storyboard frames already rendered'));
+        setStepStatus('b2', 'done');
+        return;
+      }
+
+      let completedItems = 0;
+      const updateProgress = (msg: string) => {
+        completedItems++;
+        currentRenderingMessage.value = `${msg} (${completedItems}/${totalItems})`;
+        currentRenderingPercent.value = Math.min(100, Math.round((completedItems / totalItems) * 100));
+      };
+
+      const scriptStore = (await import('@/stores/useScriptStore')).useScriptStore();
+
+      // 1. Render Characters & Wardrobe Variants
+      for (const char of characters) {
+        let matchedCast = (seriesStore.charactersList || []).find(
+          (c: Character) => c.name?.toLowerCase().trim() === char.name?.toLowerCase().trim() || c.id === char.id
+        ) as Character;
+        if (!matchedCast) continue;
+        let referenceAvatar = matchedCast?.avatar || '';
+        const resolvedPhysical = matchedCast?.visual_traits || matchedCast?.physical_characteristics || matchedCast?.appearance || matchedCast?.traits || '';
+        // const hasCharImage = !!(referenceAvatar);
+
+        if (!referenceAvatar) {
+          //render avatar first
+          await renderCharacter(matchedCast);
+          matchedCast = (seriesStore.charactersList || []).find(
+            (c: Character) => c.name?.toLowerCase().trim() === char.name?.toLowerCase().trim() || c.id === char.id
+          ) as Character;
+          // if the new matched cast is the same as the old one, it means the avatar is not rendered
+          referenceAvatar = matchedCast?.avatar || '';
+          if (!matchedCast || !referenceAvatar) {
+            toast.error(`Failed to render avatar for character ${char.name}`);
+            hasError = true;
+            continue;
+          }
+        }
+
+        if (char.wardrobe_variants && char.wardrobe_variants.length > 0) {
+          for (const variant of char.wardrobe_variants) {
+            if (variant.image_url) continue;
+
+            try {
+              updateProgress(`Rendering Wardrobe: ${char.name} (${variant.name})`);
+              const res = await scriptStore.generateCharacterSheet({
+                character_name: char.name,
+                physical_characteristics: resolvedPhysical,
+                clothing_and_accessories: variant.clothing_and_accessories || '',
+                visual_style: seriesStore.currentSeries?.visual_style || 'realistic',
+                reference_image_url: referenceAvatar || undefined,
+              });
+              if (res?.image_url) {
+                variant.image_url = res.image_url;
+              }
+            } catch (err) {
+              console.warn(`[renderAllAssetsAndStoryboard] Failed to render wardrobe for ${char.name}:`, err);
+              hasError = true;
+            }
+          }
+        }
+
+        // if (!matchedCast.avatar) {
+        //   // If variants have an image, reuse first variant image
+        //   const firstVariantImg = char.wardrobe_variants?.find((v: any) => v.imageUrl)?.imageUrl;
+        //   if (firstVariantImg) {
+        //     char.avatar = firstVariantImg;
+        //   } else {
+        //     try {
+        //       updateProgress(`Rendering Character: ${char.name}`);
+        //       const res = await scriptStore.generateCharacterSheet({
+        //         character_name: char.name,
+        //         physical_characteristics: resolvedPhysical,
+        //         clothing_and_accessories: char.clothing_and_accessories || '',
+        //         visual_style: seriesStore.currentSeries?.visual_style || 'realistic',
+        //         reference_image_url: referenceAvatar || undefined,
+        //       });
+        //       if (res?.image_url) {
+        //         char.avatar = res.image_url;
+        //       }
+        //     } catch (err) {
+        //       console.warn(`[renderAllAssetsAndStoryboard] Failed to render character ${char.name}:`, err);
+        //       hasError = true;
+        //     }
+        //   }
+        // }
+      }
+
+      // Save Characters
+      try {
+        await http.patch(`/series/${sId}/episodes/${epId}`, {
+          characters,
+          locations,
+          props,
+        });
+      } catch (err) {
+        console.warn('[renderAllAssetsAndStoryboard] Failed to save episode assets:', err);
+      }
+
+      // 2. Render Locations
+      for (const loc of locations) {
+        if (loc.image_url) continue;
+        try {
+          updateProgress(`Rendering Location: ${loc.name}`);
+          const res = await scriptStore.generateLocationSheet({
+            location_name: loc.name,
+            physical_characteristics: loc.physical_characteristics,
+            time_of_day: loc.time_of_day,
+            visual_style: seriesStore.currentSeries?.visual_style || 'realistic',
+          });
+          if (res?.image_url) {
+            loc.image_url = res.image_url;
+          }
+        } catch (err) {
+          console.warn(`[renderAllAssetsAndStoryboard] Failed to render location ${loc.name}:`, err);
+          hasError = true;
+        }
+      }
+
+      // Save Locations
+      try {
+        await http.patch(`/series/${sId}/episodes/${epId}`, {
+          characters,
+          locations,
+          props,
+        });
+      } catch (err) {
+        console.warn('[renderAllAssetsAndStoryboard] Failed to save episode assets:', err);
+      }
+
+      // 3. Render Props
+      for (const prop of props) {
+        if (prop.image_url) continue;
+        try {
+          updateProgress(`Rendering Prop: ${prop.name}`);
+          const res = await scriptStore.generatePropSheet({
+            prop_name: prop.name,
+            physical_characteristics: prop.physical_characteristics,
+            visual_style: seriesStore.currentSeries?.visual_style || 'realistic',
+          });
+          if (res?.image_url) {
+            prop.image_url = res.image_url;
+          }
+        } catch (err) {
+          console.warn(`[renderAllAssetsAndStoryboard] Failed to render prop ${prop.name}:`, err);
+          hasError = true;
+        }
+      }
+
+      // Save Props
+      try {
+        await http.patch(`/series/${sId}/episodes/${epId}`, {
+          characters,
+          locations,
+          props,
+        });
+      } catch (err) {
+        console.warn('[renderAllAssetsAndStoryboard] Failed to save episode assets:', err);
+      }
+
+      // 4. Render Storyboard Shots for all Scenes
+      for (let i = 0; i < scenes.length; i++) {
+        const scene = scenes[i];
+        if (scene.storyboard_frame_url || scene.image_url || scene.video_url || sceneRenderStatuses.value.get(scene.index)?.storyboard_url) continue;
+        try {
+          updateProgress(`Rendering Storyboard Scene ${scene.index}`);
+          await renderScene(scene.index, scene);
+        } catch (err) {
+          console.warn(`[renderAllAssetsAndStoryboard] Failed to render scene ${scene.index}:`, err);
+          hasError = true;
+        }
+      }
+
+      setStepStatus('b2', hasError ? 'error' : 'done');
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pipeline-asset-updated'));
+    } catch (err: any) {
+      setStepStatus('b2', 'error');
+      toast.error(err.message || 'Assets & Storyboard batch generation failed');
+    } finally {
+      isRendering.value = false;
+    }
+  }
+
   // ─── B3: Image-to-Video Render ─────────────────────────────────────────────
-  async function renderSceneVideo(sceneIndex: number, scene: any) {
+  async function renderSceneVideo(sceneIndex: number, scene: Scene) {
     const epId = seriesStore.activeEpisodeId;
     if (!epId) return;
 
-    updateSceneStatus(sceneIndex, { videoStatus: 'running' });
+    updateSceneStatus(sceneIndex, { video_status: 'running' });
     setStepStatus('b3', 'running');
     isRendering.value = true;
     currentRenderingScene.value = sceneIndex;
@@ -353,37 +578,40 @@ export const usePipelineStore = defineStore('pipeline', () => {
 
     try {
       const sId = seriesStore.currentSeries?.id;
-      const calculatedDuration = Math.min(8, Math.max(4, Number(scene.durationSeconds) || 5));
-      const targetMotion = scene.motion || scene.motionIntensity || 'cinematic_motion';
-      const targetCamera = scene.cameraMovement || scene.cameraAngle || 'dolly_in';
+      const calculatedDuration = Math.min(8, Math.max(4, Number(scene.duration_seconds) || 5));
+      const targetAction = scene.action || 'walk_forward';
+      const targetCamera = scene.camera_movement || 'dolly_in';
+      const lightingMood = scene.lighting_mood || "";
 
       const allScenes = seriesStore.activeScript?.scenes || seriesStore.activeEpisode?.scenes || [];
-      const nextScene = allScenes.find((s: any) => s.index === sceneIndex + 1) as any;
-      const nextFrameUrl = nextScene?.storyboardFrameUrl || nextScene?.imageUrl;
+      const nextScene = allScenes.find((s: Scene) => s.index === sceneIndex + 1) as any;
+      const nextFrameUrl = nextScene?.storyboard_frame_url;
 
       const res: any = await http.post('/assets/video-generate', {
+        series_id: sId,
         seriesId: sId,
-        startFrameUrl: scene.storyboardFrameUrl || (scene as any).imageUrl,
-        endFrameUrl: nextFrameUrl || undefined,
-        episodeId: epId,
-        sceneId: `scene_${String(sceneIndex).padStart(2, '0')}`,
+        start_frame_url: scene.storyboard_frame_url,
+        end_frame_url: scene.storyboard_end_frame_url || undefined,
+        episode_id: epId,
+        scene_id: `scene_${String(sceneIndex).padStart(2, '0')}`,
         duration: calculatedDuration,
-        motion: targetMotion,
-        cameraMovement: targetCamera,
-        prompt: scene.visualPrompt || scene.description || undefined,
-        sceneData: scene,
+        action: targetAction,
+        camera_movement: targetCamera,
+        light_mood: lightingMood,
+        prompt: scene.visual_prompt || scene.description || undefined,
+        scene_data: scene,
       });
 
       const url = res?.data?.url;
       if (url) {
-        updateSceneStatus(sceneIndex, { videoStatus: 'done', videoUrl: url });
+        updateSceneStatus(sceneIndex, { video_status: 'done', video_url: url });
         seriesStore.updateSceneVideoUrl(epId, sceneIndex, url);
 
         // 1. Update Video Clip Properties & Transitions directly on OpenVideo Timeline
         await syncVideoClipToTimeline(sceneIndex, url, calculatedDuration, scene, res?.data);
 
         // 2. If scene has dialogue, trigger consistent TTS Voiceover & Synchronized Captions
-        if (Array.isArray(scene.dialogue) && scene.dialogue.length > 0 && !scene.voiceoverUrl) {
+        if (Array.isArray(scene.dialogue) && scene.dialogue.length > 0 && !scene.voiceover_url) {
           // const firstChar = scene.dialogue[0]?.character;
           // const matchedCast = (seriesStore.charactersList || []).find((c: any) => c.name?.toLowerCase().trim() === String(firstChar || '').toLowerCase().trim());
           // const defaultVoice = matchedCast?.voiceId || (matchedCast?.gender === 'female' ? 'Aoede' : 'Puck');
@@ -398,12 +626,12 @@ export const usePipelineStore = defineStore('pipeline', () => {
         if (sId) await seriesStore.saveEpisodeScenes(sId, epId);
         if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pipeline-asset-updated'));
       } else {
-        updateSceneStatus(sceneIndex, { videoStatus: 'done' });
+        updateSceneStatus(sceneIndex, { video_status: 'done' });
       }
       setStepStatus('b3', 'done');
       currentRenderingPercent.value = 100;
     } catch (err) {
-      updateSceneStatus(sceneIndex, { videoStatus: 'error' });
+      updateSceneStatus(sceneIndex, { video_status: 'error' });
       setStepStatus('b3', 'error');
       throw err;
     } finally {
@@ -417,7 +645,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
     if (!epId) return;
 
     const allScenes = seriesStore.activeScript?.scenes || seriesStore.activeEpisode?.scenes || [];
-    const scenes = allScenes.filter((s: any) => s.storyboardFrameUrl && !s.videoUrl);
+    const scenes = allScenes.filter((s: Scene) => s.storyboard_frame_url && !s.video_url);
 
     if (scenes.length === 0) {
       toast.info(i18n.global.t('toast.noScenesNeedVideo', 'All scenes already have videos or are missing backgrounds'));
@@ -456,7 +684,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
     const epId = seriesStore.activeEpisodeId;
     if (!epId || dialogue.length === 0) return;
 
-    updateSceneStatus(sceneIndex, { voiceoverStatus: 'running' });
+    updateSceneStatus(sceneIndex, { voiceover_status: 'running' });
     setStepStatus('b4', 'running');
     isRendering.value = true;
     currentRenderingScene.value = sceneIndex;
@@ -466,10 +694,10 @@ export const usePipelineStore = defineStore('pipeline', () => {
     try {
       const text = dialogue.map((d: any) => `${d.character}: ${d.line}`).join('\n');
       const res: any = await http.post('/voices/tts', {
-        episodeId: epId,
-        sceneIndex,
+        episode_id: epId,
+        scene_index: sceneIndex,
         text,
-        voiceId: voicePreset,
+        voice_id: voicePreset,
         intensity,
         speed,
         dialogue,
@@ -478,16 +706,16 @@ export const usePipelineStore = defineStore('pipeline', () => {
 
       const url = res?.data?.audioUrl || res?.data?.url;
       if (url) {
-        updateSceneStatus(sceneIndex, { voiceoverStatus: 'done', voiceoverUrl: url });
+        updateSceneStatus(sceneIndex, { voiceover_status: 'done', voiceover_url: url });
         if (languageCode) {
           seriesStore.updateLanguageTrackVoiceover(epId, languageCode, sceneIndex, url);
         } else {
-          seriesStore.updateSceneAssets(epId, sceneIndex, { voiceoverUrl: url });
+          seriesStore.updateSceneAssets(epId, sceneIndex, { voiceover_url: url });
         }
 
         // Sync Voiceover Audio and Captions on OpenVideo Timeline
         const allScenes = seriesStore.activeScript?.scenes || seriesStore.activeEpisode?.scenes || [];
-        const currentScene = allScenes.find((s: any) => s.index === sceneIndex) || { index: sceneIndex, dialogue };
+        const currentScene = allScenes.find((s: Scene) => s.index === sceneIndex) || { index: sceneIndex, dialogue };
         await syncSceneVoiceoverAndCaptionsToTimeline(sceneIndex, url, res?.data?.cues || dialogue, currentScene);
 
         // Auto-save immediately
@@ -495,12 +723,12 @@ export const usePipelineStore = defineStore('pipeline', () => {
         if (sId) await seriesStore.saveEpisodeScenes(sId, epId);
         if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pipeline-asset-updated'));
       } else {
-        updateSceneStatus(sceneIndex, { voiceoverStatus: 'done' });
+        updateSceneStatus(sceneIndex, { voiceover_status: 'done' });
       }
       setStepStatus('b4', 'done');
       currentRenderingPercent.value = 100;
     } catch (err) {
-      updateSceneStatus(sceneIndex, { voiceoverStatus: 'error' });
+      updateSceneStatus(sceneIndex, { voiceover_status: 'error' });
       setStepStatus('b4', 'error');
       throw err;
     } finally {
@@ -517,13 +745,11 @@ export const usePipelineStore = defineStore('pipeline', () => {
 
     if (languageCode) {
       // Smart skip: only scenes not yet rendered for this language track
-      const tracks = seriesStore.getLanguageTracks(epId);
-      const track = tracks.find(t => t.languageCode === languageCode);
-      const scenes = allScenes.filter((s: any) =>
+      const scenes = allScenes.filter((s: Scene) =>
         Array.isArray(s.dialogue) && s.dialogue.length > 0
-        && !track?.sceneVoiceovers[s.index]
+        && !s.translations?.[languageCode]?.voiceover_url
       );
-      const trackVoice = track?.voiceId || voicePreset;
+      const trackVoice = voicePreset;
       if (scenes.length === 0) {
         toast.info(i18n.global.t('toast.allVoiceoversAlreadyRendered', { lang: languageCode }));
         return;
@@ -544,8 +770,8 @@ export const usePipelineStore = defineStore('pipeline', () => {
       setStepStatus('b4', hasError ? 'error' : 'done');
       isRendering.value = false;
     } else {
-      // Default: skip scenes already with voiceoverUrl
-      const scenes = allScenes.filter((s: any) => Array.isArray(s.dialogue) && s.dialogue.length > 0 && !s.voiceoverUrl);
+      // Default: skip scenes already with voiceover_url
+      const scenes = allScenes.filter((s: Scene) => Array.isArray(s.dialogue) && s.dialogue.length > 0 && !s.voiceover_url);
       if (scenes.length === 0) {
         toast.info(i18n.global.t('toast.allVoiceoversRendered', 'All voiceovers already rendered'));
         return;
@@ -569,84 +795,84 @@ export const usePipelineStore = defineStore('pipeline', () => {
   }
 
   // ─── Scene BGM Render ─────────────────────────────────────────────────────
-  async function renderSceneBgm(sceneIndex: number, bgmMood: string, duration: number) {
-    const epId = seriesStore.activeEpisodeId;
-    if (!epId) return;
+  // async function renderSceneBgm(sceneIndex: number, bgmMood: string, duration: number) {
+  //   const epId = seriesStore.activeEpisodeId;
+  //   if (!epId) return;
 
-    updateSceneStatus(sceneIndex, { bgmStatus: 'running' });
-    setStepStatus('b5', 'running');
-    isRendering.value = true;
-    currentRenderingScene.value = sceneIndex;
-    currentRenderingMessage.value = `Generating BGM for Scene ${sceneIndex}`;
-    currentRenderingPercent.value = 50;
+  //   updateSceneStatus(sceneIndex, { bgm_status: 'running' });
+  //   setStepStatus('b5', 'running');
+  //   isRendering.value = true;
+  //   currentRenderingScene.value = sceneIndex;
+  //   currentRenderingMessage.value = `Generating BGM for Scene ${sceneIndex}`;
+  //   currentRenderingPercent.value = 50;
 
-    try {
-      const currentGenre = seriesStore.currentSeries?.genre || 'micro_drama_suspense';
+  //   try {
+  //     const currentGenre = seriesStore.currentSeries?.genre || 'micro_drama_suspense';
 
-      const res: any = await http.post('/assets/music-generate', {
-        episodeId: epId,
-        sceneIndex,
-        prompt: bgmMood || `Cinematic micro-drama score, genre: ${currentGenre}`,
-        genre: currentGenre,
-        duration: duration || 15,
-      });
+  //     const res: any = await http.post('/assets/music-generate', {
+  //       episode_id: epId,
+  //       scene_index: sceneIndex,
+  //       prompt: bgmMood || `Cinematic micro-drama score, genre: ${currentGenre}`,
+  //       genre: currentGenre,
+  //       duration: duration || 15,
+  //     });
 
-      const url = res?.data?.audioUrl || res?.data?.musicUrl;
-      if (url) {
-        updateSceneStatus(sceneIndex, { bgmStatus: 'done', bgmUrl: url });
-        seriesStore.updateSceneAssets(epId, sceneIndex, { bgmUrl: url });
-        // Auto-save immediately
-        const sId = seriesStore.currentSeries?.id;
-        if (sId) await seriesStore.saveEpisodeScenes(sId, epId);
-        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pipeline-asset-updated'));
-      } else {
-        updateSceneStatus(sceneIndex, { bgmStatus: 'done' });
-      }
-      setStepStatus('b5', 'done');
-      currentRenderingPercent.value = 100;
-    } catch (err) {
-      updateSceneStatus(sceneIndex, { bgmStatus: 'error' });
-      setStepStatus('b5', 'error');
-      throw err;
-    } finally {
-      isRendering.value = false;
-    }
-  }
+  //     const url = res?.data?.audio_url || res?.data?.url;
+  //     if (url) {
+  //       updateSceneStatus(sceneIndex, { bgm_status: 'done', bgm_url: url });
+  //       seriesStore.updateSceneAssets(epId, sceneIndex, { bgm_url: url });
+  //       // Auto-save immediately
+  //       const sId = seriesStore.currentSeries?.id;
+  //       if (sId) await seriesStore.saveEpisodeScenes(sId, epId);
+  //       if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pipeline-asset-updated'));
+  //     } else {
+  //       updateSceneStatus(sceneIndex, { bgm_status: 'done' });
+  //     }
+  //     setStepStatus('b5', 'done');
+  //     currentRenderingPercent.value = 100;
+  //   } catch (err) {
+  //     updateSceneStatus(sceneIndex, { bgm_status: 'error' });
+  //     setStepStatus('b5', 'error');
+  //     throw err;
+  //   } finally {
+  //     isRendering.value = false;
+  //   }
+  // }
 
   // Smart batch B5: only render scenes without bgm
-  async function renderAllBgm() {
-    const epId = seriesStore.activeEpisodeId;
-    if (!epId) return;
+  // async function renderAllBgm() {
+  //   const epId = seriesStore.activeEpisodeId;
+  //   if (!epId) return;
 
-    const allScenes = seriesStore.activeScript?.scenes || seriesStore.activeEpisode?.scenes || [];
-    const scenes = allScenes.filter((s: any) => !s.bgmUrl);
+  //   const allScenes = seriesStore.activeScript?.scenes || seriesStore.activeEpisode?.scenes || [];
+  //   const scenes = allScenes.filter((s: Scene) => !s.bgm_url);
 
-    if (scenes.length === 0) {
-      toast.info(i18n.global.t('toast.allBgmRendered', 'All scenes already have BGM'));
-      return;
-    }
+  //   if (scenes.length === 0) {
+  //     toast.info(i18n.global.t('toast.allBgmRendered', 'All scenes already have BGM'));
+  //     return;
+  //   }
 
-    setStepStatus('b5', 'running');
-    isRendering.value = true;
-    let hasError = false;
-    const total = scenes.length;
+  //   setStepStatus('b5', 'running');
+  //   isRendering.value = true;
+  //   let hasError = false;
+  //   const total = scenes.length;
 
-    for (let i = 0; i < scenes.length; i++) {
-      const scene = scenes[i];
-      currentRenderingScene.value = scene.index;
-      currentRenderingMessage.value = `Generating BGM Scene ${scene.index} (${i + 1}/${total})`;
-      currentRenderingPercent.value = Math.round(((i + 1) / total) * 100);
-      try {
-        await renderSceneBgm(scene.index, scene.bgmMood || 'dramatic cinematic', scene.durationSeconds || 15);
-      } catch {
-        hasError = true;
-      }
-    }
-    setStepStatus('b5', hasError ? 'error' : 'done');
-    isRendering.value = false;
-  }
+  //   for (let i = 0; i < scenes.length; i++) {
+  //     const scene = scenes[i];
+  //     currentRenderingScene.value = scene.index;
+  //     currentRenderingMessage.value = `Generating BGM Scene ${scene.index} (${i + 1}/${total})`;
+  //     currentRenderingPercent.value = Math.round(((i + 1) / total) * 100);
+  //     try {
+  //       await renderSceneBgm(scene.index, scene.bgm_mood || 'dramatic cinematic', scene.duration_seconds || 15);
+  //     } catch {
+  //       hasError = true;
+  //     }
+  //   }
+  //   setStepStatus('b5', hasError ? 'error' : 'done');
+  //   isRendering.value = false;
+  // }
 
-  // ─── B6: Caption Generation + Translation per Language ───────────────────────────
+  // ─── B5: Caption Generation + Translation per Language ───────────────────────────
 
   // Generate (and optionally translate) captions for one language; stores cues per-scene
   async function generateCaptionsForLanguage(langCode: string, translateFrom?: string) {
@@ -655,68 +881,128 @@ export const usePipelineStore = defineStore('pipeline', () => {
     if (!epId) return;
 
     const scenes = seriesStore.activeScript?.scenes || seriesStore.activeEpisode?.scenes || [];
-    setStepStatus('b6', 'running');
+    setStepStatus('b5', 'running');
     isRendering.value = true;
     currentRenderingMessage.value = `Generating Captions (${langCode})`;
     currentRenderingPercent.value = 30;
 
-    const total = scenes.length || 1;
-    for (let sIdx = 0; sIdx < scenes.length; sIdx++) {
-      const scene = scenes[sIdx];
-      currentRenderingScene.value = scene.index;
-      currentRenderingMessage.value = `Generating Captions (${langCode}) Scene ${scene.index} (${sIdx + 1}/${total})`;
-      currentRenderingPercent.value = Math.round(((sIdx + 1) / total) * 100);
+    if (translateFrom && translateFrom !== langCode) {
+      // Batch-translate all scenes in one fast call using Gemini AI
+      currentRenderingMessage.value = `Translating Captions to ${langCode}...`;
+      currentRenderingPercent.value = 50;
+
+      const scenesToTranslate = scenes.map((s: Scene) => ({
+        sceneIndex: s.index,
+        dialogue: Array.isArray(s.dialogue)
+          ? s.dialogue.map((d: any) => `${d.character}: ${d.line}`).join('\n')
+          : (s.dialogue || ''),
+      })).filter((s: any) => s.dialogue.trim().length > 0);
+
       try {
-        const dialogueText = (scene.dialogue || []).map((d: any) => `${d.character}: ${d.line}`).join('\n');
-        if (!dialogueText) continue;
+        const batchRes: any = await http.post('/captions/batch-translate', {
+          episode_id: epId,
+          target_language: langCode,
+          source_language: translateFrom,
+          scenes: scenesToTranslate,
+        });
 
-        let cues: any[];
+        const translatedScenes = batchRes?.data?.translatedScenes || batchRes?.translatedScenes || [];
+        const transMap = new Map<number, string>();
+        translatedScenes.forEach((ts: any) => {
+          transMap.set(ts.sceneIndex, ts.translatedDialogue);
+        });
 
-        if (translateFrom && translateFrom !== langCode) {
-          // Translate from existing track rather than re-generating
-          const res: any = await http.post('/captions/translate', {
-            episodeId: epId,
-            language: langCode,
-            text: dialogueText,
-          });
-          const translated: string = res?.data?.translatedText || dialogueText;
-          // Auto-time translated text (fallback timing from scene duration)
-          const words = translated.split(' ');
-          let timeUs = 0;
-          cues = [];
-          for (let i = 0; i < words.length; i += 5) {
-            const chunk = words.slice(i, i + 5).join(' ');
-            const dur = chunk.length * 80000; // ~80ms per char
-            cues.push({ id: `cue_${i}`, text: chunk, startMs: timeUs / 1000, endMs: (timeUs + dur) / 1000 });
-            timeUs += dur + 200000;
+        for (const scene of scenes) {
+          const translated = transMap.get(scene.index) || (Array.isArray(scene.dialogue) ? scene.dialogue.map((d: any) => d.line).join(' ') : (scene.dialogue || ''));
+          if (!translated) continue;
+
+          const sourceCues: CaptionsData[] = (translateFrom ? scene.translations?.[translateFrom]?.captions_data : scene.captions_data) || scene.captions_data || [];
+          let cues: CaptionCue[] = [];
+
+          if (sourceCues.length === 1) {
+            cues = [{
+              id: `cue_${scene.index}_${langCode}_0`,
+              text: translated,
+              start_ms: sourceCues[0].start_ms,
+              end_ms: sourceCues[0].end_ms,
+              from_us: sourceCues[0].start_ms * 1000,
+              to_us: sourceCues[0].end_ms * 1000,
+              duration_ms: sourceCues[0].end_ms - sourceCues[0].start_ms,
+            }];
+          } else if (sourceCues.length > 1) {
+            const words = translated.split(' ');
+            const wordsPerCue = Math.max(1, Math.ceil(words.length / sourceCues.length));
+            cues = sourceCues.map((srcCue, idx) => {
+              const chunk = words.slice(idx * wordsPerCue, (idx + 1) * wordsPerCue).join(' ');
+              return {
+                id: `cue_${scene.index}_${langCode}_${idx}`,
+                text: chunk || srcCue.text,
+                start_ms: srcCue.start_ms,
+                end_ms: srcCue.end_ms,
+                from_us: srcCue.start_ms * 1000,
+                to_us: srcCue.end_ms * 1000,
+                duration_ms: srcCue.end_ms - srcCue.start_ms,
+              };
+            });
+          } else {
+            const durMs = (scene.duration_seconds || 6) * 1000;
+            cues = [{
+              id: `cue_${scene.index}_${langCode}_0`,
+              text: translated,
+              start_ms: 0,
+              end_ms: durMs,
+              from_us: 0,
+              to_us: durMs * 1000,
+              duration_ms: durMs,
+              duration_us: durMs * 1000,
+            }];
           }
-        } else {
-          // Auto-generate from scratch
-          const res: any = await http.post('/captions/auto-generate', {
-            episodeId: epId,
-            language: langCode,
-            text: dialogueText,
-          });
-          const rawCues = res?.data?.cues || [];
-          cues = rawCues.map((c: any) => ({
-            id: c.id,
-            text: c.text,
-            startMs: c.fromUs ? c.fromUs / 1000 : (c.timing?.display?.from || 0) / 1000,
-            endMs: c.toUs ? c.toUs / 1000 : (c.timing?.display?.to || 0) / 1000,
-            words: c.words,
-          }));
+
+          updateSceneStatus(scene.index, { caption_status: 'done' });
+          seriesStore.updateLanguageTrackDialogue(epId, langCode, scene.index, translated);
+          seriesStore.updateLanguageTrackCaptions(epId, langCode, scene.index, cues);
         }
 
-        updateSceneStatus(scene.index, { captionStatus: 'done' });
-        seriesStore.updateLanguageTrackCaptions(epId, langCode, scene.index, cues);
-        if (sId) await seriesStore.saveEpisodeScenes(sId, epId);
-        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pipeline-asset-updated'));
+        seriesStore.syncCaptionTrackToTimeline(epId, langCode);
       } catch (err) {
-        console.warn(`[generateCaptionsForLanguage] scene ${scene.index} failed:`, err);
+        console.warn(`[generateCaptionsForLanguage] Batch translation failed:`, err);
+      }
+    } else {
+      const total = scenes.length || 1;
+      for (let sIdx = 0; sIdx < scenes.length; sIdx++) {
+        const scene = scenes[sIdx];
+        currentRenderingScene.value = scene.index;
+        currentRenderingMessage.value = `Generating Captions (${langCode}) Scene ${scene.index} (${sIdx + 1}/${total})`;
+        currentRenderingPercent.value = Math.round(((sIdx + 1) / total) * 100);
+        try {
+          const dialogueText = (scene.dialogue || []).map((d: any) => `${d.character}: ${d.line}`).join('\n');
+          if (!dialogueText) continue;
+
+          const res: any = await http.post('/captions/auto-generate', {
+            episode_id: epId,
+            language: langCode,
+            text: dialogueText,
+          });
+          const rawCues : CaptionCue[] = res?.data?.cues || [];
+          const cues = rawCues.map((c: CaptionCue) => ({
+            id: c.id,
+            text: c.text,
+            start_ms: c.from_us ? c.from_us / 1000 : (c.start_ms || (c.timing?.display?.from || 0) / 1000),
+            end_ms: c.to_us ? c.to_us / 1000 : (c.end_ms || (c.timing?.display?.to || 0) / 1000),
+            words: c.words,
+          }));
+
+          updateSceneStatus(scene.index, { caption_status: 'done' });
+          seriesStore.updateLanguageTrackCaptions(epId, langCode, scene.index, cues);
+          if (sId) await seriesStore.saveEpisodeScenes(sId, epId);
+          if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pipeline-asset-updated'));
+        } catch (err) {
+          console.warn(`[generateCaptionsForLanguage] scene ${scene.index} failed:`, err);
+        }
       }
     }
 
-    setStepStatus('b6', 'done');
+    setStepStatus('b5', 'done');
     isRendering.value = false;
     if (sId) await seriesStore.saveEpisodeScenes(sId, epId);
   }
@@ -731,7 +1017,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
     }
     for (const [idxStr, cues] of Object.entries(byScene)) {
       const idx = Number(idxStr);
-      updateSceneStatus(idx, { captionStatus: 'done' });
+      updateSceneStatus(idx, { caption_status: 'done' });
       seriesStore.updateSceneAssets(episodeId, idx, { captionsData: cues });
     }
     if (sId) await seriesStore.saveEpisodeScenes(sId, episodeId);
@@ -793,14 +1079,15 @@ export const usePipelineStore = defineStore('pipeline', () => {
           },
         };
 
-        const effectKey = normalizeEffectKey(scene.videoEffect);
+        const effectKey = normalizeEffectKey(scene.video_effect || scene.videoEffect);
         if (effectKey) {
+          const effectDurationUs = Math.min(500_000, durationUs);
           targetClip.effects = [
             {
               id: `eff_${targetClip.id}`,
               key: effectKey,
               startTime: 0,
-              duration: durationUs,
+              duration: effectDurationUs,
             },
           ];
         }
@@ -811,7 +1098,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
       // Add / Update Transition Effect if scene has transitionEffect
       if (sceneIndex > 1) {
         const prevClipId = `clip_v_${epId}_s${sceneIndex - 1}`;
-        const transKey = normalizeTransitionKey(scene.transitionEffect);
+        const transKey = normalizeTransitionKey(scene.transition_effect || scene.transitionEffect);
         if (transKey && clips[prevClipId] && clips[vClipId]) {
           const transClipId = `clip_trans_${epId}_s${sceneIndex - 1}`;
           clips[transClipId] = {
@@ -851,8 +1138,8 @@ export const usePipelineStore = defineStore('pipeline', () => {
         settings: state.settings,
         tracks: state.tracks,
         clips: state.clips,
-        changeSummary,
-        clientTimestamp: new Date().toISOString(),
+        change_summary: changeSummary,
+        client_timestamp: new Date().toISOString(),
       });
     } catch (e: any) {
       console.warn('[usePipelineStore] Failed to auto-save timeline snapshot:', e?.message);
@@ -881,7 +1168,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
         c.id === vClipId || ((c.type === 'Video' || c.type === 'Image') && (c.name?.includes(`Scene ${sceneIndex}`) || c.label?.includes(`Scene ${sceneIndex}`)))
       );
       const sceneFromUs = vClip?.timing?.display?.from ?? (vClip?.display?.from ?? 0);
-      const sceneDurationUs = vClip?.timing?.duration ?? (vClip?.duration ?? Math.round((scene.durationSeconds || 6) * 1_000_000));
+      const sceneDurationUs = vClip?.timing?.duration ?? (vClip?.duration ?? Math.round((Number(scene.duration_seconds || scene.durationSeconds) || 6) * 1_000_000));
 
       const rawCues = Array.isArray(cues) && cues.length > 0 ? cues : (scene.dialogue || []);
       if (!audioUrl && rawCues.length === 0) {
@@ -978,20 +1265,23 @@ export const usePipelineStore = defineStore('pipeline', () => {
         const captionConfig = {
           captions: {
             style: {
-              fontSize: 80,
-              fontFamily: 'Bangers-Regular',
+              fontSize: 44,
+              fontFamily: 'Inter',
               fontWeight: '700',
               fontStyle: 'normal',
               color: '#ffffff',
               align: 'center',
-              fontUrl: 'https://fonts.gstatic.com/s/poppins/v15/pxiByp8kv8JHgFVrLCz7V1tvFP-KUEg.ttf',
+              wordWrap: true,
+              wordWrapWidth: Math.round(1080 * 0.86),
+              breakWords: true,
+              fontUrl: 'https://fonts.gstatic.com/s/inter/v20/UcCo3FwrK3iLTcvtYwYL8g.woff2',
               stroke: {
                 color: '#000000',
                 width: 4,
               },
               shadow: {
                 color: '#000000',
-                alpha: 0.5,
+                alpha: 0.6,
                 blur: 4,
                 offsetX: 2,
                 offsetY: 2,
@@ -1047,9 +1337,14 @@ export const usePipelineStore = defineStore('pipeline', () => {
           videoWidth,
           videoHeight,
           words: wordsList,
-          fontSize: captionTrackStyle.fontSize || 80,
+          fontSize: captionTrackStyle.fontSize || 44,
           fontFamily: captionTrackStyle.fontFamily || 'Inter',
-          style: captionTrackStyle,
+          style: {
+            ...captionTrackStyle,
+            wordWrap: true,
+            wordWrapWidth: Math.round(videoWidth * 0.86),
+            breakWords: true,
+          },
         });
 
         captionClipsJSON.forEach((json: any, cIdx: number) => {
@@ -1086,7 +1381,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
             style: {
               color: '#ffffff',
               align: 'center',
-              ...(captionTrackStyle || {}),
+              // ...(captionTrackStyle || {}),
             },
             locked: false,
             effects: [],
@@ -1125,7 +1420,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
       await http.post('/voices/dubbing/re-align', {
         episodeId: epId,
         language: langCode,
-        scenes: scenes.map((s: any) => ({ index: s.index, duration: s.durationSeconds || 5 })),
+        scenes: scenes.map((s: any) => ({ index: s.index, duration: s.duration_seconds || s.durationSeconds || 5 })),
       });
     } catch (err) {
       console.warn('[reAlignDubbing] failed:', err);
@@ -1137,16 +1432,18 @@ export const usePipelineStore = defineStore('pipeline', () => {
     const epId = seriesStore.activeEpisodeId;
     if (!epId || !data) return;
 
-    const rawCues = (Array.isArray(data.captionsData) && data.captionsData.length > 0)
-      ? data.captionsData
-      : (Array.isArray(data.cues) && data.cues.length > 0 ? data.cues : currentScene?.dialogue || []);
-
-    if (data.bgmUrl || data.voiceoverUrl) {
+    // const rawCues = (Array.isArray(data.captionsData) && data.captionsData.length > 0)
+    //   ? data.captionsData
+    //   : (Array.isArray(data.cues) && data.cues.length > 0 ? data.cues : currentScene?.dialogue || []);
+    const rawCues = [];//test caption time by LLM
+    const bgmUrl = data.bgm_url || data.bgmUrl;
+    const vUrl = data.voiceover_url || data.voiceoverUrl;
+    if (bgmUrl || vUrl) {
       seriesStore.updateSceneAssets(epId, sceneIndex, {
-        bgmUrl: data.bgmUrl,
-        voiceoverUrl: data.voiceoverUrl,
-        captionsData: rawCues.length > 0 ? rawCues : undefined,
-        voiceDurationUs: data.voiceDurationUs || data.durationUs,
+        bgm_url: bgmUrl,
+        voiceover_url: vUrl,
+        captions_data: rawCues.length > 0 ? rawCues : undefined,
+        voice_duration_us: data.voice_duration_us || data.voiceDurationUs || data.durationUs,
       });
     }
 
@@ -1159,15 +1456,15 @@ export const usePipelineStore = defineStore('pipeline', () => {
       c.id === vClipId || ((c.type === 'Video' || c.type === 'Image') && (c.name?.includes(`Scene ${sceneIndex}`) || c.label?.includes(`Scene ${sceneIndex}`)))
     );
     const sceneFromUs = vClip?.timing?.display?.from ?? (vClip?.display?.from ?? 0);
-    const sceneDurationUs = vClip?.timing?.duration ?? (vClip?.duration ?? Math.round((Number((currentScene as any)?.durationSeconds) || 6) * 1_000_000));
+    const sceneDurationUs = vClip?.timing?.duration ?? (vClip?.duration ?? Math.round((Number((currentScene as any)?.duration_seconds || (currentScene as any)?.durationSeconds) || 6) * 1_000_000));
 
     // 1. Sync BGM / Ambient Track
-    if (data.bgmUrl) {
+    if (bgmUrl) {
       let bgmTrack = tracks.find((t: any) => t.id === 'track_bgm' || t.id === 'track_bgm_main' || (t.type === 'Audio' && t.name?.toLowerCase().includes('bgm')));
       if (!bgmTrack) {
         bgmTrack = {
           id: 'track_bgm',
-          name: '🎵 Background Music (BGM)',
+          name: 'Music',
           type: 'Audio',
           clipIds: [],
         };
@@ -1183,7 +1480,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
         id: bgmClipId,
         type: 'Audio',
         name: `BGM Scene ${sceneIndex}`,
-        src: data.bgmUrl,
+        src: bgmUrl,
         timing: {
           display: { from: sceneFromUs, to: sceneFromUs + sceneDurationUs },
           trim: { from: 0, to: sceneDurationUs },
@@ -1201,15 +1498,15 @@ export const usePipelineStore = defineStore('pipeline', () => {
     core.store.setState({ ...state, clips, tracks });
 
     // 2. Sync Real TTS Voiceover & Word-Level Captions
-    if ((rawCues.length > 0) || (Array.isArray(data?.words) && data.words.length > 0) || data?.voiceoverUrl) {
+    if ((rawCues.length > 0) || (Array.isArray(data?.words) && data.words.length > 0) || vUrl) {
       await syncSceneVoiceoverAndCaptionsToTimeline(
         sceneIndex,
-        data.voiceoverUrl,
+        vUrl,
         rawCues,
         currentScene,
         data.words,
-        data.voiceStartUs,
-        data.voiceDurationUs
+        data.voice_start_us || data.voiceStartUs,
+        data.voice_duration_us || data.voiceDurationUs
       );
     } else {
       await saveCurrentTimeline(`Scene ${sceneIndex} BGM and audio synced`);
@@ -1232,9 +1529,9 @@ export const usePipelineStore = defineStore('pipeline', () => {
       const rawDialogue = dialogue || currentScene.dialogue || [];
 
       const res: any = await http.post('/voices/separate-audio', {
-        episodeId: epId,
-        sceneIndex,
-        videoUrl,
+        episode_id: epId,
+        scene_index: sceneIndex,
+        video_url: videoUrl,
         dialogue: rawDialogue,
       });
 
@@ -1272,6 +1569,11 @@ export const usePipelineStore = defineStore('pipeline', () => {
     currentRenderingMessage,
     currentRenderingPercent,
     currentRenderingScene,
+    activeRenderingItem,
+    activeRenderingStep,
+    activeRenderingProgress,
+    setActiveProgress,
+    isItemRendering,
     doneStepsCount,
     setStepStatus,
     getSceneStatus,
@@ -1280,14 +1582,15 @@ export const usePipelineStore = defineStore('pipeline', () => {
     syncStepStatusesWithEpisode,
     renderScene,
     renderAllScenes,
+    renderAllAssetsAndStoryboard,
     renderCharacter,
     renderAllCharacters,
     renderSceneVideo,
     renderAllVideos,
     renderSceneVoiceover,
     renderAllVoiceovers,
-    renderSceneBgm,
-    renderAllBgm,
+    // renderSceneBgm,
+    // renderAllBgm,
     syncCaptionsToTimeline,
     generateCaptionsForLanguage,
     reAlignDubbing,

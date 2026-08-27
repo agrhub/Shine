@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, onUnmounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Assistant from './Assistant.vue';
 import PropertiesPanel from './properties-panel/PropertiesPanel.vue';
 import { usePanelStore } from '@/stores/usePanelStore';
 import { useStudioStore } from '~/composables/useStudioStore';
 import { useTimelineStore } from '~/composables/useTimelineStore';
+
+const { t } = useI18n();
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -120,13 +123,13 @@ const handleBgChange = (e: Event) => {
       <!-- Default Canvas Properties Panel -->
       <div v-else class="p-4 space-y-6 text-xs overflow-y-auto h-full">
         <div class="flex items-center justify-between">
-          <h3 class="font-semibold text-sm">Canvas Properties</h3>
+          <h3 class="font-semibold text-sm">{{ t('editor.canvasProperties') }}</h3>
         </div>
 
         <div class="space-y-4">
           <!-- Width -->
           <div class="flex items-center justify-between">
-            <span class="text-muted-foreground">Width</span>
+            <span class="text-muted-foreground">{{ t('common.width') }}</span>
             <div class="flex items-center gap-1 w-32">
               <Input
                 type="number"
@@ -140,7 +143,7 @@ const handleBgChange = (e: Event) => {
 
           <!-- Height -->
           <div class="flex items-center justify-between">
-            <span class="text-muted-foreground">Height</span>
+            <span class="text-muted-foreground">{{ t('common.height') }}</span>
             <div class="flex items-center gap-1 w-32">
               <Input
                 type="number"
@@ -154,22 +157,22 @@ const handleBgChange = (e: Event) => {
 
           <!-- Aspect Ratio -->
           <div class="flex items-center justify-between">
-            <span class="text-muted-foreground">Aspect Ratio</span>
+            <span class="text-muted-foreground">{{ t('editor.aspectRatio') }}</span>
             <Select :model-value="aspectRatio" @update:model-value="handleAspectChange">
               <SelectTrigger class="w-32 h-8 text-xs">
-                <SelectValue placeholder="Aspect ratio" />
+                <SelectValue :placeholder="t('editor.aspectRatio')" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="9:16">9:16 (Vertical)</SelectItem>
-                <SelectItem value="16:9">16:9 (Landscape)</SelectItem>
-                <SelectItem value="1:1">1:1 (Square)</SelectItem>
+                <SelectItem value="9:16">{{ t('editor.verticalRatio') }}</SelectItem>
+                <SelectItem value="16:9">{{ t('editor.landscapeRatio') }}</SelectItem>
+                <SelectItem value="1:1">{{ t('editor.squareRatio') }}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <!-- Background Color -->
           <div class="flex items-center justify-between">
-            <span class="text-muted-foreground">Background</span>
+            <span class="text-muted-foreground">{{ t('editor.background') }}</span>
             <div class="flex items-center gap-2 w-32 justify-end">
               <input
                 type="color"

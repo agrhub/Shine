@@ -2,35 +2,7 @@ import { defineStore } from 'pinia';
 import http from '@/utils/http';
 import i18n from '@/i18n';
 import { ElMessage } from 'element-plus';
-import type { PublishJob } from '@/types/api';
-
-export interface SocialConnection {
-  _id?: string;
-  platform: 'youtube' | 'tiktok' | 'facebook';
-  channelId: string;
-  channelName: string;
-  isActive: boolean;
-}
-
-export interface PlatformComment {
-  id: string;
-  platform: string;
-  author: string;
-  authorAvatar?: string;
-  text: string;
-  likes: number;
-  timestamp: string;
-  replyCount?: number;
-}
-
-export interface SentimentAnalysisResult {
-  sentiment: string;
-  positiveRatio: number;
-  topReactionTropes: string[];
-  audienceComplaints: string[];
-  scriptSuggestions: string[];
-  retentionForecast: number;
-}
+import type { PlatformComment, PublishJob, SentimentAnalysisResult, SocialConnection } from '@/types/api';
 
 export const usePublishStore = defineStore('publish', {
   state: () => ({
@@ -72,11 +44,11 @@ export const usePublishStore = defineStore('publish', {
       }
     },
 
-    async fetchComments(episodeId: string, platform?: string) {
+    async fetchComments(episode_id: string, platform?: string) {
       this.isLoadingComments = true;
       try {
         const res: any = await http.get('/engagement/comments', {
-          params: { episodeId, platform },
+          params: { episode_id, platform },
         });
         this.comments = res.data?.data?.comments || res.data?.comments || [];
         return this.comments;
@@ -89,10 +61,10 @@ export const usePublishStore = defineStore('publish', {
       }
     },
 
-    async replyToComment(commentId: string, platform: string, text: string) {
+    async replyToComment(comment_id: string, platform: string, text: string) {
       try {
         const res: any = await http.post('/engagement/reply', {
-          commentId,
+          comment_id,
           platform,
           text,
         });
@@ -104,7 +76,7 @@ export const usePublishStore = defineStore('publish', {
       }
     },
 
-    async analyzeComments(episodeId: string, commentsList?: PlatformComment[]) {
+    async analyzeComments(episode_id: string, commentsList?: PlatformComment[]) {
       const targetComments = commentsList || this.comments;
       if (targetComments.length === 0) {
         ElMessage.warning('No comments available to analyze.');
@@ -113,7 +85,7 @@ export const usePublishStore = defineStore('publish', {
       this.isAnalyzingSentiment = true;
       try {
         const res: any = await http.post('/engagement/analyze', {
-          episodeId,
+          episode_id,
           comments: targetComments,
         });
         this.sentimentAnalysis = res.data?.data?.analysis || res.data?.analysis || null;
@@ -127,13 +99,13 @@ export const usePublishStore = defineStore('publish', {
       }
     },
 
-    async applyFeedbackToScript(seriesId: string, targetEpisodeNumber: number = 2, customNotes?: string) {
+    async applyFeedbackToScript(series_id: string, target_episode_number: number = 2, custom_notes?: string) {
       try {
         const res: any = await http.post('/engagement/feedback-to-script', {
-          seriesId,
-          targetEpisodeNumber,
+          series_id,
+          target_episode_number,
           analysis: this.sentimentAnalysis,
-          customNotes,
+          custom_notes,
         });
         ElMessage.success('Audience feedback incorporated into Episode script!');
         return res.data?.data;
@@ -144,12 +116,12 @@ export const usePublishStore = defineStore('publish', {
     },
 
     async publishEpisode(
-      episodeId: string,
+      episode_id: string,
       platforms: ('tiktok' | 'youtube' | 'instagram' | 'facebook' | 'douyin')[],
       caption: string = '',
       hashtags: string[] = [],
-      coverUrl: string = '',
-      seriesId: string = 'series-001'
+      cover_url: string = '',
+      series_id: string = 'series-001'
     ): Promise<PublishJob | null> {
       this.publishing = true;
       try {
@@ -157,12 +129,12 @@ export const usePublishStore = defineStore('publish', {
         ElMessage.info(startedMsg);
 
         const res = await http.post('/publish/multi-platform', {
-          episodeId,
-          seriesId,
+          episode_id,
+          series_id,
           platforms,
           caption,
           hashtags,
-          coverUrl,
+          cover_url,
         });
 
         if (res.data && res.data.data) {
@@ -188,23 +160,23 @@ export const usePublishStore = defineStore('publish', {
       if (this.eventSource) {
         this.eventSource.close();
       }
-      const sseUrl = `${http.defaults.baseURL || '/api'}/render/stream?jobId=${encodeURIComponent(jobId)}`;
+      const sseUrl = `${http.defaults.baseURL || '/api'}/render/stream?job_id=${encodeURIComponent(jobId)}`;
       const es = new EventSource(sseUrl);
 
       es.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.currentPlatform && typeof data.progress === 'number') {
-            this.platformProgress[data.currentPlatform] = data.progress;
+          if (data.current_platform && typeof data.progress === 'number') {
+            this.platformProgress[data.current_platform] = data.progress;
           }
           if (data.status === 'published' || data.status === 'success' || data.status === 'completed') {
             if (this.activePublishJob) {
               this.activePublishJob.status = 'success';
-              if (data.publishedUrls) {
-                this.activePublishJob.publishedUrls = data.publishedUrls;
+              if (data.published_urls) {
+                this.activePublishJob.published_urls = data.published_urls;
               }
             }
-            const count = Object.keys(data.publishedUrls || {}).length || 1;
+            const count = Object.keys(data.published_urls || {}).length || 1;
             ElMessage.success(i18n.global.t('toast.publishSuccess', { count }));
             es.close();
             this.eventSource = null;
@@ -222,10 +194,10 @@ export const usePublishStore = defineStore('publish', {
       this.eventSource = es;
     },
 
-    async generateViralCover(episodeId: string) {
+    async generateViralCover(episode_id: string) {
       this.generatingCover = true;
       try {
-        const res = await http.post('/ai/viral-cover/generate', { episodeId });
+        const res = await http.post('/ai/viral-cover/generate', { episode_id });
         if (res.data && res.data.data) {
           this.coverVariants = res.data.data.variants || [];
           return this.coverVariants;

@@ -170,3 +170,13 @@ export function getCaptionTrackId(langCode: string): string {
   const safeLang = (langCode || 'default').replace(/[^a-zA-Z0-9_-]/g, '_');
   return `track_caption_${safeLang}`;
 }
+
+export const GEMINI_LANGUAGE_DEFAULTS: Record<string, { label: string; voiceId?: string }> = Object.fromEntries(
+  GEMINI_SPEECH_LANGUAGES.map((l) => [
+    l.code,
+    {
+      label: l.nativeName,
+    },
+  ])
+);
+

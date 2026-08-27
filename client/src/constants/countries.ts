@@ -8,7 +8,7 @@ export interface WorldCountry {
   isPopular?: boolean; // Highlighted in quick selection chips
 }
 
-export const WORLD_COUNTRIES: WorldCountry[] = [
+export const TOP_COUNTRIES: WorldCountry[] = [
   // ─── Top Drama & Creator Markets (Popular) ──────────────────────────────────
   { code: 'vn', name: 'Vietnam', nativeName: 'Việt Nam', flag: '🇻🇳', continent: 'Asia', primaryLang: 'vi-VN', isPopular: true },
   { code: 'us', name: 'United States', nativeName: 'United States', flag: '🇺🇸', continent: 'North America', primaryLang: 'en-US', isPopular: true },
@@ -25,6 +25,10 @@ export const WORLD_COUNTRIES: WorldCountry[] = [
   { code: 'mx', name: 'Mexico', nativeName: 'México', flag: '🇲🇽', continent: 'North America', primaryLang: 'es-MX', isPopular: true },
   { code: 'in', name: 'India', nativeName: 'भारत', flag: '🇮🇳', continent: 'Asia', primaryLang: 'hi-IN', isPopular: true },
   { code: 'es', name: 'Spain', nativeName: 'España', flag: '🇪🇸', continent: 'Europe', primaryLang: 'es-ES', isPopular: true },
+];
+
+export const WORLD_COUNTRIES: WorldCountry[] = [
+  ...TOP_COUNTRIES,
 
   // ─── Asia & Pacific ─────────────────────────────────────────────────────────
   { code: 'tw', name: 'Taiwan', nativeName: '台灣', flag: '🇹🇼', continent: 'Asia', primaryLang: 'zh-TW', isPopular: true },

@@ -10,6 +10,7 @@ import { useStudioStore } from '@/composables/useStudioStore';
 import { usePlaybackStore } from '@/composables/usePlaybackStore';
 import { core } from '@/utils/project';
 import { toast } from 'vue-sonner';
+import { ElMessageBox } from 'element-plus';
 import http from '@/utils/http';
 
 // Components & Modals
@@ -23,6 +24,7 @@ import PipelineTab from './workspace/PipelineTab.vue';
 import ScriptTab from './workspace/ScriptTab.vue';
 import AudioTab from './workspace/AudioTab.vue';
 import CaptionsTab from './workspace/CaptionsTab.vue';
+import Chatbot from './workspace/Chatbot.vue';
 import ExportModal from '@/components/editor/ExportModal.vue';
 import CountryFlag from '@/components/common/CountryFlag.vue';
 import { getLanguageByCode } from '@/constants/geminiLanguages';
@@ -64,34 +66,21 @@ const renderReviewThumbnail = ref('');
 // Watch active language to switch voiceover and caption tracks on OpenVideo Core
 watch(() => seriesStore.activeLanguageCode, (activeLang) => {
   if (!activeLang) return;
-  try {
-    const state = core.store.getState();
-    const tracks = (state.tracks as any[]) || [];
-    const safeLang = activeLang.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const targetVoiceTrackId = `track_voiceover_${safeLang}`;
-    const targetCaptionTrackId = `track_caption_${safeLang}`;
-
-    tracks.forEach((track: any) => {
-      if (track.id?.startsWith('track_voiceover_')) {
-        const shouldMute = track.id !== targetVoiceTrackId;
-        if (track.muted !== shouldMute) {
-          track.muted = shouldMute;
-        }
-      }
-      if (track.id?.startsWith('track_caption_')) {
-        const shouldShow = track.id === targetCaptionTrackId;
-        if (track.visible !== shouldShow) {
-          track.visible = shouldShow;
-        }
-      }
-    });
-  } catch (err) {
-    console.warn('[watch activeLanguageCode] Failed to sync timeline tracks:', err);
-  }
+  seriesStore.setPreviewCaptionLanguage(activeLang);
+  seriesStore.setPreviewVoiceLanguage(activeLang);
 });
 
 // Right sidebar tab state
 const rightTab = ref<'pipeline' | 'script' | 'audio' | 'captions'>('pipeline');
+const isAiSidebarOpen = ref(true);
+const isLeftSidebarCollapsed = ref(false);
+const isTabSidebarCollapsed = ref(true);
+
+watch(isAiSidebarOpen, (open) => {
+  if (open) {
+    isTabSidebarCollapsed.value = true;
+  }
+});
 
 // Format Time helper (seconds -> mm:ss)
 function formatTime(seconds: number) {
@@ -222,24 +211,6 @@ const chatMessages = ref<Array<{ role: 'user' | 'assistant'; text: string; time:
 const isChatSending = ref(false);
 const chatInputPrompt = ref('');
 
-// ─── Floating Chatbot Drawer ──────────────────────────────────────────────────
-const isChatDrawerOpen = ref(false);
-const drawerChatMessages = ref<Array<{ role: 'user' | 'assistant'; text: string; time: string }>>([{
-  role: 'assistant',
-  text: `🎬 Hello! I'm your AI Production Director. I can help you:
-• Generate scene images (B1/B2)
-• Render video from images (B3)
-• Sync voiceover & dubbing (B4)
-• Generate music & BGM (B5)
-• Create captions (B6)
-• Export & publish episodes (B8-B10)
-
-What would you like to do?`,
-  time: 'Just now',
-}]);
-const drawerChatInput = ref('');
-const isDrawerChatSending = ref(false);
-
 // (Pipeline steps moved to usePipelineStore)
 
 async function runPipelineStep(stepId: string) {
@@ -250,10 +221,10 @@ async function runPipelineStep(stepId: string) {
       await pipelineStore.renderAllCharacters();
       toast.success(t('toast.b2CharRendered'));
     } else if (stepId === 'b2') {
-      // Smart batch: only render scenes without a background image
-      await pipelineStore.renderAllScenes();
+      // Smart batch: sequentially render all character wardrobes, locations, props, and scene storyboard frames
+      await pipelineStore.renderAllAssetsAndStoryboard();
       if (activeEpisodeId.value) await loadEpisodeTimeline(activeEpisodeId.value);
-      toast.success(t('toast.b1BgRendered'));
+      toast.success(t('toast.b1BgRendered', 'Assets & Storyboard generated successfully!'));
     } else if (stepId === 'b3') {
       // Smart batch: only render scenes with BG but no video yet
       await pipelineStore.renderAllVideos();
@@ -271,7 +242,7 @@ async function runPipelineStep(stepId: string) {
       toast.success(t('toast.b5BgmGenerated'));
     } else if (stepId === 'b6') {
       // Generate captions for default language; saves per-scene immediately
-      const defaultLang = seriesStore.activeEpisode?.activeLanguageCode || 'en-US';
+      const defaultLang = seriesStore.currentSeries?.language || 'en-US';
       await pipelineStore.generateCaptionsForLanguage(defaultLang);
       if (activeEpisodeId.value) await loadEpisodeTimeline(activeEpisodeId.value);
       toast.success(t('toast.b6CaptionsSynced'));
@@ -314,16 +285,16 @@ function onLocalExportDone(blobUrl: string, thumbnail: string) {
 async function queueServerRender() {
   pipelineStore.setStepStatus('b8', 'running');
   try {
-    const langs = (seriesStore.getLanguageTracks(activeEpisodeId.value) || []).map(t => t.languageCode).filter(Boolean);
+    const langs = (seriesStore.getLanguageTracks(activeEpisodeId.value) || []).map(t => t.language_code).filter(Boolean);
     const targetRatio = seriesStore.currentSeries?.ratio || '9:16';
     const dim = getCanvasDimensionsForRatio(targetRatio);
     const res: any = await http.post('/export/render-job', {
-      seriesId: seriesId.value,
-      episodeId: activeEpisodeId.value,
+      series_id: seriesId.value,
+      episode_id: activeEpisodeId.value,
       resolution: `${dim.width}x${dim.height}`,
       fps: 30,
       format: 'mp4',
-      languages: langs.length > 0 ? langs : [seriesStore.activeLanguageCode || 'vi-VN'],
+      languages: langs.length > 0 ? langs : [seriesStore.currentSeries?.language || 'en-US'],
       tracks: [],
     });
     const jobId = res?.data?.jobId;
@@ -339,7 +310,7 @@ async function queueServerRender() {
             clearInterval(pollInterval);
             const outputs = status?.data?.outputsByLang || {};
             renderReviewOutputs.value = outputs;
-            renderReviewSelectedLang.value = seriesStore.activeLanguageCode || Object.keys(outputs)[0] || 'vi-VN';
+            renderReviewSelectedLang.value = seriesStore.currentSeries?.language || seriesStore.activeLanguageCode || Object.keys(outputs)[0] || 'en-US';
             renderReviewUrl.value = outputs[renderReviewSelectedLang.value] || status?.data?.outputUrl || '';
             if (renderReviewUrl.value) isRenderReviewOpen.value = true;
           } else if (state === 'failed') {
@@ -355,58 +326,42 @@ async function queueServerRender() {
   }
 }
 
-async function runPipeline(stepId: string | undefined) {
-  isRendering.value = true;
-  if(stepId != undefined){
-    await runPipelineStep(stepId);
+function sendToChatbot(prompt: string) {
+  isAiSidebarOpen.value = true;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('trigger-chatbot-action', { detail: { prompt } }));
   }
-  else{
-    renderProgress.value = 0;
-    for (let i = 0; i < pipelineStore.pipelineSteps.length; i++) {
-      const s = pipelineStore.pipelineSteps[i];
-      await runPipelineStep(s.id);
-      renderProgress.value = Math.round(((i + 1) / pipelineStore.pipelineSteps.length) * 100);
+}
+
+async function runPipeline(stepId: string | undefined, agentMode = false) {
+  if (!agentMode) {
+    isRendering.value = true;
+    if (stepId != undefined) {
+      await runPipelineStep(stepId);
     }
-    toast.success(t('toast.pipelineCompleted'));
+    else{
+      renderProgress.value = 0;
+      for (let i = 0; i < pipelineStore.pipelineSteps.length; i++) {
+        const s = pipelineStore.pipelineSteps[i];
+        await runPipelineStep(s.id);
+        renderProgress.value = Math.round(((i + 1) / pipelineStore.pipelineSteps.length) * 100);
+      }
+      toast.success(t('toast.pipelineCompleted'));
+    }
+    isRendering.value = false;
+    return;
   }
-  isRendering.value = false;
+  const stepPrompts: Record<string, string> = {
+    b1: 'Generate primary character portraits and cast anchors',
+    b2: 'Generate all character wardrobes, locations, props, and storyboard frames sequentially',
+    b3: 'Generate Image-to-Video clips for all scenes',
+    b4: 'Generate TTS voiceover narration and dialogue sync',
+    b6: 'Generate and synchronize subtitle captions',
+    b7: 'Review and verify timeline completion for this episode',
+  };
+  const prompt = (stepId && stepPrompts[stepId]) || 'Run the complete production pipeline for this episode';
+  sendToChatbot(prompt);
 }
-
-async function sendDrawerChat() {
-  const text = drawerChatInput.value.trim();
-  if (!text || isDrawerChatSending.value) return;
-
-  drawerChatMessages.value.push({
-    role: 'user',
-    text,
-    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-  });
-  drawerChatInput.value = '';
-  isDrawerChatSending.value = true;
-
-  try {
-    const res: any = await http.post('/ai/assistant/command-edit', {
-      prompt: text,
-      seriesId: seriesId.value,
-      episodeId: activeEpisodeId.value,
-      timelineState: core.store.getState(),
-    });
-    drawerChatMessages.value.push({
-      role: 'assistant',
-      text: res?.data?.explanation || 'Pipeline executed your request.',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    });
-  } catch {
-    drawerChatMessages.value.push({
-      role: 'assistant',
-      text: 'Command processed. Timeline updated with your requested changes.',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    });
-  } finally {
-    isDrawerChatSending.value = false;
-  }
-}
-
 
 // Publish states
 const selectedPublishPlatforms = ref<string[]>(['tiktok', 'youtube', 'instagram']);
@@ -557,15 +512,13 @@ async function addNewEpisode() {
     });
     if (res?.data?.episode) {
       const ep = res.data.episode;
-      episodesList.value.push({
+      seriesStore.episodesList.push({
         id: ep.id,
         number: ep.episode_number,
         title: ep.title,
         duration: ep.duration,
-        scenesCount: ep.scenesCount,
+        scenes_count: ep.scenes_count || ep.scenes?.length || 0,
         status: 'LIVE EDITING',
-        statusClass: 'text-[var(--el-color-primary)] bg-[var(--el-color-primary-light-9)]',
-        thumb: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=200&h=260&fit=crop',
       });
       newEpisodeTitle.value = '';
       newEpisodeSynopsis.value = '';
@@ -759,7 +712,39 @@ function openMasterScript() {
   isMasterScriptModalOpen.value = true;
 }
 
-function triggerAutoPipeline() {
+async function confirmGenerationScope(customMessage?: string): Promise<'missing' | 'all' | 'cancel'> {
+  try {
+    const action = await ElMessageBox.confirm(
+      customMessage || t('workspace.generationConfirmMessage', 'Do you want to render only missing items or re-render all items completely?'),
+      t('workspace.generationConfirmTitle', 'Generation Scope'),
+      {
+        distinguishCancelAndClose: true,
+        confirmButtonText: t('workspace.generateMissingOnly', 'Generate Missing Only (Fast)'),
+        cancelButtonText: t('workspace.regenerateAll', 'Re-render All (Force)'),
+        type: 'info',
+        roundButton: true,
+      }
+    );
+    return action === 'confirm' ? 'missing' : 'all';
+  } catch (action) {
+    if (action === 'cancel') {
+      return 'all';
+    }
+    return 'cancel';
+  }
+}
+
+async function triggerAutoPipeline(agentMode = false) {
+  if (agentMode) {
+    const mode = await confirmGenerationScope();
+    if (mode === 'cancel') return;
+    if (mode === 'all') {
+      sendToChatbot('Force re-run and re-render the complete production pipeline for all scenes and assets in this episode');
+    } else {
+      sendToChatbot('Run the complete production pipeline for this episode for all missing items');
+    }
+    return;
+  }
   runPipeline(undefined);
 }
 
@@ -854,9 +839,9 @@ onUnmounted(() => {
           {{ t('workspace.publishSeries') }}
         </el-button>
 
-        <el-button circle plain icon="User" size="small" @click="isCollaboratorsModalOpen = true" />
+        <!--<el-button circle plain icon="User" @click="isCollaboratorsModalOpen = true" />-->
 
-        <el-button circle plain icon="ChatDotRound" size="small" @click="isChatModalOpen = true" />
+        <el-button circle plain icon="Cpu" :type="isAiSidebarOpen ? 'primary' : 'default'" @click="isAiSidebarOpen = !isAiSidebarOpen" :title="t('workspace.toggleAiSidebar', 'Toggle AI Copilot Sidebar')" />
       </div>
     </header>
 
@@ -866,24 +851,80 @@ onUnmounted(() => {
     <div class="flex flex-1 overflow-hidden">
       
       <!-- ─── 1. LEFT SIDEBAR: EPISODE LIBRARY ──────────────────────────────── -->
-      <aside class="w-72 border-r flex flex-col shrink-0 z-10" style="border-color: var(--el-border-color); background-color: var(--el-bg-color-overlay);">
-        <div class="p-4 flex-1 flex flex-col overflow-hidden">
+      <aside
+        class="border-r flex flex-col shrink-0 z-10 transition-all duration-300"
+        :class="isLeftSidebarCollapsed ? 'w-16' : 'w-72'"
+        style="border-color: var(--el-border-color); background-color: var(--el-bg-color-overlay);"
+      >
+        <!-- Collapsed Mini View -->
+        <div v-if="isLeftSidebarCollapsed" class="p-2 flex-1 flex flex-col items-center overflow-hidden">
+          <el-button
+            circle plain size="small"
+            icon="Expand"
+            class="mb-3"
+            @click="isLeftSidebarCollapsed = false"
+            :title="t('workspace.expandSidebar', 'Expand Episode Library')"
+          />
+
+          <el-button
+            circle plain size="small"
+            type="primary"
+            icon="Plus"
+            class="mb-3 !ml-0"
+            @click="isAddEpisodeModalOpen = true"
+            :title="t('workspace.addEpisode', 'Add Episode')"
+          />
+
+          <!-- Mini Episodes List -->
+          <div class="flex-1 overflow-y-auto space-y-2.5 w-full flex flex-col items-center custom-scrollbar">
+            <div
+              v-for="(ep, idx) in episodesList"
+              :key="ep.id"
+              @click="selectEpisode(ep, idx)"
+              class="w-11 h-14 rounded-xl border transition-all cursor-pointer relative overflow-hidden shrink-0 group flex items-center justify-center"
+              :class="activeEpisodeId === ep.id ? 'ring-2 ring-emerald-500 ring-offset-1 ring-offset-neutral-900 border-emerald-500' : 'border-neutral-700 hover:border-neutral-500'"
+              :title="`EP #${ep.number}: ${ep.title}`"
+            >
+              <img
+                :src="(ep as any).thumbnail_url || (ep as any).cover_image || (ep.scenes && ep.scenes[0] && (ep.scenes[0].storyboard_frame_url || ep.scenes[0].video_url)) || '/images/dashboard/episode-thumb-default.jpg'"
+                :alt="ep.title"
+                class="w-full h-full object-cover group-hover:scale-105 transition-transform"
+              />
+              <div class="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-colors flex items-end justify-center pb-0.5">
+                <span class="text-[9px] font-black text-white font-mono drop-shadow">#{{ ep.number }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Mini Load Indicator -->
+          <div class="pt-2 border-t w-full flex justify-center" style="border-color: var(--el-border-color-light);">
+            <el-tag size="small" round type="info" class="!px-1.5 !text-[9px] font-mono">
+              {{ episodesList.length }}
+            </el-tag>
+          </div>
+        </div>
+
+        <!-- Expanded Full View -->
+        <div v-else class="p-4 flex-1 flex flex-col overflow-hidden">
           <div class="flex items-center justify-between mb-4">
             <h2 class="text-[11px] font-bold tracking-wider uppercase" style="color: var(--el-text-color-secondary);">
               {{ t('workspace.episodeLibrary') }}
             </h2>
-            <el-button circle plain size="small" icon="Plus" type="primary" @click="isAddEpisodeModalOpen = true" />
+            <div class="flex items-center gap-1">
+              <el-button circle plain size="small" icon="Plus" type="primary" :disabled="true" @click="isAddEpisodeModalOpen = true" />
+              <el-button circle plain icon="Fold" size="small" @click="isLeftSidebarCollapsed = true" :title="t('workspace.collapseSidebar', 'Collapse sidebar')" />
+            </div>
           </div>
 
-          <el-button
+          <!-- <el-button
             type="primary"
             round
             class="w-full !mb-4 !font-semibold !py-2.5"
-            @click="triggerAutoPipeline"
+            @click="triggerAutoPipeline(true)"
             icon="Cpu" size="small"
           >
             {{ t('workspace.autoPipelineFlow') }}
-          </el-button>
+          </el-button> -->
 
           <!-- Episodes Scroll Area -->
           <div class="flex-1 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
@@ -897,7 +938,7 @@ onUnmounted(() => {
                 : 'border-color: var(--el-border-color-light); background-color: var(--el-fill-color-light);'"
             >
               <div class="w-16 h-20 rounded-xl overflow-hidden relative shrink-0 bg-neutral-900">
-                <img :src="ep.thumb || (ep as any).thumbnail_url || (ep as any).cover_image || (ep.scenes && ep.scenes[0] && ((ep.scenes[0] as any).storyboardFrameUrl || (ep.scenes[0] as any).imageUrl || (ep.scenes[0] as any).videoUrl)) || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=200&h=260&fit=crop'" :alt="ep.title" class="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                <img :src="(ep as any).thumbnail_url || (ep as any).cover_image || (ep.scenes && ep.scenes[0] && (ep.scenes[0].storyboard_frame_url || ep.scenes[0].video_url)) || '/images/dashboard/episode-thumb-default.jpg'" :alt="ep.title" class="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                 <div class="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/70 text-white rounded text-[9px] font-mono">
                   #{{ ep.number }}
                 </div>
@@ -905,7 +946,7 @@ onUnmounted(() => {
 
               <div class="flex flex-col justify-center py-1 flex-1 min-w-0">
                 <h3 class="font-bold text-xs truncate" style="color: var(--el-text-color-primary);">{{ ep.title }}</h3>
-                <p class="text-[11px] mt-0.5" style="color: var(--el-text-color-secondary);">{{ ep.duration }} • {{ ep.scenesCount }}</p>
+                <p class="text-[11px] mt-0.5" style="color: var(--el-text-color-secondary);">{{ ep.duration }} • {{ ep.scenes_count }}</p>
                 <div class="flex items-center gap-1.5 mt-2">
                   <el-tag type="primary" size="small" round effect="plain">{{ ep.status }}</el-tag>
                 </div>
@@ -916,22 +957,22 @@ onUnmounted(() => {
           <!-- Batch Queue Status -->
           <div class="mt-4 pt-4 border-t" style="border-color: var(--el-border-color-light);">
             <div class="flex justify-between text-[10px] font-bold tracking-wide mb-2" style="color: var(--el-text-color-secondary);">
-              <span>{{ t('workspace.batchQueue') }} ({{ episodesList.length }}/{{ seriesStore.currentSeries?.totalEpisodes || 24 }})</span>
-              <span style="color: var(--el-color-primary);">{{ Math.round((episodesList.length / (seriesStore.currentSeries?.totalEpisodes || 24)) * 100) }}%</span>
+              <span>{{ t('workspace.batchQueue') }} ({{ episodesList.length }}/{{ seriesStore.currentSeries?.total_episodes || 24 }})</span>
+              <span style="color: var(--el-color-primary);">{{ Math.round((episodesList.length / (seriesStore.currentSeries?.total_episodes || 24)) * 100) }}%</span>
             </div>
             <el-progress
-              :percentage="Math.min(100, Math.round((episodesList.length / (seriesStore.currentSeries?.totalEpisodes || 24)) * 100))"
+              :percentage="Math.min(100, Math.round((episodesList.length / (seriesStore.currentSeries?.total_episodes || 24)) * 100))"
               :show-text="false"
               :stroke-width="4"
               color="var(--el-color-primary)"
             />
           </div>
-        </div>
 
-        <div class="p-4 border-t" style="border-color: var(--el-border-color-light); background-color: var(--el-bg-color-page);">
-          <div class="flex justify-between items-end">
-            <span class="text-[10px] font-bold tracking-widest uppercase" style="color: var(--el-text-color-secondary);">{{ t('workspace.seriesLoad') }}</span>
-            <span class="text-xs font-semibold" style="color: var(--el-text-color-primary);">{{ t('workspace.seriesLoadCount', { count: episodesList.length, total: seriesStore.currentSeries?.totalEpisodes || 100 }) }}</span>
+          <div class="mt-4 pt-2 border-t" style="border-color: var(--el-border-color-light);">
+            <div class="flex justify-between items-end">
+              <span class="text-[10px] font-bold tracking-widest uppercase" style="color: var(--el-text-color-secondary);">{{ t('workspace.seriesLoad') }}</span>
+              <span class="text-xs font-semibold" style="color: var(--el-text-color-primary);">{{ t('workspace.seriesLoadCount', { count: episodesList.length, total: seriesStore.currentSeries?.total_episodes || 100 }) }}</span>
+            </div>
           </div>
         </div>
       </aside>
@@ -964,191 +1005,123 @@ onUnmounted(() => {
         </div>
       </main>
 
-      <!-- ─── 3. RIGHT SIDEBAR: COPILOT / SCRIPT / AUDIO / CAPTIONS ───────────── -->
-      <aside class="w-80 lg:w-96 border-l flex flex-col shrink-0 z-10 shadow-soft" style="border-color: var(--el-border-color); background-color: var(--el-card-bg-color);">
-        
-        <!-- Sidebar Navigation Tabs -->
-        <div class="flex border-b p-2 gap-1" style="border-color: var(--el-border-color);">
-          <el-button
-            v-for="tab in [
-              { id: 'pipeline', label: t('workspace.tabPipeline'), icon: 'Files' },
-              { id: 'script', label: t('workspace.tabScript'), icon: 'Document' },
-              { id: 'audio', label: t('workspace.tabAudio'), icon: 'Microphone' },
-              { id: 'captions', label: t('workspace.tabCaptions'), icon: 'ChatSquare' }
-            ]"
-            :key="tab.id"
-            @click="rightTab = tab.id as any"
-            :type="rightTab === tab.id ? 'primary' : ''"
-            :plain="rightTab !== tab.id"
-            round size="small"
-            class="!ml-0 flex-1"
-          >
-            <el-icon class="mr-1"><component :is="tab.icon" /></el-icon>
-            <span class="hidden sm:inline">{{ tab.label }}</span>
-          </el-button>
-        </div>
+      <!-- ─── 3. DEDICATED AI COPILOT RIGHT SIDEBAR ────────────────────────────── -->
+      <aside
+        v-if="isAiSidebarOpen"
+        class="w-80 lg:w-96 h-[calc(100vh-56px)] border-l flex flex-col shrink-0 z-10 shadow-soft p-4"
+        style="border-color: var(--el-border-color); background-color: var(--el-bg-color-overlay);"
+      >
+        <Chatbot @close="isAiSidebarOpen = false" />
+      </aside>
 
-        <!-- Sidebar Tab Panels Content -->
-        <div class="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar text-[var(--el-text-color-primary)]">
-          <PipelineTab
-            v-if="rightTab === 'pipeline'"
-            @open-cast="openManageCast"
-            @run-pipeline="runPipeline"
-            @view-character="openCharacterDetail"
-          />
-          <ScriptTab
-            v-else-if="rightTab === 'script'"
-            @open-master-script="openMasterScript"
-          />
-          <AudioTab
-            v-else-if="rightTab === 'audio'"
-          />
-          <CaptionsTab
-            v-else-if="rightTab === 'captions'"
-            @apply-captions="applyCaptionsToTimeline"
-          />
-        </div>
-
-        <!-- Right Sidebar Bottom Actions -->
-        <div class="p-5 border-t" style="border-color: var(--el-border-color);">
-          <div class="flex items-center justify-between mb-3 text-[10px] font-bold uppercase tracking-wide" style="color: var(--el-text-color-secondary);">
-            <span>{{ t('workspace.readyToPublish') }}</span>
-            <span>{{ t('workspace.epsVerticalHd', { count: episodesList.length || 100 }) }}</span>
-          </div>
-          <div class="flex gap-2">
-            <el-button type="primary" round icon="Promotion" size="small" class="flex-1 !font-bold !py-3" @click="triggerBulkPublish">
-              {{ t('workspace.bulkExportPublish') }}
+      <!-- ─── 4. RIGHT SIDEBAR: PIPELINE / SCRIPT / AUDIO / CAPTIONS ───────────── -->
+      <aside
+        class="border-l flex flex-col shrink-0 z-20 shadow-soft transition-all duration-300"
+        :class="isTabSidebarCollapsed ? 'w-14' : 'w-80 lg:w-96'"
+        style="border-color: var(--el-border-color); background-color: var(--el-card-bg-color);"
+      >
+        <!-- Collapsed Mini Tab Strip -->
+        <div v-if="isTabSidebarCollapsed" class="p-2 flex-1 flex flex-col items-center justify-between overflow-hidden">
+          <div class="flex flex-col items-center gap-2.5 w-full">
+            <el-button
+              v-for="tab in [
+                { id: 'pipeline', label: t('workspace.tabPipeline', 'Pipeline'), icon: 'Files' },
+                { id: 'script', label: t('workspace.tabScript', 'Script'), icon: 'Document' },
+                { id: 'audio', label: t('workspace.tabAudio', 'Audio'), icon: 'Microphone' },
+                { id: 'captions', label: t('workspace.tabCaptions', 'Captions'), icon: 'ChatSquare' }
+              ]"
+              :key="tab.id"
+              circle
+              size="small"
+              :type="rightTab === tab.id ? 'primary' : 'default'"
+              :plain="rightTab !== tab.id"
+              class="!ml-0"
+              @click="rightTab = tab.id as any; isTabSidebarCollapsed = false"
+              :title="tab.label"
+            >
+              <el-icon><component :is="tab.icon" /></el-icon>
             </el-button>
-            <el-button circle plain size="small" icon="Calendar" @click="toast.info(t('toast.calendarScheduling'))" />
+          </div>
+
+          <div class="flex flex-col items-center gap-2">
+            <el-button
+              circle plain size="small"
+              icon="Expand"
+              @click="isTabSidebarCollapsed = false"
+              :title="t('workspace.expandTabs', 'Expand Tabs')"
+            />
+          </div>
+        </div>
+
+        <!-- Expanded Full Tab Panels Content -->
+        <div v-else class="flex-1 flex flex-col h-full overflow-hidden">
+          <!-- Sidebar Navigation Tabs -->
+          <div class="flex items-center justify-between border-b p-2 gap-1" style="border-color: var(--el-border-color);">
+            <div class="flex flex-1 gap-1">
+              <el-button
+                v-for="tab in [
+                  { id: 'pipeline', label: t('workspace.tabPipeline', 'Pipeline'), icon: 'Files' },
+                  { id: 'script', label: t('workspace.tabScript', 'Script'), icon: 'Document' },
+                  { id: 'audio', label: t('workspace.tabAudio', 'Audio'), icon: 'Microphone' },
+                  { id: 'captions', label: t('workspace.tabCaptions', 'Captions'), icon: 'ChatSquare' }
+                ]"
+                :key="tab.id"
+                @click="rightTab = tab.id as any"
+                :type="rightTab === tab.id ? 'primary' : ''"
+                :plain="rightTab !== tab.id"
+                round size="small"
+                class="!ml-0 flex-1 !px-2"
+              >
+                <el-icon class="mr-1"><component :is="tab.icon" /></el-icon>
+                <span class="hidden sm:inline">{{ tab.label }}</span>
+              </el-button>
+            </div>
+            <el-button
+              circle plain size="small"
+              icon="Fold"
+              @click="isTabSidebarCollapsed = true"
+              :title="t('workspace.collapseTabs', 'Collapse Tabs')"
+            />
+          </div>
+
+          <!-- Sidebar Tab Panels Content -->
+          <div class="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar text-[var(--el-text-color-primary)]">
+            <PipelineTab
+              v-if="rightTab === 'pipeline'"
+              @open-cast="openManageCast"
+              @run-pipeline="runPipeline"
+              @view-character="openCharacterDetail"
+            />
+            <ScriptTab
+              v-else-if="rightTab === 'script'"
+              @open-master-script="openMasterScript"
+            />
+            <AudioTab
+              v-else-if="rightTab === 'audio'"
+            />
+            <CaptionsTab
+              v-else-if="rightTab === 'captions'"
+              @apply-captions="applyCaptionsToTimeline"
+            />
+          </div>
+
+          <!-- Right Sidebar Bottom Actions -->
+          <div class="p-5 border-t" style="border-color: var(--el-border-color);">
+            <div class="flex items-center justify-between mb-3 text-[10px] font-bold uppercase tracking-wide" style="color: var(--el-text-color-secondary);">
+              <span>{{ t('workspace.readyToPublish') }}</span>
+              <span>{{ t('workspace.epsVerticalHd', { count: episodesList.length || 100 }) }}</span>
+            </div>
+            <div class="flex gap-2">
+              <el-button type="primary" round icon="Promotion" size="small" class="flex-1 !font-bold !py-3" @click="triggerBulkPublish">
+                {{ t('workspace.bulkExportPublish') }}
+              </el-button>
+              <el-button circle plain size="small" icon="Calendar" @click="toast.info(t('toast.calendarScheduling'))" />
+            </div>
           </div>
         </div>
       </aside>
 
     </div>
-
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    <!-- FLOATING AI CHATBOT BUTTON                                              -->
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    <div class="fixed right-6 bottom-8 z-50 flex flex-col items-end gap-3">
-      <!-- Render progress indicator -->
-      <div v-if="isRendering" class="flex items-center gap-2 px-3 py-2 border rounded-full text-xs font-bold shadow-lg" style="background-color: var(--el-bg-color-overlay); border-color: var(--el-border-color);">
-        <el-icon style="color: var(--el-color-primary);"><Loading /></el-icon>
-        <span>{{ t('workspace.pipeline', 'Pipeline') }} {{ renderProgress }}%</span>
-      </div>
-
-      <!-- Floating AI Chat Button -->
-      <button
-        id="floating-ai-chat-btn"
-        @click="isChatDrawerOpen = true"
-        class="w-14 h-14 rounded-full shadow-2xl flex items-center justify-center cursor-pointer transition-all hover:scale-110 active:scale-95 relative"
-        style="background: linear-gradient(135deg, var(--el-color-primary) 0%, #0ea5e9 100%); box-shadow: 0 0 24px rgba(62,207,142,0.4);"
-      >
-        <el-icon :size="24" class="text-white"><Cpu /></el-icon>
-        <span class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-white text-[9px] font-black">{{ t('workspace.aiBadge') }}</span>
-      </button>
-    </div>
-
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    <!-- AI CHATBOT RIGHT DRAWER                                                 -->
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    <el-drawer
-      v-model="isChatDrawerOpen"
-      direction="rtl"
-      size="420px"
-      :show-close="false"
-      class="ai-chat-drawer"
-    >
-      <template #header>
-        <div class="flex items-center justify-between w-full">
-          <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, var(--el-color-primary), #0ea5e9);">
-              <el-icon :size="18" class="text-white"><Cpu /></el-icon>
-            </div>
-            <div>
-              <div class="text-sm font-black" style="color: var(--el-text-color-primary);">{{ t('workspace.aiDirectorTitle') }}</div>
-              <div class="text-[10px] font-bold" style="color: var(--el-color-primary);">{{ t('workspace.activePipelineAgent') }}</div>
-            </div>
-          </div>
-          <el-button circle plain size="small" icon="Close" @click="isChatDrawerOpen = false" />
-        </div>
-      </template>
-
-      <!-- Quick Command Pills -->
-      <!-- <div class="px-4 py-2 flex flex-wrap gap-1.5 border-b" style="border-color: var(--el-border-color);">
-        <el-button
-          v-for="step in pipelineStore.pipelineSteps"
-          :key="step.id"
-          size="small"
-          round plain class="!ml-0"
-          @click="drawerChatInput = step.label; sendDrawerChat()"
-        >{{ step.label }}</el-button>
-      </div> -->
-
-      <!-- Pipeline Steps Progress -->
-      <div class="px-4 py-3 border-b" style="border-color: var(--el-border-color);">
-        <div class="text-[10px] font-black uppercase tracking-wider mb-2" style="color: var(--el-text-color-secondary);">{{ t('workspace.pipelineStatus') }}</div>
-        <div class="grid grid-cols-5 gap-1">
-          <div
-            v-for="step in pipelineStore.pipelineSteps"
-            :key="step.id"
-            :title="step.label"
-            class="h-1.5 rounded-full cursor-pointer transition-all"
-            :style="step.status === 'done'
-              ? 'background-color: var(--el-color-primary);'
-              : step.status === 'running'
-              ? 'background-color: var(--el-color-warning);'
-              : step.status === 'error'
-              ? 'background-color: var(--el-color-danger);'
-              : 'background-color: var(--el-fill-color-dark, var(--el-border-color));'"
-            @click="runPipelineStep(step.id)"
-          ></div>
-        </div>
-      </div>
-
-      <!-- Chat Messages -->
-      <div class="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar" style="max-height: calc(100vh - 340px)">
-        <div
-          v-for="(msg, i) in drawerChatMessages"
-          :key="i"
-          class="flex"
-          :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
-        >
-          <div
-            class="max-w-[85%] px-4 py-3 rounded-2xl text-xs leading-relaxed whitespace-pre-line border"
-            :style="msg.role === 'user'
-              ? 'background-color: var(--el-color-primary); color: white; border-color: var(--el-color-primary);'
-              : 'background-color: var(--el-fill-color-light); border-color: var(--el-border-color); color: var(--el-text-color-primary);'"
-          >
-            <div class="flex items-center justify-between gap-4 mb-1">
-              <span class="font-bold text-[10px] uppercase opacity-75">{{ msg.role === 'user' ? 'You' : 'AI Director' }}</span>
-              <span class="text-[9px] opacity-60">{{ msg.time }}</span>
-            </div>
-            {{ msg.text }}
-          </div>
-        </div>
-        <div v-if="isDrawerChatSending" class="flex justify-start">
-          <div class="px-4 py-3 rounded-2xl border text-xs flex items-center gap-2" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color);">
-            <el-icon class="is-loading" style="color: var(--el-color-primary);"><Loading /></el-icon>
-            <span>AI Director is working on your command...</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Chat Input -->
-      <div class="p-4 border-t" style="border-color: var(--el-border-color);">
-        <div class="flex gap-2">
-          <el-input
-            v-model="drawerChatInput"
-            placeholder="e.g. Generate B1 background for Scene 4..."
-            size="large"
-            @keyup.enter="sendDrawerChat"
-          />
-          <el-button type="primary" size="small" icon="Promotion" :loading="isDrawerChatSending" @click="sendDrawerChat" />
-        </div>
-      </div>
-    </el-drawer>
-
-
 
     <!-- 1. Master Script Modal -->
     <MasterScriptModal
@@ -1172,18 +1145,18 @@ onUnmounted(() => {
     <el-dialog v-model="isAddEpisodeModalOpen" :title="t('workspace.addEpisode')" width="460px" append-to-body class="rounded-2xl">
       <div class="space-y-4">
         <div>
-          <label class="text-xs font-bold text-[var(--el-text-color-secondary)] block mb-1.5 uppercase">Episode Title</label>
+          <label class="text-xs font-bold text-[var(--el-text-color-secondary)] block mb-1.5 uppercase">{{ t('workspace.episodeTitle') }}</label>
           <el-input v-model="newEpisodeTitle" placeholder="e.g. The Hidden Truth" size="large" />
         </div>
         <div>
-          <label class="text-xs font-bold text-[var(--el-text-color-secondary)] block mb-1.5 uppercase">Synopsis / Plot Hook</label>
+          <label class="text-xs font-bold text-[var(--el-text-color-secondary)] block mb-1.5 uppercase">{{ t('workspace.synopsisPlotHook') }}</label>
           <el-input v-model="newEpisodeSynopsis" type="textarea" :rows="3" placeholder="Brief summary of the episode action..." />
         </div>
       </div>
       <template #footer>
         <div class="flex justify-end gap-2">
-          <el-button @click="isAddEpisodeModalOpen = false">Cancel</el-button>
-          <el-button type="primary" @click="addNewEpisode">Create Episode</el-button>
+          <el-button @click="isAddEpisodeModalOpen = false">{{ t('common.cancel') }}</el-button>
+          <el-button type="primary" @click="addNewEpisode">{{ t('workspace.createEpisode') }}</el-button>
         </div>
       </template>
     </el-dialog>
@@ -1209,7 +1182,7 @@ onUnmounted(() => {
           </div>
           <div class="flex justify-between items-center">
             <span class="font-bold">Speech Recognition</span>
-            <el-tag size="small" type="primary">Deepgram Nova-2 Realtime</el-tag>
+            <el-tag size="small" type="primary">Gemini Multimodal Audio STT</el-tag>
           </div>
         </div>
       </div>

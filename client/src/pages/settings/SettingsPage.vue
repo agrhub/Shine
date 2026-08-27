@@ -175,7 +175,7 @@ onMounted(() => {
             round
             class="w-full !justify-start !ml-0"
           >
-            <i class="fa-solid fa-user mr-2 text-xs"></i>
+            <el-icon class="mr-2 text-xs"><User /></el-icon>
             <span>{{ t('settings.profileSettings') }}</span>
           </el-button>
           <el-button
@@ -184,18 +184,9 @@ onMounted(() => {
             round
             class="w-full !justify-start !ml-0"
           >
-            <i class="fa-solid fa-credit-card mr-2 text-xs"></i>
+            <el-icon class="mr-2 text-xs"><CreditCard /></el-icon>
             <span>{{ t('settings.billingPlan') }}</span>
           </el-button>
-          <!-- <el-button
-            @click="activeTab = 'team'"
-            :type="activeTab === 'team' ? 'primary' : ''"
-            round
-            class="w-full !justify-start !ml-0"
-          >
-            <i class="fa-solid fa-users mr-2 text-xs"></i>
-            <span>{{ t('settings.teamMembers') }}</span>
-          </el-button> -->
         </nav>
       </div>
 
@@ -211,7 +202,7 @@ onMounted(() => {
             round
             class="w-full !justify-start !ml-0"
           >
-            <i class="fa-solid fa-database mr-2 text-xs"></i>
+            <el-icon class="mr-2 text-xs"><Folder /></el-icon>
             <span>{{ t('settings.assetHosting') }}</span>
           </el-button>
           <el-button
@@ -220,7 +211,7 @@ onMounted(() => {
             round
             class="w-full !justify-start !ml-0"
           >
-            <i class="fa-solid fa-globe mr-2 text-xs"></i>
+            <el-icon class="mr-2 text-xs"><Cpu /></el-icon>
             <span>{{ t('settings.apiAiModels') }}</span>
           </el-button>
           <el-button
@@ -229,7 +220,7 @@ onMounted(() => {
             round
             class="w-full !justify-start !ml-0"
           >
-            <i class="fa-solid fa-share-nodes mr-2 text-xs"></i>
+            <el-icon class="mr-2 text-xs"><Share /></el-icon>
             <span>{{ t('settings.platformIntegrations') || 'Platforms & SSO' }}</span>
           </el-button>
           <el-button
@@ -238,7 +229,7 @@ onMounted(() => {
             round
             class="w-full !justify-start !ml-0"
           >
-            <i class="fa-solid fa-microchip mr-2 text-xs"></i>
+            <el-icon class="mr-2 text-xs"><Platform /></el-icon>
             <span>{{ t('settings.renderCluster') }}</span>
           </el-button>
           <el-button
@@ -247,7 +238,7 @@ onMounted(() => {
             round
             class="w-full !justify-start !ml-0"
           >
-            <i class="fa-solid fa-chart-line mr-2 text-xs"></i>
+            <el-icon class="mr-2 text-xs"><TrendCharts /></el-icon>
             <span>{{ t('settings.observabilityTraces') }}</span>
           </el-button>
           <el-button
@@ -256,7 +247,7 @@ onMounted(() => {
             round
             class="w-full !justify-start !ml-0"
           >
-            <i class="fa-solid fa-user-shield mr-2 text-xs"></i>
+            <el-icon class="mr-2 text-xs"><Lock /></el-icon>
             <span>{{ t('settings.userDirectory') }}</span>
           </el-button>
         </nav>
@@ -274,7 +265,7 @@ onMounted(() => {
             round
             class="w-full !justify-start !ml-0"
           >
-            <i class="fa-solid fa-file-contract mr-2 text-xs"></i>
+            <el-icon class="mr-2 text-xs"><Document /></el-icon>
             <span>{{ t('settings.complianceTerms') }}</span>
           </el-button>
           <el-button
@@ -283,7 +274,7 @@ onMounted(() => {
             round
             class="w-full !justify-start !ml-0"
           >
-            <i class="fa-solid fa-user-lock mr-2 text-xs"></i>
+            <el-icon class="mr-2 text-xs"><Lock /></el-icon>
             <span>{{ t('settings.privacyPolicy') }}</span>
           </el-button>
         </nav>

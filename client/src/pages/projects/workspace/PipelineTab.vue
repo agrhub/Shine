@@ -51,8 +51,8 @@ async function runStep(stepId: string) {
         <el-icon :size="12" style="color: var(--el-text-color-secondary);"><ArrowRight /></el-icon>
       </div>
       <p class="text-[11px] leading-relaxed" style="color: var(--el-text-color-secondary);">
-        AI retention engine active for <span class="font-semibold" style="color: var(--el-text-color-primary);">{{ series?.title }}</span>.
-        Dynamic pacing &amp; cliffhanger hooks calibrated for micro-drama audience.
+        {{ t('workspace.aiRetentionActive') }} <span class="font-semibold" style="color: var(--el-text-color-primary);">{{ series?.title }}</span>.
+        {{ t('workspace.retentionCalibrated') }}
       </p>
     </div>
 
@@ -77,31 +77,21 @@ async function runStep(stepId: string) {
           @click="emit('view-character', char)"
         >
           <el-avatar
-            v-if="char.avatarUrl"
-            :src="char.avatarUrl"
-            :size="40"
+            :src="char.avatar as string" :size="40" fit="cover"
             class="border-2 hover:scale-105 transition-transform"
             style="border-color: var(--el-bg-color-overlay);"
-          />
-          <el-avatar
-            v-else
-            :size="40"
-            class="border-2 hover:scale-105 transition-transform"
-            style="border-color: var(--el-border-color); background-color: var(--el-fill-color-dark);"
+            :alt="char.name"
           >
-            <el-icon :size="16"><User /></el-icon>
+            <template #error>
+              <div class="image-viewer-slot image-slot">
+                <el-icon :size="16"><User /></el-icon>
+              </div>
+            </template>
           </el-avatar>
-          <!-- No-render indicator -->
-          <div
-            v-if="!char.avatarUrl"
-            class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full border border-white"
-            style="background-color: var(--el-color-warning);"
-            title="Not rendered yet"
-          />
         </div>
 
         <div v-if="castMembers.length === 0" class="text-xs italic" style="color: var(--el-text-color-placeholder);">
-          No characters loaded
+          {{ t('workspace.noCharactersLoaded') }}
         </div>
       </div>
 

@@ -91,11 +91,11 @@ const handleSignup = async () => {
   <div id="signup-page" class="space-y-8 font-['Outfit',sans-serif]">
     <!-- Header -->
     <div class="space-y-1">
-      <h2 class="text-3xl font-extrabold tracking-tight text-[#1c1b1b] dark:text-white">
-        Create your account
+      <h2 class="text-3xl font-extrabold tracking-tight text-[var(--el-text-color-primary)]">
+        {{ t('auth.createAccount') }}
       </h2>
-      <p class="text-sm text-gray-500 dark:text-on-surface-variant">
-        Start your 14-day free trial of Shine Pro.
+      <p class="text-sm text-[var(--el-text-color-secondary)]">
+        {{ t('auth.createAccountSubtitle') }}
       </p>
     </div>
 
@@ -104,83 +104,83 @@ const handleSignup = async () => {
       <!-- First Name & Last Name Grid -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label class="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-on-surface-variant mb-1.5">
-            First name
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1.5">
+            {{ t('auth.firstName') }}
           </label>
           <input
             id="signup-name"
             v-model="form.firstName"
             type="text"
             placeholder="Jane"
-            class="w-full bg-[#f3f3f3] dark:bg-[#1f2029] border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-sm text-[#1c1b1b] dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all"
+            class="w-full bg-[var(--el-fill-color-blank)] border border-[var(--el-border-color)] rounded-xl px-4 py-3 text-sm text-[var(--el-text-color-primary)] placeholder-[var(--el-text-color-placeholder)] focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all shadow-sm"
           />
         </div>
 
         <div>
-          <label class="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-on-surface-variant mb-1.5">
-            Last name
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1.5">
+            {{ t('auth.lastName') }}
           </label>
           <input
             id="signup-last-name"
             v-model="form.lastName"
             type="text"
             placeholder="Doe"
-            class="w-full bg-[#f3f3f3] dark:bg-[#1f2029] border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-sm text-[#1c1b1b] dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all"
+            class="w-full bg-[var(--el-fill-color-blank)] border border-[var(--el-border-color)] rounded-xl px-4 py-3 text-sm text-[var(--el-text-color-primary)] placeholder-[var(--el-text-color-placeholder)] focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all shadow-sm"
           />
         </div>
       </div>
 
       <!-- Email -->
       <div>
-        <label class="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-on-surface-variant mb-1.5">
-          Email address
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1.5">
+          {{ t('auth.email') }}
         </label>
         <input
           id="signup-email"
           v-model="form.email"
           type="email"
           placeholder="jane@drama.com"
-          class="w-full bg-[#f3f3f3] dark:bg-[#1f2029] border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-sm text-[#1c1b1b] dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all"
+          class="w-full bg-[var(--el-fill-color-blank)] border border-[var(--el-border-color)] rounded-xl px-4 py-3 text-sm text-[var(--el-text-color-primary)] placeholder-[var(--el-text-color-placeholder)] focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all shadow-sm"
           required
         />
       </div>
 
       <!-- Password -->
       <div>
-        <label class="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-on-surface-variant mb-1.5">
-          Password
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1.5">
+          {{ t('auth.password') }}
         </label>
         <input
           id="signup-password"
           v-model="form.password"
           type="password"
           placeholder="••••••••"
-          class="w-full bg-[#f3f3f3] dark:bg-[#1f2029] border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-sm text-[#1c1b1b] dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all mb-2"
+          class="w-full bg-[var(--el-fill-color-blank)] border border-[var(--el-border-color)] rounded-xl px-4 py-3 text-sm text-[var(--el-text-color-primary)] placeholder-[var(--el-text-color-placeholder)] focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all mb-2 shadow-sm"
           required
         />
         <!-- 4-Segment Password Strength Bar -->
         <div class="flex gap-1.5 mb-1.5">
           <div class="h-1.5 flex-1 bg-primary rounded-full"></div>
-          <div class="h-1.5 flex-1 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
-          <div class="h-1.5 flex-1 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
-          <div class="h-1.5 flex-1 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+          <div class="h-1.5 flex-1 bg-[var(--el-border-color)] rounded-full"></div>
+          <div class="h-1.5 flex-1 bg-[var(--el-border-color)] rounded-full"></div>
+          <div class="h-1.5 flex-1 bg-[var(--el-border-color)] rounded-full"></div>
         </div>
-        <p class="text-[11px] text-on-surface-variant">
-          Must be at least 8 characters with a mix of letters and numbers.
+        <p class="text-[11px] text-[var(--el-text-color-secondary)]">
+          {{ t('auth.passwordHint') }}
         </p>
       </div>
 
       <!-- Terms Checkbox -->
       <div id="signup-terms-checkbox" class="flex items-center gap-2 pt-1">
         <el-checkbox v-model="form.agree" class="!mr-1">
-          <span class="text-xs text-gray-600 dark:text-gray-300">
-            I agree to the
-            <router-link to="/terms" class="text-on-primary-container dark:text-primary font-semibold hover:underline">
-              Terms of Service
+          <span class="text-xs text-[var(--el-text-color-regular)]">
+            {{ t('auth.agreeTo') }}
+            <router-link to="/terms" class="text-primary font-semibold hover:underline">
+              {{ t('auth.termsOfService') }}
             </router-link>
-            and
-            <router-link to="/privacy" class="text-on-primary-container dark:text-primary font-semibold hover:underline">
-              Privacy Policy
+            {{ t('auth.and') }}
+            <router-link to="/privacy" class="text-primary font-semibold hover:underline">
+              {{ t('auth.privacyPolicy') }}
             </router-link>.
           </span>
         </el-checkbox>
@@ -195,17 +195,17 @@ const handleSignup = async () => {
         :loading="authStore.isLoading"
         @click="handleSignup"
       >
-        Create Account
+        {{ t('auth.createAccount') }}
       </el-button>
     </form>
 
     <!-- Social Divider -->
     <div v-if="hasAnySSO" class="my-6 flex items-center justify-center relative">
       <div class="absolute inset-0 flex items-center">
-        <div class="w-full border-t border-gray-200 dark:border-gray-700"></div>
+        <div class="w-full border-t border-[var(--el-border-color)]"></div>
       </div>
-      <span class="relative bg-[#fcf9f8] dark:bg-surface px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
-        Or sign up with
+      <span class="relative bg-[var(--el-bg-color-page)] px-3 text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)]">
+        {{ t('auth.orSignUpWith') }}
       </span>
     </div>
 
@@ -215,7 +215,7 @@ const handleSignup = async () => {
       <button
         v-if="ssoProviders.google"
         type="button"
-        class="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 dark:border-gray-700 rounded-full bg-white dark:bg-surface-container hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-xs font-semibold text-[#1c1b1b] dark:text-white shadow-sm"
+        class="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 px-4 border border-[var(--el-border-color)] rounded-full bg-[var(--el-card-bg-color)] hover:bg-[var(--el-fill-color-light)] transition-colors text-xs font-semibold text-[var(--el-text-color-primary)] shadow-sm"
         @click="handleSSOSignup('google')"
       >
         <svg class="w-4 h-4" viewBox="0 0 24 24">
@@ -231,7 +231,7 @@ const handleSignup = async () => {
       <button
         v-if="ssoProviders.github"
         type="button"
-        class="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 dark:border-gray-700 rounded-full bg-white dark:bg-surface-container hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-xs font-semibold text-[#1c1b1b] dark:text-white shadow-sm"
+        class="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 px-4 border border-[var(--el-border-color)] rounded-full bg-[var(--el-card-bg-color)] hover:bg-[var(--el-fill-color-light)] transition-colors text-xs font-semibold text-[var(--el-text-color-primary)] shadow-sm"
         @click="handleSSOSignup('github')"
       >
         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -244,19 +244,19 @@ const handleSignup = async () => {
       <button
         v-if="ssoProviders.facebook"
         type="button"
-        class="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 dark:border-gray-700 rounded-full bg-white dark:bg-surface-container hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-xs font-semibold text-[#1c1b1b] dark:text-white shadow-sm"
+        class="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 px-4 border border-[var(--el-border-color)] rounded-full bg-[var(--el-card-bg-color)] hover:bg-[var(--el-fill-color-light)] transition-colors text-xs font-semibold text-[var(--el-text-color-primary)] shadow-sm"
         @click="handleSSOSignup('facebook')"
       >
-        <i class="fa-brands fa-facebook text-blue-500 text-sm"></i>
+        <el-icon class="text-blue-500 text-sm"><Share /></el-icon>
         Facebook
       </button>
     </div>
 
     <!-- Footer Switch to Login -->
-    <div class="text-center text-xs text-gray-500 dark:text-on-surface-variant pt-2">
+    <div class="text-center text-xs text-[var(--el-text-color-secondary)] pt-2">
       <span>{{ t('auth.hasAccount') }} </span>
-      <router-link to="/auth/login" class="text-on-primary-container dark:text-primary font-extrabold hover:underline">
-        Sign in
+      <router-link to="/auth/login" class="text-primary font-extrabold hover:underline">
+        {{ t('auth.signIn') }}
       </router-link>
     </div>
   </div>

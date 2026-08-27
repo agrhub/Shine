@@ -147,8 +147,8 @@ const handleBackToLogin = () => {
 };
 
 const handleDemoLogin = (role: 'admin' | 'test') => {
-  email.value = role === 'admin' ? 'admin@shine.studio' : 'user@shine.studio';
-  password.value = 'Demo123456!';
+  email.value = role === 'admin' ? 'admin@agrhub.com' : 'user@agrhub.com';
+  password.value = 'Demo@123456!';
   handleLogin();
 };
 </script>
@@ -159,19 +159,19 @@ const handleDemoLogin = (role: 'admin' | 'test') => {
     <div v-if="is2FAStep" class="space-y-6">
       <div class="space-y-1">
         <div class="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center text-xl mb-4">
-          <i class="fa-solid fa-shield-halved"></i>
+          <el-icon :size="24"><Lock /></el-icon>
         </div>
-        <h2 class="text-2xl font-extrabold tracking-tight text-[#1c1b1b] dark:text-white">
+        <h2 class="text-2xl font-extrabold tracking-tight text-[var(--el-text-color-primary)]">
           {{ t('auth.twoFactorVerification') }}
         </h2>
-        <p class="text-sm text-gray-500 dark:text-on-surface-variant">
+        <p class="text-sm text-[var(--el-text-color-secondary)]">
           {{ t('auth.twoFactorLoginDesc') }} <strong class="text-primary">{{ maskedEmail }}</strong>
         </p>
       </div>
 
       <form class="space-y-5" @submit.prevent="handleVerify2FA">
         <div>
-          <label class="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-on-surface-variant mb-2">
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-2">
             {{ t('settings.verificationCode') }}
           </label>
           <input
@@ -179,7 +179,7 @@ const handleDemoLogin = (role: 'admin' | 'test') => {
             type="text"
             maxlength="6"
             placeholder="••••••"
-            class="w-full text-center tracking-[14px] font-mono text-2xl font-bold bg-[#f3f3f3] dark:bg-[#1f2029] border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-[#1c1b1b] dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all"
+            class="w-full text-center tracking-[14px] font-mono text-2xl font-bold bg-[var(--el-fill-color-blank)] border border-[var(--el-border-color)] rounded-xl px-4 py-3 text-[var(--el-text-color-primary)] placeholder-[var(--el-text-color-placeholder)] focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all shadow-sm"
             autofocus
             required
           />
@@ -199,10 +199,10 @@ const handleDemoLogin = (role: 'admin' | 'test') => {
         <div class="flex items-center justify-between text-xs pt-2">
           <button
             type="button"
-            class="text-gray-500 hover:text-primary font-semibold flex items-center gap-1.5 transition"
+            class="text-[var(--el-text-color-secondary)] hover:text-primary font-semibold flex items-center gap-1.5 transition"
             @click="handleBackToLogin"
           >
-            <i class="fa-solid fa-arrow-left text-[10px]"></i> {{ t('common.back') }}
+            <el-icon class="text-[10px]"><Back /></el-icon> {{ t('common.back') }}
           </button>
 
           <button
@@ -221,11 +221,11 @@ const handleDemoLogin = (role: 'admin' | 'test') => {
     <div v-else class="space-y-8">
       <!-- Header -->
       <div class="space-y-1">
-        <h2 class="text-3xl font-extrabold tracking-tight text-[#1c1b1b] dark:text-white">
-          Welcome back 👋
+        <h2 class="text-3xl font-extrabold tracking-tight text-[var(--el-text-color-primary)]">
+          {{ t('auth.welcomeBackHeader') }}
         </h2>
-        <p class="text-sm text-gray-500 dark:text-on-surface-variant">
-          Sign in to your Shine account
+        <p class="text-sm text-[var(--el-text-color-secondary)]">
+          {{ t('auth.welcomeBackSubtitle') }}
         </p>
       </div>
 
@@ -233,15 +233,15 @@ const handleDemoLogin = (role: 'admin' | 'test') => {
       <form class="space-y-5" @submit.prevent="handleLogin">
         <!-- Email -->
         <div>
-          <label class="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-on-surface-variant mb-1.5">
-            Email address
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1.5">
+            {{ t('auth.email') }}
           </label>
           <input
             id="login-email"
             v-model="email"
             type="email"
             placeholder="jane@shinedrama.com"
-            class="w-full bg-[#f3f3f3] dark:bg-[#1f2029] border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-sm text-[#1c1b1b] dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all"
+            class="w-full bg-[var(--el-fill-color-blank)] border border-[var(--el-border-color)] rounded-xl px-4 py-3 text-sm text-[var(--el-text-color-primary)] placeholder-[var(--el-text-color-placeholder)] focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all shadow-sm"
             required
           />
         </div>
@@ -249,11 +249,11 @@ const handleDemoLogin = (role: 'admin' | 'test') => {
         <!-- Password -->
         <div>
           <div class="flex justify-between items-center mb-1.5">
-            <label class="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-on-surface-variant">
-              Password
+            <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)]">
+              {{ t('auth.password') }}
             </label>
-            <RouterLink to="/auth/forgot-password" class="text-xs text-on-primary-container dark:text-primary font-semibold hover:underline">
-              Forgot password?
+            <RouterLink to="/auth/forgot-password" class="text-xs text-primary font-semibold hover:underline">
+              {{ t('auth.forgotPasswordLink') }}
             </RouterLink>
           </div>
           <input
@@ -261,7 +261,7 @@ const handleDemoLogin = (role: 'admin' | 'test') => {
             v-model="password"
             type="password"
             placeholder="••••••••"
-            class="w-full bg-[#f3f3f3] dark:bg-[#1f2029] border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-sm text-[#1c1b1b] dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all"
+            class="w-full bg-[var(--el-fill-color-blank)] border border-[var(--el-border-color)] rounded-xl px-4 py-3 text-sm text-[var(--el-text-color-primary)] placeholder-[var(--el-text-color-placeholder)] focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all shadow-sm"
             required
           />
         </div>
@@ -269,8 +269,8 @@ const handleDemoLogin = (role: 'admin' | 'test') => {
         <!-- Remember Me -->
         <div class="flex items-center gap-2 pt-1">
           <el-checkbox v-model="rememberMe" id="remember-me">
-            <span class="text-xs text-gray-600 dark:text-gray-300">
-              Remember me
+            <span class="text-xs text-[var(--el-text-color-regular)]">
+              {{ t('auth.rememberMe') }}
             </span>
           </el-checkbox>
         </div>
@@ -284,17 +284,17 @@ const handleDemoLogin = (role: 'admin' | 'test') => {
           :loading="authStore.isLoading"
           @click="handleLogin"
         >
-          Sign In
+          {{ t('auth.signIn') }}
         </el-button>
       </form>
 
       <!-- Social Divider -->
       <div v-if="hasAnySSO" class="my-6 flex items-center justify-center relative">
         <div class="absolute inset-0 flex items-center">
-          <div class="w-full border-t border-gray-200 dark:border-gray-700"></div>
+          <div class="w-full border-t border-[var(--el-border-color)]"></div>
         </div>
-        <span class="relative bg-[#fcf9f8] dark:bg-surface px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
-          Or continue with
+        <span class="relative bg-[var(--el-bg-color-page)] px-3 text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)]">
+          {{ t('auth.orContinueWith') }}
         </span>
       </div>
 
@@ -304,7 +304,7 @@ const handleDemoLogin = (role: 'admin' | 'test') => {
         <button
           v-if="ssoProviders.google"
           type="button"
-          class="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 dark:border-gray-700 rounded-full bg-white dark:bg-surface-container hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-xs font-semibold text-[#1c1b1b] dark:text-white shadow-sm"
+          class="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 px-4 border border-[var(--el-border-color)] rounded-full bg-[var(--el-card-bg-color)] hover:bg-[var(--el-fill-color-light)] transition-colors text-xs font-semibold text-[var(--el-text-color-primary)] shadow-sm"
           @click="handleSSOLogin('google')"
         >
           <svg class="w-4 h-4" viewBox="0 0 24 24">
@@ -320,7 +320,7 @@ const handleDemoLogin = (role: 'admin' | 'test') => {
         <button
           v-if="ssoProviders.github"
           type="button"
-          class="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 dark:border-gray-700 rounded-full bg-white dark:bg-surface-container hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-xs font-semibold text-[#1c1b1b] dark:text-white shadow-sm"
+          class="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 px-4 border border-[var(--el-border-color)] rounded-full bg-[var(--el-card-bg-color)] hover:bg-[var(--el-fill-color-light)] transition-colors text-xs font-semibold text-[var(--el-text-color-primary)] shadow-sm"
           @click="handleSSOLogin('github')"
         >
           <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -333,32 +333,19 @@ const handleDemoLogin = (role: 'admin' | 'test') => {
         <button
           v-if="ssoProviders.facebook"
           type="button"
-          class="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 px-4 border border-gray-300 dark:border-gray-700 rounded-full bg-white dark:bg-surface-container hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-xs font-semibold text-[#1c1b1b] dark:text-white shadow-sm"
+          class="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 px-4 border border-[var(--el-border-color)] rounded-full bg-[var(--el-card-bg-color)] hover:bg-[var(--el-fill-color-light)] transition-colors text-xs font-semibold text-[var(--el-text-color-primary)] shadow-sm"
           @click="handleSSOLogin('facebook')"
         >
-          <i class="fa-brands fa-facebook text-blue-500 text-sm"></i>
+          <el-icon class="text-blue-500 text-sm"><Share /></el-icon>
           Facebook
         </button>
       </div>
 
-      <!-- Quick Demo Logins -->
-      <div class="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-2">
-        <p class="text-xs text-gray-500 dark:text-on-surface-variant font-medium text-center">{{ t('auth.quickDemoHeader') }}</p>
-        <div class="grid grid-cols-2 gap-3">
-          <el-button id="demo-admin-btn" size="small" plain @click="handleDemoLogin('admin')" class="!w-full !rounded-full">
-            Demo: Admin
-          </el-button>
-          <el-button id="demo-test-btn" size="small" plain @click="handleDemoLogin('test')" class="!w-full !rounded-full">
-            Demo: Test User
-          </el-button>
-        </div>
-      </div>
-
       <!-- Sign Up Redirect -->
-      <p class="text-center text-xs text-gray-500 dark:text-on-surface-variant pt-2">
-        Don't have an account?
-        <RouterLink to="/auth/signup" class="text-on-primary-container dark:text-primary font-extrabold hover:underline ml-1">
-          Sign Up
+      <p class="text-center text-xs text-[var(--el-text-color-secondary)] pt-2">
+        {{ t('auth.noAccount') }}
+        <RouterLink to="/auth/signup" class="text-primary font-extrabold hover:underline ml-1">
+          {{ t('auth.signUp') }}
         </RouterLink>
       </p>
     </div>

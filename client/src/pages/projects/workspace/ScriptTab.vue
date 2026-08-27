@@ -5,7 +5,9 @@ import { useSeriesStore } from '@/stores/useSeriesStore';
 import { usePipelineStore } from '@/stores/usePipelineStore';
 import { useScriptStore } from '@/stores/useScriptStore';
 import { toast } from 'vue-sonner';
+import { ElMessageBox } from 'element-plus';
 import http from '@/utils/http';
+import { Character, CharacterEpisode, CharacterWardrobeVariant } from '@/types/api';
 
 const emit = defineEmits<{
   (e: 'open-master-script'): void;
@@ -71,22 +73,42 @@ const isExtracting = ref(false);
 const isGeneratingAssetImage = ref<Record<string, boolean>>({});
 const selectedWardrobeVariant = ref<Record<string, string>>({});
 
-function getActiveWardrobeDesc(char: any) {
+function getActiveWardrobeDesc(char: CharacterEpisode) {
   const selectedId = selectedWardrobeVariant.value[char.id];
-  if (selectedId && char.wardrobeVariants) {
-    const v = char.wardrobeVariants.find((wv: any) => wv.variantId === selectedId);
-    if (v?.clothingAndAccessories) return v.clothingAndAccessories;
+  const variants = char.wardrobe_variants;
+  if (selectedId && Array.isArray(variants)) {
+    const v = variants.find((wv: any) => wv.variant_id === selectedId);
+    if (v) return v.clothing_and_accessories || '';
   }
-  return char.clothingAndAccessories || '';
+  return char.clothing_and_accessories || '';
 }
 
-function getActiveCharacterImage(char: any) {
+function getCharacterAvatar(char: Character | {id: string, name: string, avatar: string}): string {
+  if (!char) return '';
+  const master = seriesStore.getCharacterById(char.id || char.name);
+  return master?.avatar || char.avatar || '';
+}
+
+function getActiveCharacterImage(char: CharacterEpisode): string {
+  if (!char) return '';
   const selectedId = selectedWardrobeVariant.value[char.id];
-  if (selectedId && char.wardrobeVariants) {
-    const v = char.wardrobeVariants.find((wv: any) => wv.variantId === selectedId);
-    if (v?.imageUrl) return v.imageUrl;
+  const variants = char.wardrobe_variants;
+  if (selectedId && Array.isArray(variants)) {
+    const v = variants.find((wv: CharacterWardrobeVariant) => (wv.variant_id) === selectedId);
+    const img = v?.image_url;
+    if (img) return img;
   }
-  return char.imageUrl || '';
+  // Check if any wardrobe variant has a rendered image
+  if (Array.isArray(variants) && variants.length > 0) {
+    const activeV = variants.find((wv: CharacterWardrobeVariant) => wv.image_url);
+    const img = activeV?.image_url;
+    if (img) return img;
+  }
+  return getCharacterAvatar({
+    id: char.id,
+    name: char.name,
+    avatar: ''
+  });
 }
 
 function selectWardrobeVariant(charId: string, variantId: string) {
@@ -97,8 +119,12 @@ function selectWardrobeVariant(charId: string, variantId: string) {
 const isPreviewModalOpen = ref(false);
 const previewScene = ref<any>(null);
 
+function getSceneStatus(sceneIndex: number) {
+  return pipelineStore.getSceneStatus(sceneIndex);
+}
+
 function openVideoPreview(scene: any) {
-  const vUrl = scene.videoUrl || getSceneStatus(scene.index).videoUrl;
+  const vUrl = scene.video_url || getSceneStatus(scene.index).video_url;
   if (!vUrl) return;
   previewScene.value = scene;
   isPreviewModalOpen.value = true;
@@ -107,6 +133,31 @@ function openVideoPreview(scene: any) {
 function closeVideoPreview() {
   isPreviewModalOpen.value = false;
   previewScene.value = null;
+}
+
+// ─── Active AI Agent Lock State Helpers ─────────────────────────────────────
+function isCharacterLocked(char: any): boolean {
+  return !!(isGeneratingAssetImage.value[char.id] || pipelineStore.isItemRendering(char.name));
+}
+
+function isLocationLocked(loc: any): boolean {
+  return !!(isGeneratingAssetImage.value[loc.id] || pipelineStore.isItemRendering(loc.name));
+}
+
+function isPropLocked(prop: any): boolean {
+  return !!(isGeneratingAssetImage.value[prop.id] || pipelineStore.isItemRendering(prop.name));
+}
+
+function isSceneLocked(scene: any): boolean {
+  const idx = scene.index || scene.scene_number || scene.sceneNumber;
+  return !!(
+    getSceneStatus(idx).bg_status === 'running' ||
+    getSceneStatus(idx).video_status === 'running' ||
+    isSyncingAudio.value[idx] ||
+    pipelineStore.isItemRendering(`Scene #${idx}`) ||
+    pipelineStore.isItemRendering(`Scene ${idx}`) ||
+    pipelineStore.isItemRendering(idx)
+  );
 }
 
 // ─── Flow Actions: Auto-Extract & Autofill Assets ───────────────────────────
@@ -138,10 +189,15 @@ async function handleExtractAssets() {
 
     toast.info(t('workspace.analyzingScreenplay', 'Analyzing screenplay, extracting assets & generating scenes...'));
 
+    const curSeries = seriesStore.currentSeries as any;
+    const sPlan = curSeries?.master_plan;
+    const targetDuration = Number(sPlan?.totalDurationSeconds) || Number(sPlan?.episodeDurationSeconds) || Number(curSeries?.episode_duration) || 90;
+
     const result = await scriptStore.analyzeScreenplay({
       screenplay: screenplayText.value,
-      seriesId: sId,
-      episodeId: epId,
+      series_id: sId,
+      episode_id: epId,
+      target_duration_seconds: targetDuration,
     });
 
     if (result.characters?.length > 0) {
@@ -203,64 +259,130 @@ async function handleExtractAssets() {
   }
 }
 
-async function handleRenderCharacters(){
+function sendToChatbot(prompt: string) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('trigger-chatbot-action', { detail: { prompt } }));
+  }
+}
+
+async function confirmGenerationScope(customMessage?: string): Promise<'missing' | 'all' | 'cancel'> {
+  try {
+    const action = await ElMessageBox.confirm(
+      customMessage || t('workspace.generationConfirmMessage', 'Do you want to render only missing items or re-render all items completely?'),
+      t('workspace.generationConfirmTitle', 'Generation Scope'),
+      {
+        distinguishCancelAndClose: true,
+        confirmButtonText: t('workspace.generateMissingOnly', 'Generate Missing Only (Fast)'),
+        cancelButtonText: t('workspace.regenerateAll', 'Re-render All (Force)'),
+        type: 'info',
+        roundButton: true,
+      }
+    );
+    return action === 'confirm' ? 'missing' : 'all';
+  } catch (action) {
+    if (action === 'cancel') {
+      return 'all';
+    }
+    return 'cancel';
+  }
+}
+
+async function handleRenderCharacters(agentMode = false){
+  if(agentMode){
+    const mode = await confirmGenerationScope();
+    if (mode === 'cancel') return;
+    if (mode === 'all') {
+      sendToChatbot('Force re-render all character wardrobe variants for this episode');
+    } else {
+      sendToChatbot('Generate all character wardrobe variants missing images for this episode');
+    }
+    return;
+  }
   for (const char of extractedCharacters.value) {
-    if(char.wardrobeVariants && char.wardrobeVariants.length > 0){
-      for(const variant of char.wardrobeVariants){
-        if(variant.imageUrl) continue;
-        await handleGenerateCharacterSheet(char, variant.variantId || variant.id)
+    const hasCharImage = !!char.avatar;
+    const variants = char.wardrobe_variants || [];
+    if (variants.length > 0) {
+      for (const variant of variants) {
+        if (variant.image_url) continue;
+        if (variants.length === 1 && hasCharImage) {
+          variant.image_url = char.avatar;
+          continue;
+        }
+        await handleGenerateCharacterSheet(char, variant.variant_id);
       }
     }
-    if(!char.imageUrl){
-      await handleGenerateCharacterSheet(char)
+    if (!char.avatar) {
+      await handleGenerateCharacterSheet(char);
     }
   }
 }
 
-async function handleRenderLocations(){
+async function handleRenderLocations(agentMode = false){
+  if(agentMode){
+    const mode = await confirmGenerationScope();
+    if (mode === 'cancel') return;
+    if (mode === 'all') {
+      sendToChatbot('Force re-render all location environment sheets for this episode');
+    } else {
+      sendToChatbot('Generate all location environment sheets missing images for this episode');
+    }
+    return;
+  }
   for (const loc of extractedLocations.value) {
-    if (loc.imageUrl) continue;
+    if (loc.image_url) continue;
     await handleGenerateLocationSheet(loc)
   }
 }
 
-async function handleRenderProps(){
+async function handleRenderProps(agentMode = false){
+  if(agentMode){
+    const mode = await confirmGenerationScope();
+    if (mode === 'cancel') return;
+    if (mode === 'all') {
+      sendToChatbot('Force re-render all prop product shots for this episode');
+    } else {
+      sendToChatbot('Generate all prop product shots missing images for this episode');
+    }
+    return;
+  }
   for (const prop of extractedProps.value) {
-    if (prop.imageUrl) continue;
+    if (prop.image_url) continue;
     await handleGeneratePropSheet(prop)
   }
 }
 
-async function handleGenerateCharacterSheet(char: any, variantId?: string) {
+async function handleGenerateCharacterSheet(char: CharacterEpisode, variantId?: string, agentMode = false) {
   isGeneratingAssetImage.value[char.id] = true;
   try {
     const selectedVariantId = variantId || selectedWardrobeVariant.value[char.id];
-    const matchedVariant = char.wardrobeVariants?.find((wv: any) => wv.variantId === selectedVariantId);
-    const wardrobeToUse = matchedVariant?.clothingAndAccessories || char.clothingAndAccessories || '';
+    const matchedVariant = char.wardrobe_variants?.find((wv: any) => wv.variant_id === selectedVariantId);
+    const wardrobeToUse = matchedVariant?.clothing_and_accessories || char.clothing_and_accessories || '';
     const variantLabel = matchedVariant ? ` (${matchedVariant.name})` : '';
-
+    if(agentMode){
+      sendToChatbot(`Generate character sheet for "${char.name}"${variantLabel}`);
+      return;
+    }
     toast.info(`${t('workspace.generatingSheet', 'Generating Character Sheet')} (${char.name}${variantLabel})...`);
 
     // Retrieve existing facial portrait from Series Cast or character avatar
     const matchedCast = (seriesStore.charactersList || []).find(
       (c: any) => c.name?.toLowerCase().trim() === char.name?.toLowerCase().trim() || c.id === char.id
     );
-    const referenceAvatar = char.avatar || char.avatarUrl || matchedCast?.avatar || matchedCast?.avatarUrl || '';
 
-    const resolvedPhysical = char.physicalCharacteristics || matchedCast?.visualTraits || matchedCast?.physicalCharacteristics || matchedCast?.appearance || matchedCast?.traits || '';
+    const referenceAvatar = matchedCast?.avatar || '';
+    const resolvedPhysical = char.physical_characteristics || matchedCast?.visual_traits || matchedCast?.physical_characteristics || matchedCast?.appearance || matchedCast?.traits || '';
 
     const res = await scriptStore.generateCharacterSheet({
-      characterName: char.name,
-      physicalCharacteristics: resolvedPhysical,
-      clothingAndAccessories: wardrobeToUse,
-      visualStyle: seriesStore.currentSeries?.visual_style || 'realistic',
-      referenceImageUrl: referenceAvatar || undefined,
+      character_name: char.name,
+      physical_characteristics: resolvedPhysical,
+      clothing_and_accessories: wardrobeToUse,
+      visual_style: seriesStore.currentSeries?.visual_style || 'realistic',
+      reference_image_url: referenceAvatar || undefined,
     });
 
     if (matchedVariant) {
-      matchedVariant.imageUrl = res.imageUrl;
+      matchedVariant.image_url = res.image_url;
     }
-    char.imageUrl = res.imageUrl;
 
     await saveEpisodeAssets();
     toast.success(`${t('workspace.sheetReady', 'Character sheet ready')} (${char.name}${variantLabel})`);
@@ -271,17 +393,21 @@ async function handleGenerateCharacterSheet(char: any, variantId?: string) {
   }
 }
 
-async function handleGenerateLocationSheet(loc: any) {
+async function handleGenerateLocationSheet(loc: any, agentMode = false) {
   isGeneratingAssetImage.value[loc.id] = true;
   try {
+    if(agentMode){
+      sendToChatbot(`Generate location visual sheet for "${loc.name}"`);
+      return;
+    }
     toast.info(`${t('workspace.generatingSheet', 'Generating Location Sheet')} (${loc.name})...`);
     const res = await scriptStore.generateLocationSheet({
-      locationName: loc.name,
-      physicalCharacteristics: loc.physicalCharacteristics,
-      timeOfDay: loc.timeOfDay,
-      visualStyle: seriesStore.currentSeries?.visual_style || 'realistic',
+      location_name: loc.name,
+      physical_characteristics: loc.physical_characteristics,
+      time_of_day: loc.time_of_day,
+      visual_style: seriesStore.currentSeries?.visual_style || 'realistic',
     });
-    loc.imageUrl = res.imageUrl;
+    loc.image_url = res.image_url;
     await saveEpisodeAssets();
     toast.success(`${t('workspace.sheetReady', 'Location sheet ready')} (${loc.name})`);
   } catch (err: any) {
@@ -291,16 +417,20 @@ async function handleGenerateLocationSheet(loc: any) {
   }
 }
 
-async function handleGeneratePropSheet(prop: any) {
+async function handleGeneratePropSheet(prop: any, agentMode = false) {
   isGeneratingAssetImage.value[prop.id] = true;
   try {
+    if(agentMode){
+      sendToChatbot(`Generate prop product shot for "${prop.name}"`);
+      return;
+    }
     toast.info(`${t('workspace.generatingSheet', 'Generating Prop Shot')} (${prop.name})...`);
     const res = await scriptStore.generatePropSheet({
-      propName: prop.name,
-      physicalCharacteristics: prop.physicalCharacteristics,
-      visualStyle: seriesStore.currentSeries?.visual_style || 'realistic',
+      prop_name: prop.name,
+      physical_characteristics: prop.physical_characteristics,
+      visual_style: seriesStore.currentSeries?.visual_style || 'realistic',
     });
-    prop.imageUrl = res.imageUrl;
+    prop.image_url = res.image_url;
     await saveEpisodeAssets();
     toast.success(`${t('workspace.sheetReady', 'Prop shot ready')} (${prop.name})`);
   } catch (err: any) {
@@ -310,8 +440,12 @@ async function handleGeneratePropSheet(prop: any) {
   }
 }
 
-async function renderScene(scene: any) {
+async function renderScene(scene: any, agentMode = false) {
   try {
+    if(agentMode){
+      sendToChatbot(`Generate storyboard frame image for Scene #${scene.index}`);
+      return;
+    }
     toast.info(t('toast.renderingSceneIndex'));
     await pipelineStore.renderScene(scene.index, scene);
     toast.success(t('workspace.renderScene') + ' ' + t('common.done', 'Done'));
@@ -320,7 +454,11 @@ async function renderScene(scene: any) {
   }
 }
 
-async function renderSceneVideo(scene: any) {
+async function renderSceneVideo(scene: any, agentMode = false) {
+  if(agentMode){
+    sendToChatbot(`Generate Image-to-Video clip for Scene #${scene.index}`);
+    return;
+  }
   try {
     toast.info(t('toast.renderingVideo', 'Rendering scene video...'));
     await pipelineStore.renderSceneVideo(scene.index, scene);
@@ -330,7 +468,17 @@ async function renderSceneVideo(scene: any) {
   }
 }
 
-async function renderAllScenes() {
+async function renderAllScenes(agentMode = false) {
+  if(agentMode){
+    const mode = await confirmGenerationScope();
+    if (mode === 'cancel') return;
+    if (mode === 'all') {
+      sendToChatbot('Force re-render storyboard image frames for all scenes');
+    } else {
+      sendToChatbot('Generate storyboard image frames for all scenes missing storyboard');
+    }
+    return;
+  }
   try {
     toast.info(t('workspace.renderAllScenes'));
     await pipelineStore.renderAllScenes();
@@ -340,14 +488,10 @@ async function renderAllScenes() {
   }
 }
 
-function getSceneStatus(sceneIndex: number) {
-  return pipelineStore.getSceneStatus(sceneIndex);
-}
-
 const isSyncingAudio = ref<Record<number, boolean>>({});
 
-async function handleSyncAudio(scene: any) {
-  const vUrl = scene.videoUrl || getSceneStatus(scene.index).videoUrl;
+async function handleSyncAudio(scene: any, agentMode = false) {
+  const vUrl = scene.video_url || getSceneStatus(scene.index).video_url;
   if (!vUrl) {
     toast.warning(t('workspace.videoRequiredFirst', 'Please render video first before syncing audio & captions.'));
     return;
@@ -355,6 +499,10 @@ async function handleSyncAudio(scene: any) {
 
   isSyncingAudio.value[scene.index] = true;
   try {
+    if(agentMode){
+      sendToChatbot(`Generate TTS voiceover and captions sync for Scene #${scene.index}`);
+      return;
+    }
     toast.info(t('workspace.syncingAudioCues', `Separating audio & extracting captions for Scene ${scene.index}...`));
     const result = await pipelineStore.separateSceneAudio(scene.index, vUrl, scene.dialogue);
     if (result) {
@@ -370,6 +518,11 @@ async function handleSyncAudio(scene: any) {
 }
 
 const b1Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b1'));
+const b2Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b2'));
+
+async function handleRenderAllAssetsAndStoryboard() {
+  await pipelineStore.renderAllAssetsAndStoryboard();
+}
 </script>
 
 <template>
@@ -405,6 +558,20 @@ const b1Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b1
           <el-icon class="mr-1"><Picture /></el-icon> 3. {{ t('workspace.tabStoryboard', 'Storyboard') }}
         </el-button>
       </div>
+
+      <!-- <div class="flex items-center gap-1">
+        <el-button
+          round
+          size="small"
+          type="primary"
+          icon="MagicStick"
+          :loading="b2Step?.status === 'running'"
+          class="!font-bold !text-xs !px-3"
+          @click="handleRenderAllAssetsAndStoryboard"
+        >
+          {{ t('workspace.renderAssetsAndStoryboard', 'Assets & Storyboard') }}
+        </el-button>
+      </div> -->
     </div>
 
     <!-- ════════════════════════════════════════════════════════════════════════ -->
@@ -449,7 +616,7 @@ const b1Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b1
           <h3 class="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style="color: var(--el-color-primary);">
             <el-icon :size="14"><User /></el-icon> {{ t('workspace.characters', 'Characters') }} ({{ extractedCharacters.length }})
           </h3>
-          <el-button link type="primary" size="small" icon="MagicStick" @click="handleRenderCharacters">
+          <el-button link type="primary" size="small" icon="MagicStick" @click="handleRenderCharacters(true)">
             {{ t('workspace.autofill', 'Autofill') }}
           </el-button>
         </div>
@@ -471,39 +638,43 @@ const b1Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b1
                   </div>
                 </template>
               </el-image>
-              <!-- <el-tag v-if="char.role" size="small" effect="plain" round class="text-[9px] absolute top-2 right-2">{{ char.role }}</el-tag>   -->
+              
+              <!-- Active Rendering Lock Overlay -->
+              <div v-if="isCharacterLocked(char)" class="absolute inset-0 z-20 backdrop-blur-[2px] bg-black/60 flex flex-col items-center justify-center gap-1.5 p-2 text-center transition-all animate-pulse">
+                <el-icon class="animate-spin text-lg text-primary"><Loading /></el-icon>
+                <span class="text-[10px] font-bold text-white tracking-wide">AI Generating...</span>
+              </div>
             </div>
 
             <div class="flex items-center justify-between">
-              <span class="font-bold text-xs" style="color: var(--el-text-color-primary);">{{ char.name }}</span>
+              <div class="flex items-center gap-2 min-w-0">
+                <el-avatar
+                  v-if="getCharacterAvatar(char)"
+                  :size="22"
+                  :src="getCharacterAvatar(char)"
+                  shape="circle"
+                  class="border border-white/20 bg-black/40 flex-shrink-0"
+                />
+                <span class="font-bold text-xs truncate" style="color: var(--el-text-color-primary);">{{ char.name }}</span>
+              </div>
             </div>
-            <p v-if="char.physicalCharacteristics" :title="char.physicalCharacteristics" class="text-[10px] line-clamp-2 leading-tight" style="color: var(--el-text-color-secondary);">
-              <strong style="color: var(--el-text-color-primary);">Face/Body:</strong> {{ char.physicalCharacteristics }}
+            <p v-if="char.physical_characteristics" :title="char.physical_characteristics" class="text-[10px] line-clamp-2 leading-tight" style="color: var(--el-text-color-secondary);">
+              <strong style="color: var(--el-text-color-primary);">Face/Body:</strong> {{ char.physical_characteristics }}
             </p>
             <p class="text-[10px] line-clamp-2 leading-tight" :title="getActiveWardrobeDesc(char)" style="color: var(--el-text-color-secondary);">
               <strong style="color: var(--el-text-color-primary);">Wardrobe:</strong> {{ getActiveWardrobeDesc(char) }}
             </p>
-            <div v-if="char.wardrobeVariants && char.wardrobeVariants.length > 0" :title="getActiveWardrobeDesc(char)" class="flex gap-1 flex-wrap items-center">
-              <span class="text-[9px] font-semibold opacity-70">Trang phục:</span>
+            <div v-if="char.wardrobe_variants && char.wardrobe_variants.length > 0" :title="getActiveWardrobeDesc(char)" class="flex gap-1 flex-wrap items-center">
+              <span class="text-[9px] font-semibold opacity-70">Wardrobe:</span>
               <el-tag
+                v-for="wv in char.wardrobe_variants"
+                :key="wv.variant_id"
                 size="small"
-                :type="!selectedWardrobeVariant[char.id] ? 'primary' : undefined"
-                :effect="!selectedWardrobeVariant[char.id] ? 'dark' : 'plain'"
+                :type="selectedWardrobeVariant[char.id] === wv.variant_id ? 'primary' : 'warning'"
+                :effect="selectedWardrobeVariant[char.id] === wv.variant_id ? 'dark' : 'plain'"
                 round
                 class="text-[8px] cursor-pointer"
-                @click="selectWardrobeVariant(char.id, '')"
-              >
-                Mặc định
-              </el-tag>
-              <el-tag
-                v-for="wv in char.wardrobeVariants"
-                :key="wv.variantId"
-                size="small"
-                :type="selectedWardrobeVariant[char.id] === wv.variantId ? 'primary' : 'warning'"
-                :effect="selectedWardrobeVariant[char.id] === wv.variantId ? 'dark' : 'plain'"
-                round
-                class="text-[8px] cursor-pointer"
-                @click="selectWardrobeVariant(char.id, wv.variantId)"
+                @click="selectWardrobeVariant(char.id, wv.variant_id)"
               >
                 👔 {{ wv.name }}
               </el-tag>
@@ -515,11 +686,12 @@ const b1Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b1
               type="primary"
               :plain="!!getActiveCharacterImage(char)"
               :icon="getActiveCharacterImage(char) ? 'RefreshLeft' : 'Picture'"
-              :loading="isGeneratingAssetImage[char.id]"
+              :loading="isCharacterLocked(char)"
+              :disabled="isCharacterLocked(char)"
               class="!w-full !text-[10px] mt-auto"
               @click="handleGenerateCharacterSheet(char)"
             >
-              {{ getActiveCharacterImage(char) ? t('workspace.reRender', 'Re-render') : t('workspace.render', 'Render') }}
+              {{ isCharacterLocked(char) ? 'Rendering...' : (getActiveCharacterImage(char) ? t('workspace.reRender', 'Re-render') : t('workspace.render', 'Render')) }}
             </el-button>
           </div>
         </div>
@@ -534,7 +706,7 @@ const b1Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b1
           <h3 class="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style="color: var(--el-color-primary);">
             <el-icon :size="14"><Location /></el-icon> {{ t('workspace.locations', 'Locations') }} ({{ extractedLocations.length }})
           </h3>
-          <el-button link type="primary" size="small" icon="MagicStick" @click="handleRenderLocations">
+          <el-button link type="primary" size="small" icon="MagicStick" @click="handleRenderLocations(true)">
             {{ t('workspace.autofill', 'Autofill') }}
           </el-button>
         </div>
@@ -548,7 +720,7 @@ const b1Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b1
           >
             <!-- 4-in-1 Preview / Placeholder -->
             <div class="w-full aspect-[16/9] relative rounded-lg border overflow-hidden relative flex items-center justify-center" style="border-color: var(--el-border-color);">
-              <el-image :src="loc.imageUrl" :preview-src-list="[loc.imageUrl]" :alt="loc.name" class="w-full h-full object-cover">
+              <el-image :src="loc.image_url" :preview-src-list="loc.image_url ? [loc.image_url] : []" :alt="loc.name" class="w-full h-full object-cover">
                 <template #error>
                   <div class="flex flex-col items-center justify-center p-2 text-center h-full">
                     <el-icon :size="24"><Location /></el-icon>
@@ -556,27 +728,34 @@ const b1Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b1
                   </div>
                 </template>
               </el-image>
-              <el-tag size="small" effect="plain" round class="text-[9px] absolute top-2 right-2">{{ loc.timeOfDay || 'Daytime' }}</el-tag>
+              <el-tag size="small" effect="plain" round class="text-[9px] absolute top-2 right-2">{{ loc.time_of_day || 'Daytime' }}</el-tag>
+
+              <!-- Active Rendering Lock Overlay -->
+              <div v-if="isLocationLocked(loc)" class="absolute inset-0 z-20 backdrop-blur-[2px] bg-black/60 flex flex-col items-center justify-center gap-1.5 p-2 text-center transition-all animate-pulse">
+                <el-icon class="animate-spin text-lg text-primary"><Loading /></el-icon>
+                <span class="text-[10px] font-bold text-white tracking-wide">AI Generating...</span>
+              </div>
             </div>
 
             <div class="flex justify-between items-center">
               <span class="font-bold text-xs" style="color: var(--el-text-color-primary);">{{ loc.name }}</span>
             </div>
-            <p class="text-[10px] line-clamp-2 leading-tight" :title="loc.physicalCharacteristics" style="color: var(--el-text-color-secondary);">
-              {{ loc.physicalCharacteristics }}
+            <p class="text-[10px] line-clamp-2 leading-tight" :title="loc.physical_characteristics" style="color: var(--el-text-color-secondary);">
+              {{ loc.physical_characteristics }}
             </p>
 
             <el-button
               size="small"
               round
               type="primary"
-              :plain="!!loc.imageUrl"
-              :icon="loc.imageUrl ? 'RefreshLeft' : 'Picture'"
-              :loading="isGeneratingAssetImage[loc.id]"
+              :plain="!!loc.image_url"
+              :icon="loc.image_url ? 'RefreshLeft' : 'Picture'"
+              :loading="isLocationLocked(loc)"
+              :disabled="isLocationLocked(loc)"
               class="!w-full !text-[10px] mt-auto"
               @click="handleGenerateLocationSheet(loc)"
             >
-              {{ loc.imageUrl ? t('workspace.reRender', 'Re-render') : t('workspace.render', 'Render') }}
+              {{ isLocationLocked(loc) ? 'Rendering...' : (loc.image_url ? t('workspace.reRender', 'Re-render') : t('workspace.render', 'Render')) }}
             </el-button>
           </div>
         </div>
@@ -591,7 +770,7 @@ const b1Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b1
           <h3 class="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style="color: var(--el-color-primary);">
             <el-icon :size="14"><Box /></el-icon> {{ t('workspace.props', 'Props & Objects') }} ({{ extractedProps.length }})
           </h3>
-          <el-button link type="primary" size="small" icon="MagicStick" @click="handleRenderProps">
+          <el-button link type="primary" size="small" icon="MagicStick" @click="handleRenderProps(true)">
             {{ t('workspace.autofill', 'Autofill') }}
           </el-button>
         </div>
@@ -605,7 +784,7 @@ const b1Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b1
           >
             <!-- Product Shot Preview -->
             <div class="w-full aspect-[16/9] rounded-lg border overflow-hidden relative flex items-center justify-center" style="border-color: var(--el-border-color);">
-              <el-image :src="prop.imageUrl" :preview-src-list="[prop.imageUrl]" :alt="prop.name" class="w-full h-full object-cover">
+              <el-image :src="prop.image_url" :preview-src-list="prop.image_url ? [prop.image_url] : []" :alt="prop.name" class="w-full h-full object-cover">
                 <template #error>
                   <div class="flex flex-col items-center justify-center p-2 text-center h-full">
                     <el-icon :size="24"><Box /></el-icon>
@@ -613,26 +792,33 @@ const b1Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b1
                   </div>
                 </template>
               </el-image>
+
+              <!-- Active Rendering Lock Overlay -->
+              <div v-if="isPropLocked(prop)" class="absolute inset-0 z-20 backdrop-blur-[2px] bg-black/60 flex flex-col items-center justify-center gap-1.5 p-2 text-center transition-all animate-pulse">
+                <el-icon class="animate-spin text-lg text-primary"><Loading /></el-icon>
+                <span class="text-[10px] font-bold text-white tracking-wide">AI Generating...</span>
+              </div>
             </div>
 
             <div class="flex items-center justify-between">
               <span class="font-bold text-xs" style="color: var(--el-text-color-primary);">{{ prop.name }}</span>
             </div>
-            <p class="text-[10px] line-clamp-2 leading-tight" :title="prop.physicalCharacteristics" style="color: var(--el-text-color-secondary);">
-              {{ prop.physicalCharacteristics }}
+            <p class="text-[10px] line-clamp-2 leading-tight" :title="prop.physical_characteristics" style="color: var(--el-text-color-secondary);">
+              {{ prop.physical_characteristics }}
             </p>
 
             <el-button
               size="small"
               round
               type="primary"
-              :plain="!!prop.imageUrl"
-              :icon="prop.imageUrl ? 'RefreshLeft' : 'Picture'"
-              :loading="isGeneratingAssetImage[prop.id]"
+              :plain="!!prop.image_url"
+              :icon="prop.image_url ? 'RefreshLeft' : 'Picture'"
+              :loading="isPropLocked(prop)"
+              :disabled="isPropLocked(prop)"
               class="!w-full !text-[10px] mt-auto"
               @click="handleGeneratePropSheet(prop)"
             >
-              {{ prop.imageUrl ? t('workspace.reRender', 'Re-render') : t('workspace.render', 'Render') }}
+              {{ isPropLocked(prop) ? 'Rendering...' : (prop.image_url ? t('workspace.reRender', 'Re-render') : t('workspace.render', 'Render')) }}
             </el-button>
           </div>
         </div>
@@ -651,7 +837,7 @@ const b1Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b1
           <h3 class="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style="color: var(--el-color-primary);">
             <el-icon :size="14"><VideoCamera /></el-icon> {{ t('workspace.storyboard', 'Storyboard') }} ({{ scenes.length }} {{ t('workspace.scenes', 'Scenes') }})
           </h3>
-          <el-button link type="primary" size="small" icon="MagicStick" @click="renderAllScenes">
+          <el-button link type="primary" size="small" icon="MagicStick" @click="renderAllScenes(true)">
             {{ t('workspace.autofill', 'Autofill') }}
           </el-button>
         </div>
@@ -672,10 +858,10 @@ const b1Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b1
               style="border-color: var(--el-border-color);"
             >
               <el-image
-                :src="scene.storyboardFrameUrl || getSceneStatus(scene.index).storyboardUrl"
+                :src="scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url"
                 :alt="`Scene ${scene.index}`"
                 :preview-teleported="true"
-                :preview-src-list="[scene.storyboardFrameUrl || getSceneStatus(scene.index).storyboardUrl || '']"
+                :preview-src-list="[scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url || '']"
                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               >
                 <template #error>
@@ -685,58 +871,60 @@ const b1Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b1
                   </div>
                 </template>
               </el-image>
+
+              <!-- Active Rendering Lock Overlay -->
+              <div v-if="isSceneLocked(scene)" class="absolute inset-0 z-20 backdrop-blur-[2px] bg-black/60 flex flex-col items-center justify-center gap-1.5 p-2 text-center transition-all animate-pulse">
+                <el-icon class="animate-spin text-lg text-primary"><Loading /></el-icon>
+                <span class="text-[10px] font-bold text-white tracking-wide">AI Rendering...</span>
+              </div>
               
-              <div v-if="scene.videoUrl || getSceneStatus(scene.index).videoUrl" @click.stop="openVideoPreview(scene)" class="absolute bottom-2 right-2 z-10">
+              <div v-if="scene.video_url || getSceneStatus(scene.index).video_url" @click.stop="openVideoPreview(scene)" class="absolute bottom-2 right-2 z-10">
                 <el-button type="primary" icon="VideoPlay" size="small" circle></el-button>
               </div>
 
               <el-tag size="small" effect="plain" round class="text-[9px] absolute top-2 right-2">
-                #{{ sIdx + 1 }} | {{ scene.durationSeconds || 6 }}s
+                #{{ sIdx + 1 }} | {{ scene.duration_seconds || 6 }}s
               </el-tag>
-
-              <!-- <div class="absolute  top-1.5 left-1.5 shadow z-10"> -->
-                <!-- #{{ String(scene.index || (sIdx + 1)).padStart(2, '0') }} -->
-                <!-- <el-tag v-if="scene.sceneNumber && scene.shotNumber" size="small" type="warning" effect="dark" round class="text-[9px] font-mono">
-                  #{{ sIdx + 1 }} | {{ scene.durationSeconds || 6 }}s
-                </el-tag> -->
-              <!-- </div> -->
             </div>
 
             <el-button
               size="small"
               round
-              :type="scene.storyboardFrameUrl || getSceneStatus(scene.index).storyboardUrl ? '' : 'primary'"
-              :plain="!!(scene.storyboardFrameUrl || getSceneStatus(scene.index).storyboardUrl)"
-              :icon="scene.storyboardFrameUrl || getSceneStatus(scene.index).storyboardUrl ? 'RefreshLeft' : 'Picture'"
-              :loading="getSceneStatus(scene.index).bgStatus === 'running'"
+              :type="scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url ? '' : 'primary'"
+              :plain="!!(scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url)"
+              :icon="scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url ? 'RefreshLeft' : 'Picture'"
+              :loading="isSceneLocked(scene)"
+              :disabled="isSceneLocked(scene)"
               class="!w-full !text-[10px] !px-1.5"
               @click="renderScene(scene)"
             >
-              {{ scene.storyboardFrameUrl || getSceneStatus(scene.index).storyboardUrl ? t('workspace.reRender') : t('workspace.renderScene') }}
+              {{ scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url ? t('workspace.reRender') : t('workspace.renderScene') }}
             </el-button>
 
             <el-button
-              v-if="scene.storyboardFrameUrl || getSceneStatus(scene.index).storyboardUrl"
+              v-if="scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url"
               size="small"
               round
-              :type="scene.videoUrl || getSceneStatus(scene.index).videoUrl ? '' : 'success'"
-              :plain="!!(scene.videoUrl || getSceneStatus(scene.index).videoUrl)"
-              :icon="scene.videoUrl || getSceneStatus(scene.index).videoUrl ? 'RefreshLeft' : 'Film'"
-              :loading="getSceneStatus(scene.index).videoStatus === 'running'"
+              :type="scene.video_url || getSceneStatus(scene.index).video_url ? '' : 'success'"
+              :plain="!!(scene.video_url || getSceneStatus(scene.index).video_url)"
+              :icon="scene.video_url || getSceneStatus(scene.index).video_url ? 'RefreshLeft' : 'Film'"
+              :loading="isSceneLocked(scene)"
+              :disabled="isSceneLocked(scene)"
               class="!w-full !text-[10px] !px-1.5 !ml-0"
               @click="renderSceneVideo(scene)"
             >
-              {{ scene.videoUrl || getSceneStatus(scene.index).videoUrl ? t('workspace.reRenderVideo') : t('workspace.renderVideo') }}
+              {{ scene.video_url || getSceneStatus(scene.index).video_url ? t('workspace.reRenderVideo') : t('workspace.renderVideo') }}
             </el-button>
 
             <el-button
-              v-if="scene.videoUrl || getSceneStatus(scene.index).videoUrl"
+              v-if="scene.video_url || getSceneStatus(scene.index).video_url"
               size="small"
               round
               type="warning"
               plain
               icon="Microphone"
-              :loading="isSyncingAudio[scene.index]"
+              :loading="isSceneLocked(scene)"
+              :disabled="isSceneLocked(scene)"
               class="!w-full !text-[10px] !px-1.5 !ml-0"
               @click="handleSyncAudio(scene)"
             >
@@ -751,16 +939,16 @@ const b1Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b1
                 {{ scene.heading || `SCENE ${String(scene.index || (sIdx + 1)).padStart(2, '0')}` }}
               </span>
               <!-- <div class="flex items-center gap-1.5 shrink-0">
-                <el-tag v-if="scene.sceneNumber && scene.shotNumber" size="small" type="warning" effect="dark" round class="text-[9px] font-mono">
-                  S{{ scene.sceneNumber }} · SHOT {{ scene.shotNumber }}
+                <el-tag v-if="scene.scene_number && scene.shot_number" size="small" type="warning" effect="dark" round class="text-[9px] font-mono">
+                  S{{ scene.scene_number }} · SHOT {{ scene.shot_number }}
                 </el-tag>
-                <span class="text-[10px] font-mono" style="color: var(--el-text-color-secondary);">{{ scene.durationSeconds || 6 }}s</span>
+                <span class="text-[10px] font-mono" style="color: var(--el-text-color-secondary);">{{ scene.duration_seconds || 6 }}s</span>
               </div> -->
             </div>
 
             <div class="flex gap-1.5 flex-wrap mb-2">
               <el-tag v-if="scene.location" size="small" type="info" effect="plain" round class="text-[10px]">{{ scene.location }}</el-tag>
-              <el-tag v-if="scene.timeOfDay" size="small" effect="plain" round class="text-[10px]">{{ scene.timeOfDay }}</el-tag>
+              <el-tag v-if="scene.time_of_day" size="small" effect="plain" round class="text-[10px]">{{ scene.time_of_day }}</el-tag>
               <el-tag v-for="p in (scene.props || [])" :key="p" size="small" type="success" effect="plain" round class="text-[10px]">
                 📦 {{ p }}
               </el-tag>
@@ -800,7 +988,7 @@ const b1Step = computed(() => pipelineStore.pipelineSteps.find(s => s.id === 'b1
       <div v-if="previewScene" class="flex flex-col items-center gap-3">
         <div class="w-full max-w-[300px] rounded-2xl overflow-hidden bg-black shadow-2xl border relative flex items-center justify-center" style="border-color: var(--el-border-color);">
           <video
-            :src="previewScene.videoUrl || getSceneStatus(previewScene.index).videoUrl"
+            :src="previewScene.video_url || getSceneStatus(previewScene.index).video_url"
             controls autoplay loop playsinline class="w-full h-full object-contain"
           />
         </div>

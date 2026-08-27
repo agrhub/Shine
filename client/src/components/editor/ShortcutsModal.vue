@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import {
   Dialog,
   DialogContent,
@@ -15,6 +16,7 @@ interface ShortcutsModalProps {
 
 defineProps<ShortcutsModalProps>();
 const emit = defineEmits(['update:open']);
+const { t } = useI18n();
 
 interface ShortcutItem {
   label: string;
@@ -93,7 +95,7 @@ const SHORTCUTS: ShortcutCategory[] = [
   <Dialog :open="open" @update:open="(val) => emit('update:open', val)">
     <DialogContent class="md:max-w-5xl w-full max-w-5xl border bg-card p-6 py-8 overflow-hidden">
       <DialogHeader class="px-6">
-        <DialogTitle class="text-lg font-semibold">Shortcuts</DialogTitle>
+        <DialogTitle class="text-lg font-semibold">{{ t('editor.shortcuts') }}</DialogTitle>
       </DialogHeader>
       <div class="px-6">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-8">

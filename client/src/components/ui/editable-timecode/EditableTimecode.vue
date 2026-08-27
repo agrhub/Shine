@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
 import { cn } from '@/utils/utils';
-import { formatTimeCode, parseTimeCode, type TimeCode, DEFAULT_FPS } from '~/lib/time';
+import { formatTimeCode, parseTimeCode, type TimeCode, DEFAULT_FPS } from '@/utils/time';
 
 interface Props {
   time: number;

@@ -116,7 +116,7 @@ const addItemToCanvas = async (asset: PexelsImage) => {
 
       <div v-else-if="images.length === 0" class="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
         <ImageIcon :size="32" class="opacity-50" />
-        <span class="text-sm">No images found</span>
+        <span class="text-sm">{{ $t('editor.noImagesFound') }}</span>
       </div>
 
       <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-2">

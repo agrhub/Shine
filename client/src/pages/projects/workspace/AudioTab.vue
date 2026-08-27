@@ -12,6 +12,7 @@ import {
   type GeminiSpeechLanguage
 } from '@/constants/geminiLanguages';
 import { TabPaneName } from 'element-plus';
+import http from '@/utils/http';
 
 const { t } = useI18n();
 const seriesStore = useSeriesStore();
@@ -77,7 +78,7 @@ function playVoiceSample(voiceId: string) {
     voiceAudioPlayer.pause();
   }
   const matched = pipelineStore.voicePresets.find(v => v.id === voiceId);
-  const sampleUrl = matched?.audioSampleUrl || `https://gstatic.com/aistudio/voices/samples/${voiceId}.wav`;
+  const sampleUrl = matched?.audio_sample_url || `https://gstatic.com/aistudio/voices/samples/${voiceId}.wav`;
   voiceAudioPlayer = new Audio(sampleUrl);
   isPlayingSample.value = true;
   voiceAudioPlayer.play().catch(() => {
@@ -101,7 +102,7 @@ const mainTargetLang = computed<GeminiSpeechLanguage>(() => {
 });
 
 // Selected active language track
-const activeVoiceLang = ref<string>('vi-VN');
+const activeVoiceLang = ref<string>('en-US');
 // Multi-select languages for batch voiceover generation
 const selectedBatchLangs = ref<string[]>([]);
 const isBatchMode = ref(false);
@@ -109,28 +110,171 @@ const selectedLangToAdd = ref<string>('');
 const isEnableDubbing = ref(false);
 
 // Visible language tabs
-const activeTrackCodes = ref<string[]>([]);
+const activeTrackCodes = computed(() => seriesStore.dubbingLanguages);
+
+// Dubbing settings hydration from active episode
+watch(() => seriesStore.activeEpisode?.dubbing_settings, (settings) => {
+  if (settings) {
+    if (settings.isEnableDubbing !== undefined) isEnableDubbing.value = settings.isEnableDubbing;
+    if (settings.autoDucking !== undefined) autoDucking.value = settings.autoDucking;
+    if (settings.selectedVoicePreset) selectedVoicePreset.value = settings.selectedVoicePreset;
+    if (settings.voiceIntensity !== undefined) voiceIntensity.value = settings.voiceIntensity;
+    if (settings.voicePacing !== undefined) voicePacing.value = settings.voicePacing;
+  }
+}, { immediate: true, deep: true });
+
+function persistDubbingSettings() {
+  const epId = seriesStore.activeEpisodeId;
+  const sId = seriesStore.currentSeries?.id;
+  if (!epId) return;
+  seriesStore.updateEpisodeDubbingSettings(epId, {
+    isEnableDubbing: isEnableDubbing.value,
+    autoDucking: autoDucking.value,
+    selectedVoicePreset: selectedVoicePreset.value,
+    voiceIntensity: voiceIntensity.value,
+    voicePacing: voicePacing.value,
+  });
+  if (sId) seriesStore.saveEpisodeScenes(sId, epId);
+}
+
+watch([isEnableDubbing, autoDucking, selectedVoicePreset, voiceIntensity, voicePacing], () => {
+  persistDubbingSettings();
+});
 
 // Auto-sync main language when active series changes
 watch(mainTargetLang, (newMain) => {
   if (newMain) {
-    if (!activeTrackCodes.value.includes(newMain.code)) {
-      activeTrackCodes.value.unshift(newMain.code);
-    }
+    seriesStore.addDubbingLanguage(newMain.code);
     // Set default active voice language to target market's main language
-    if (!activeVoiceLang.value || activeVoiceLang.value === 'en-US' && newMain.code !== 'en-US') {
+    if (!activeVoiceLang.value || (activeVoiceLang.value === 'en-US' && newMain.code !== 'en-US')) {
       activeVoiceLang.value = newMain.code;
     }
   }
 }, { immediate: true });
 
+const isDubbingLoading = ref(false);
+
+function getSceneDialogueList(scene: any, langCode: string) {
+  if (langCode === mainTargetLang.value?.code || !langCode) {
+    return Array.isArray(scene.dialogue) ? scene.dialogue : [{ character: scene.character || 'Character', line: scene.dialogue || '' }];
+  }
+  const epId = seriesStore.activeEpisodeId;
+  const translated = epId ? seriesStore.getLanguageTrackDialogue(epId, langCode, scene.index) : null;
+  if (translated) {
+    const speaker = scene.dialogue?.[0]?.character || 'Character';
+    return [{ character: speaker, line: translated }];
+  }
+  const tracks = epId ? seriesStore.getLanguageTracks(epId) : [];
+  const track = tracks.find(t => t.language_code === langCode);
+  const cues = track?.scene_captions?.[scene.index];
+  if (cues && cues.length > 0) {
+    const speaker = scene.dialogue?.[0]?.character || 'Character';
+    return [{ character: speaker, line: cues.map((c: any) => c.text).join(' ') }];
+  }
+  return Array.isArray(scene.dialogue) ? scene.dialogue : [{ character: scene.character || 'Character', line: scene.dialogue || '' }];
+}
+
+async function handleTranslateAndDubLanguage(targetLang: string) {
+  const epId = seriesStore.activeEpisodeId;
+  const seriesId = seriesStore.currentSeries?.id;
+  if (!epId || !seriesId || !targetLang) return;
+
+  isDubbingLoading.value = true;
+  try {
+    toast.info(t('toast.dubbingStarted'));
+
+    const scenesToDub = scenes.value.map(s => {
+      let dialogueText = '';
+      let speaker = '';
+      if (Array.isArray(s.dialogue)) {
+        dialogueText = s.dialogue.map((d: any) => d.line || d.text || '').join(' ');
+        speaker = s.dialogue[0]?.character || '';
+      } else {
+        dialogueText = s.dialogue || '';
+      }
+      return {
+        sceneIndex: s.index,
+        character: speaker,
+        dialogue: dialogueText,
+      };
+    }).filter(s => s.dialogue.trim().length > 0);
+
+    // 1. Translate dialogue to target language if not main
+    let translatedScenes = scenesToDub;
+    if (targetLang !== mainTargetLang.value.code) {
+      const transRes: any = await http.post('/captions/batch-translate', {
+        episodeId: epId,
+        targetLanguage: targetLang,
+        scenes: scenesToDub,
+      });
+      const transData = transRes?.data?.translatedScenes || transRes?.translatedScenes || [];
+      if (transData.length > 0) {
+        translatedScenes = scenesToDub.map(s => {
+          const matched = transData.find((t: any) => (t.sceneIndex || t.index) === s.sceneIndex);
+          return {
+            ...s,
+            translatedDialogue: matched?.translatedDialogue || s.dialogue,
+          };
+        });
+      }
+    }
+
+    // 2. Generate TTS Audio for translated lines (backend automatically resolves character voices from database)
+    const dubRes: any = await http.post('/captions/batch-dubbing', {
+      seriesId,
+      episodeId: epId,
+      targetLanguage: targetLang,
+      scenes: translatedScenes,
+    });
+
+    const voiceovers = dubRes?.data?.voiceovers || dubRes?.voiceovers || {};
+    Object.keys(voiceovers).forEach((scIdxStr) => {
+      const scIdx = Number(scIdxStr);
+      const vo = voiceovers[scIdx];
+      if (vo?.audioUrl) {
+        seriesStore.updateLanguageTrackVoiceover(epId, targetLang, scIdx, vo.audioUrl);
+      }
+    });
+
+    // 3. Save translated dialogue and synced caption cues for target language
+    translatedScenes.forEach((ts: any) => {
+      const scIdx = ts.scene_index || ts.sceneIndex || ts.index;
+      const text = ts.translated_dialogue || ts.translatedDialogue || ts.dialogue || '';
+      if (text) {
+        seriesStore.updateLanguageTrackDialogue(epId, targetLang, scIdx, text);
+        const originalScene = scenes.value.find(s => s.index === scIdx);
+        const durMs = (originalScene?.duration_seconds || 6) * 1000;
+        seriesStore.updateLanguageTrackCaptions(epId, targetLang, scIdx, [{
+          id: `cue_${scIdx}_${targetLang}_0`,
+          text: text,
+          start_ms: 0,
+          end_ms: durMs,
+          from_us: 0,
+          to_us: durMs * 1000,
+        }]);
+      }
+    });
+
+    seriesStore.syncVoiceoverTrackToTimeline(epId, targetLang);
+    seriesStore.syncCaptionTrackToTimeline(epId, targetLang);
+    if (seriesId) await seriesStore.saveEpisodeScenes(seriesId, epId);
+    toast.success(t('toast.dubbingSuccess'));
+  } catch (err: any) {
+    toast.error(t('toast.dubbingFailed'));
+  } finally {
+    isDubbingLoading.value = false;
+  }
+}
+
 function handleAddLanguage(code: string) {
   if (!code) return;
-  if (!activeTrackCodes.value.includes(code)) {
-    activeTrackCodes.value.push(code);
-  }
+  seriesStore.addDubbingLanguage(code);
   activeVoiceLang.value = code;
+  seriesStore.setPreviewVoiceLanguage(code);
   selectedLangToAdd.value = '';
+  if (isEnableDubbing.value) {
+    handleTranslateAndDubLanguage(code);
+  }
 }
 
 function getRenderedLangs(sceneIndex: number): string[] {
@@ -138,8 +282,8 @@ function getRenderedLangs(sceneIndex: number): string[] {
   if (!epId) return [];
   const tracks = seriesStore.getLanguageTracks(epId);
   return tracks
-    .filter(t => !!t.sceneVoiceovers[sceneIndex])
-    .map(t => getLanguageByCode(t.languageCode).flag || t.languageCode);
+    .filter(t => !!t.scene_voiceovers[sceneIndex])
+    .map(t => getLanguageByCode(t.language_code).flag || t.language_code);
 }
 
 function getSceneStatus(sceneIndex: number) {
@@ -150,16 +294,26 @@ function getSceneVoiceoverUrl(sceneIndex: number): string {
   const epId = seriesStore.activeEpisodeId;
   if (epId) {
     const tracks = seriesStore.getLanguageTracks(epId);
-    const track = tracks.find(t => t.languageCode === activeVoiceLang.value);
-    if (track?.sceneVoiceovers?.[sceneIndex]) {
-      return track.sceneVoiceovers[sceneIndex];
+    const track = tracks.find(t => t.language_code === activeVoiceLang.value);
+    if (track?.scene_voiceovers?.[sceneIndex]) {
+      return track.scene_voiceovers[sceneIndex];
     }
   }
-  return getSceneStatus(sceneIndex).voiceoverUrl || '';
+  return getSceneStatus(sceneIndex).voiceover_url || '';
 }
 
 function isSceneVoiceoverRendered(sceneIndex: number): boolean {
   return !!getSceneVoiceoverUrl(sceneIndex);
+}
+
+function isSceneAudioLocked(sceneIndex: number): boolean {
+  return !!(
+    getSceneStatus(sceneIndex).voiceover_status === 'running' ||
+    (getSceneStatus(sceneIndex) as any).voiceoverStatus === 'running' ||
+    pipelineStore.isItemRendering(`Scene #${sceneIndex}`) ||
+    pipelineStore.isItemRendering(`Scene ${sceneIndex}`) ||
+    pipelineStore.isItemRendering(sceneIndex)
+  );
 }
 
 async function renderSceneVoiceover(scene: any) {
@@ -171,7 +325,7 @@ async function renderSceneVoiceover(scene: any) {
     toast.info(t('toast.renderingVoiceoverScene'));
     const firstSpeakerName = scene.dialogue[0]?.character;
     const matchedChar = characters.value.find(c => c.name.toLowerCase() === (firstSpeakerName || '').toLowerCase());
-    const voiceToUse = matchedChar?.voiceId || selectedVoicePreset.value;
+    const voiceToUse = matchedChar?.voice_id || (matchedChar as any)?.voiceId || selectedVoicePreset.value;
 
     await pipelineStore.renderSceneVoiceover(
       scene.index,
@@ -208,28 +362,27 @@ async function renderAllVoiceovers() {
   }
 }
 
-async function renderSceneBgm(scene: any) {
-  try {
-    toast.info(t('toast.renderingBgmScene'));
-    await pipelineStore.renderSceneBgm(
-      scene.index,
-      scene.bgmMood || 'dramatic cinematic suspense',
-      scene.durationSeconds || 15
-    );
-    toast.success(t('toast.bgmQueued'));
-  } catch {
-    toast.error(t('toast.bgmRenderFailed'));
-  }
-}
+// async function renderSceneBgm(scene: any) {
+//   try {
+//     toast.info(t('toast.renderingBgmScene'));
+//     await pipelineStore.renderSceneBgm(
+//       scene.index,
+//       scene.bgm_mood || scene.bgmMood || 'dramatic cinematic suspense',
+//       scene.duration_seconds || scene.durationSeconds || 15
+//     );
+//     toast.success(t('toast.bgmQueued'));
+//   } catch {
+//     toast.error(t('toast.bgmRenderFailed'));
+//   }
+// }
 
 function handleRemoveLanguage(lang: TabPaneName){
-  console.log('remove language:', lang);
-  if (activeTrackCodes.value.length === 1) {
+  if (seriesStore.dubbingLanguages.length === 1) {
     return;
   }
-  activeTrackCodes.value.splice(activeTrackCodes.value.indexOf(lang as string), 1);
+  seriesStore.removeDubbingLanguage(lang as string);
   if (activeVoiceLang.value === lang) {
-    activeVoiceLang.value = activeTrackCodes.value[0];
+    activeVoiceLang.value = seriesStore.dubbingLanguages[0];
   }
 };
 </script>
@@ -258,7 +411,7 @@ function handleRemoveLanguage(lang: TabPaneName){
         >
           <el-avatar
             :size="48"
-            :src="char.avatarUrl || ''"
+            :src="char.avatar || ''"
             class="shrink-0"
             style="background-color: var(--el-fill-color-dark);"
           >
@@ -271,7 +424,7 @@ function handleRemoveLanguage(lang: TabPaneName){
             </div>
 
             <el-tag size="small" type="success" round effect="plain" class="!text-[9px] !font-bold !rounded-md w-fit">
-              🎙 {{ char.voiceId || 'Puck' }}
+              🎙 {{ char.voice_id || 'Puck' }}
             </el-tag>
             <el-tag v-if="char.gender" size="small" round effect="plain" class="!text-[9px] !rounded-md w-fit">
               {{ char.gender === 'female' ? `♀ ${t('workspace.female')}` : char.gender === 'male' ? `♂ ${t('workspace.male')}` : t('workspace.neutral') }}
@@ -296,7 +449,17 @@ function handleRemoveLanguage(lang: TabPaneName){
           <p class="text-xs font-semibold" style="color: var(--el-text-color-primary);">{{ t('workspace.aiAutoDubbing', 'AI Auto Dubbing') }}</p>
           <p class="text-[10px]" style="color: var(--el-text-color-secondary);">{{ t('workspace.autoGenerateEpisodeDubbing', 'Auto generate episode dubbing') }}</p>
         </div>
-        <el-switch v-model="isEnableDubbing" size="small" />
+        <el-badge value="Comming soon" class="item">
+          <el-switch v-model="isEnableDubbing" :disabled="true" size="small" />
+        </el-badge>
+      </div>
+
+      <div v-if="isEnableDubbing" class="p-3.5 rounded-xl border flex items-center justify-between" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
+        <div class="flex items-center gap-3">
+          <el-icon style="color: var(--el-text-color-secondary);"><Headset /></el-icon>
+          <span class="text-xs font-semibold" style="color: var(--el-text-color-primary);">{{ t('workspace.autoDucking') }}</span>
+        </div>
+        <el-switch v-model="autoDucking" size="small" />
       </div>
     </div>
     <template v-if="isEnableDubbing">
@@ -353,6 +516,31 @@ function handleRemoveLanguage(lang: TabPaneName){
           </span>
         </template>
         <div class="flex flex-col gap-3 px-3">
+          <!-- Auto-Dub Banner for Non-Main Language Tracks -->
+          <div
+            v-if="code !== mainTargetLang.code"
+            class="p-3 rounded-xl border flex items-center justify-between bg-emerald-500/5 border-emerald-500/20 mb-1"
+          >
+            <div class="flex flex-col gap-0.5">
+              <p class="text-xs font-bold text-emerald-500 flex items-center gap-1">
+                🎙 {{ t('workspace.autoDubTo', `Auto-Dub to ${getLanguageByCode(code).nativeName}`) }}
+              </p>
+              <p class="text-[10px]" style="color: var(--el-text-color-secondary);">
+                {{ t('workspace.dubFromMainDesc', `Translate dialogue and generate neural TTS voiceovers for ${getLanguageByCode(code).nativeName}`) }}
+              </p>
+            </div>
+            <el-button
+              type="success"
+              size="small"
+              round
+              :loading="isDubbingLoading"
+              icon="Microphone"
+              @click="handleTranslateAndDubLanguage(code)"
+            >
+              {{ isDubbingLoading ? t('workspace.generating', 'Generating...') : t('workspace.dubNow', 'Dub Now') }}
+            </el-button>
+          </div>
+
           <!-- Voiceover Tracks Per Scene -->
           <div>
             <div class="flex items-center justify-between mb-3">
@@ -398,9 +586,9 @@ function handleRemoveLanguage(lang: TabPaneName){
                   </div>
 
                   <!-- Dialogue Preview -->
-                  <div v-if="scene.dialogue && scene.dialogue.length" class="p-2.5 space-y-1">
+                  <div v-if="getSceneDialogueList(scene, code).length" class="p-2.5 space-y-1">
                     <div
-                      v-for="(dlg, dIdx) in scene.dialogue"
+                      v-for="(dlg, dIdx) in getSceneDialogueList(scene, code)"
                       :key="dIdx"
                       class="flex items-start gap-2 text-[10px]"
                     >
@@ -433,10 +621,11 @@ function handleRemoveLanguage(lang: TabPaneName){
                       round
                       icon="MagicStick"
                       plain
-                      :loading="getSceneStatus(scene.index).voiceoverStatus === 'running'"
+                      :loading="isSceneAudioLocked(scene.index)"
+                      :disabled="isSceneAudioLocked(scene.index)"
                       @click="renderSceneVoiceover(scene)"
                     >
-                      {{ isSceneVoiceoverRendered(scene.index) ? t('workspace.rerender', 'Re-render') : t('workspace.render', 'Render') }}
+                      {{ isSceneAudioLocked(scene.index) ? 'Rendering...' : (isSceneVoiceoverRendered(scene.index) ? t('workspace.rerender', 'Re-render') : t('workspace.render', 'Render')) }}
                     </el-button>
                   </div>
                 </div>
@@ -479,18 +668,18 @@ function handleRemoveLanguage(lang: TabPaneName){
             <el-icon style="color: var(--el-text-color-secondary);"><Headset /></el-icon>
             <div class="flex-1 min-w-0">
               <p class="text-[10px] font-bold" style="color: var(--el-text-color-primary);">{{ t('workspace.sceneAbbr') }} {{ String(scene.index).padStart(2, '0') }}</p>
-              <p class="text-[9px] truncate" style="color: var(--el-text-color-secondary);">{{ scene.bgmMood || 'No BGM mood set' }}</p>
+              <p class="text-[9px] truncate" style="color: var(--el-text-color-secondary);">{{ scene.bgm_mood || (scene as any).bgmMood || 'No BGM mood set' }}</p>
             </div>
             <div class="flex items-center gap-1.5">
               <!-- Music Preview Button -->
               <el-button
-                v-if="scene.bgmUrl || getSceneStatus(scene.index).bgmUrl"
+                v-if="scene.bgm_url || (scene as any).bgmUrl || getSceneStatus(scene.index).bgm_url || (getSceneStatus(scene.index) as any).bgmUrl"
                 size="small"
                 circle
                 :type="currentlyPlayingId === `bgm_${scene.index}` ? 'success' : ''"
                 :plain="currentlyPlayingId !== `bgm_${scene.index}`"
                 :title="currentlyPlayingId === `bgm_${scene.index}` ? 'Pause Music' : 'Preview Music'"
-                @click="togglePlayAudio(scene.bgmUrl || getSceneStatus(scene.index).bgmUrl, `bgm_${scene.index}`)"
+                @click="togglePlayAudio(scene.bgm_url || (scene as any).bgmUrl || getSceneStatus(scene.index).bgm_url || (getSceneStatus(scene.index) as any).bgmUrl, `bgm_${scene.index}`)"
               >
                 <el-icon>
                   <VideoPause v-if="currentlyPlayingId === `bgm_${scene.index}`" />
@@ -499,12 +688,12 @@ function handleRemoveLanguage(lang: TabPaneName){
               </el-button>
 
               <el-tag
-                :type="getSceneStatus(scene.index).bgmStatus === 'done' || scene.bgmUrl ? 'success' : getSceneStatus(scene.index).bgmStatus === 'running' ? 'warning' : 'info'"
+                :type="getSceneStatus(scene.index).bgm_status === 'done' || (getSceneStatus(scene.index) as any).bgmStatus === 'done' || scene.bgm_url || (scene as any).bgmUrl ? 'success' : getSceneStatus(scene.index).bgm_status === 'running' || (getSceneStatus(scene.index) as any).bgmStatus === 'running' ? 'warning' : 'info'"
                 size="small"
                 effect="plain"
               >
-                <el-icon v-if="getSceneStatus(scene.index).bgmStatus === 'running'"><Loading /></el-icon>
-                {{ getSceneStatus(scene.index).bgmStatus === 'running' ? 'running' : (scene.bgmUrl || getSceneStatus(scene.index).bgmStatus === 'done' ? 'done' : 'idle') }}
+                <el-icon v-if="getSceneStatus(scene.index).bgm_status === 'running' || (getSceneStatus(scene.index) as any).bgmStatus === 'running'"><Loading /></el-icon>
+                {{ getSceneStatus(scene.index).bgm_status === 'running' || (getSceneStatus(scene.index) as any).bgmStatus === 'running' ? 'running' : (scene.bgm_url || (scene as any).bgmUrl || getSceneStatus(scene.index).bgm_status === 'done' ? 'done' : 'idle') }}
               </el-tag>
               <!-- <el-button
                 size="small"
@@ -526,17 +715,11 @@ function handleRemoveLanguage(lang: TabPaneName){
     </div>
 
     <!-- AI Music & Ambience Generator -->
-    <div class="flex flex-col gap-4">
+    <!-- <div class="flex flex-col gap-4">
       <h3 class="text-xs font-bold uppercase tracking-wider" style="color: var(--el-text-color-secondary);">
         {{ t('workspace.aiMusicAmbience') }}
       </h3>
-      <!-- <el-input v-model="sceneScorePrompt" :placeholder="t('workspace.sceneScorePlaceholder')" size="large" class="!rounded-xl">
-        <template #suffix>
-          <el-button link type="primary" icon="MagicStick" @click="toast.info(t('toast.generatingAiScore'))" />
-        </template>
-      </el-input> -->
 
-      <!-- Auto-Ducking -->
       <div class="p-3.5 rounded-xl border flex items-center justify-between" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
         <div class="flex items-center gap-3">
           <el-icon style="color: var(--el-text-color-secondary);"><Headset /></el-icon>
@@ -544,6 +727,6 @@ function handleRemoveLanguage(lang: TabPaneName){
         </div>
         <el-switch v-model="autoDucking" size="small" />
       </div>
-    </div>
+    </div> -->
   </div>
 </template>

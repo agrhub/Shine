@@ -11,6 +11,8 @@ import {
   Loader2,
   Video,
 } from 'lucide-vue-next';
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 
 function formatDate(timestamp: number) {
   return new Date(timestamp)
@@ -63,19 +65,19 @@ const markDownloaded = (id: string) => downloadStore.markDownloaded(id);
     <PopoverContent class="w-80 p-0 rounded-md bg-card border border-border shadow-lg" align="end">
       <div class="flex flex-col">
         <div class="flex items-center justify-between px-3 py-2 border-b border-border">
-          <span class="text-xs font-semibold text-foreground">Tasks</span>
+          <span class="text-xs font-semibold text-foreground">{{ t('editor.tasks') }}</span>
           <button
             v-if="hasCompleted"
             @click="clearCompleted"
             class="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
-            Clear
+            {{ t('common.clear') }}
           </button>
         </div>
 
         <div v-if="downloads.length === 0" class="flex flex-col items-center justify-center px-3 py-6 gap-2 text-muted-foreground">
           <Archive class="size-5 opacity-50" />
-          <span class="text-xs">No recent tasks</span>
+          <span class="text-xs">{{ t('editor.noRecentTasks') }}</span>
         </div>
 
         <div v-else class="flex flex-col max-h-72 overflow-y-auto">
@@ -87,8 +89,8 @@ const markDownloaded = (id: string) => downloadStore.markDownloaded(id);
             <div class="relative shrink-0 h-10 w-10 rounded bg-secondary border flex items-center justify-center overflow-hidden">
               <Loader2 v-if="download.status === 'processing'" class="size-5 text-foreground animate-spin" />
               <img
-                v-else-if="download.thumbnailUrl"
-                :src="download.thumbnailUrl"
+                v-else-if="download.thumbnail_url"
+                :src="download.thumbnail_url"
                 alt=""
                 class="h-full w-full object-cover"
               />
@@ -103,16 +105,16 @@ const markDownloaded = (id: string) => downloadStore.markDownloaded(id);
                 {{ download.size !== undefined ? formatBytes(download.size) : '—' }} ·
                 {{
                   download.status === 'processing'
-                    ? 'Exporting...'
+                    ? (t('common.exporting') || 'Exporting...')
                     : download.status === 'failed'
-                      ? 'Failed'
+                      ? (t('common.failed') || 'Failed')
                       : download.downloaded
-                        ? 'Downloaded to browser'
-                        : 'Exported'
+                        ? (t('common.downloaded') || 'Downloaded')
+                        : (t('common.exported') || 'Exported')
                 }}
               </div>
               <div class="text-[10px] text-muted-foreground">
-                {{ formatDate(download.completedAt || download.createdAt) }}
+                {{ formatDate(download.completed_at || download.created_at) }}
               </div>
 
               <div v-if="download.status === 'processing'" class="mt-1.5">
@@ -143,7 +145,7 @@ const markDownloaded = (id: string) => downloadStore.markDownloaded(id);
                 }"
               >
                 <Download class="size-3.5" />
-                <span class="sr-only">Download</span>
+                <span class="sr-only">{{ t('common.download') }}</span>
               </Button>
               <Button
                 size="icon"
@@ -152,7 +154,7 @@ const markDownloaded = (id: string) => downloadStore.markDownloaded(id);
                 @click="removeDownload(download.id)"
               >
                 <X class="size-3.5" />
-                <span class="sr-only">Clear</span>
+                <span class="sr-only">{{ t('common.clear') }}</span>
               </Button>
             </div>
           </div>

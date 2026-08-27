@@ -86,6 +86,7 @@ export function useExport() {
       type: 'export',
       name: exportFileName(activeFormat),
       format: activeFormat,
+      created_at: Date.now(),
     });
 
     toast.info('Download has started');
@@ -170,7 +171,7 @@ export function useExport() {
         status: 'completed',
         progress: 1,
         url: blobUrl,
-        completedAt: Date.now(),
+        completed_at: Date.now(),
         name: exportFileName(activeFormat),
         size: blob.size,
       });

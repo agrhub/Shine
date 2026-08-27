@@ -19,7 +19,7 @@ export const data = {
 import { normalizeTransitionKey, normalizeEffectKey } from '@/stores/usePipelineStore';
 
 export const SILENT_AUDIO_SAMPLE = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-const SAMPLE_IMAGE_BG = 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1080&h=1920&fit=crop';
+const SAMPLE_IMAGE_BG = '/images/dashboard/poster-1.jpg';
 
 export function sanitizeTimelineData(timelineData: any) {
   if (!timelineData) return timelineData;

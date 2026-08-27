@@ -33,40 +33,40 @@ function handleResetPassword() {
   <div id="reset-password-page" class="space-y-8 font-['Outfit',sans-serif]">
     <!-- Header -->
     <div class="space-y-1">
-      <h2 class="text-3xl font-extrabold tracking-tight text-[#1c1b1b] dark:text-white">
+      <h2 class="text-3xl font-extrabold tracking-tight text-[var(--el-text-color-primary)]">
         {{ t('auth.resetPasswordHeader') }}
       </h2>
-      <p class="text-sm text-gray-500 dark:text-on-surface-variant">
-        Enter your new password below to secure your account.
+      <p class="text-sm text-[var(--el-text-color-secondary)]">
+        {{ t('auth.resetPasswordSubtitle') }}
       </p>
     </div>
 
     <!-- Form -->
     <form class="space-y-5" @submit.prevent="handleResetPassword">
       <div>
-        <label class="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-on-surface-variant mb-1.5">
-          New password
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1.5">
+          {{ t('auth.newPassword') }}
         </label>
         <input
           id="reset-new-password"
           v-model="newPassword"
           type="password"
           placeholder="••••••••"
-          class="w-full bg-[#f3f3f3] dark:bg-[#1f2029] border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-sm text-[#1c1b1b] dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all"
+          class="w-full bg-[var(--el-fill-color-blank)] border border-[var(--el-border-color)] rounded-xl px-4 py-3 text-sm text-[var(--el-text-color-primary)] placeholder-[var(--el-text-color-placeholder)] focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all shadow-sm"
           required
         />
       </div>
 
       <div>
-        <label class="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-on-surface-variant mb-1.5">
-          Confirm new password
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-[var(--el-text-color-secondary)] mb-1.5">
+          {{ t('auth.confirmPassword') }}
         </label>
         <input
           id="reset-confirm-password"
           v-model="confirmPassword"
           type="password"
           placeholder="••••••••"
-          class="w-full bg-[#f3f3f3] dark:bg-[#1f2029] border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-sm text-[#1c1b1b] dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all"
+          class="w-full bg-[var(--el-fill-color-blank)] border border-[var(--el-border-color)] rounded-xl px-4 py-3 text-sm text-[var(--el-text-color-primary)] placeholder-[var(--el-text-color-placeholder)] focus:outline-none focus:ring-2 focus:ring-[var(--el-color-primary)] transition-all shadow-sm"
           required
         />
       </div>

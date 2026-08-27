@@ -15,8 +15,13 @@ import WizardStepMasterPlan from './wizard/WizardStepMasterPlan.vue';
 import WizardStepCompliance from './wizard/WizardStepCompliance.vue';
 import { WizardFormData, PlanChatMessage, ComplianceResult } from './wizard/types';
 import { Film, Check, Right, Promotion } from '@element-plus/icons-vue';
+import { findCountry } from '@/constants/countries';
+import router from '@/router/index.ts';
 
-const props = defineProps<{ modelValue: boolean }>();
+const props = defineProps<{ 
+  modelValue: boolean;
+  initialTrend?: any;
+}>();
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void;
   (e: 'created', seriesId: string): void;
@@ -33,6 +38,12 @@ onMounted(() => {
 
 // ─── Step Control ──────────────────────────────────────────────────────────────
 const currentStep = ref(0); // 0=MODE, 1=CONFIG, 2=MASTER PLAN, 3=COMPLIANCE
+const masterPlan = ref<any>(null);
+
+const isGeneratingPlan = ref(false);
+const isPlanChatSending = ref(false);
+const planError = ref('');
+const planChatMessages = ref<PlanChatMessage[]>([]);
 const stepLabels = computed(() => [
   t('wizard.stepLaunchMode'),
   t('wizard.stepSeriesConfig'),
@@ -43,29 +54,60 @@ const stepLabels = computed(() => [
 // ─── Form Data ────────────────────────────────────────────────────────────────
 const formData = ref<WizardFormData>({
   mode: 'viral',
-  country: 'Vietnam',
-  countryCode: 'vn',
-  language: 'vi-VN',
+  country: 'United States',
+  countryCode: 'us',
+  language: 'en-US',
   selectedTrend: null,
   title: '',
   genre: 'Revenge / Drama',
   visualStyle: 'realistic',
-  description: '',
+  synopsis: '',
   targetEpisodes: 24,
-  episodeDurationSeconds: 90,
-  episodeDurationMinutes: 1.5,
+  episodeDurationSeconds: 60,
+  episodeDurationMinutes: 1,
   ratio: '9:16',
   referenceFiles: [],
   aiWatermark: true,
   commercialRights: true,
 });
 
+const wizardSessionId = ref<string>('wiz_' + Date.now());
+
+watch(() => props.modelValue, (isOpen) => {
+  if (isOpen) {
+    wizardSessionId.value = 'wiz_' + Date.now();
+    if (props.initialTrend) {
+      const topic = props.initialTrend;
+      formData.value.mode = 'viral';
+      formData.value.selectedTrend = topic;
+      formData.value.title = topic.topic || topic.title || '';
+      formData.value.synopsis = topic.description || topic.synopsis || topic.trope || '';
+      if (topic.genre) formData.value.genre = topic.genre;
+      if (topic.targetEpisodes) formData.value.targetEpisodes = topic.targetEpisodes;
+      if (topic.country) {
+        const c = findCountry(topic.country);
+        formData.value.country = c.name;
+        formData.value.countryCode = c.code;
+        formData.value.language = c.primaryLang || 'en-US';
+      }
+      currentStep.value = 1;
+    } else {
+      currentStep.value = 0;
+      masterPlan.value = null;
+      complianceResult.value = {};
+      planChatMessages.value = [];
+      formData.value.title = '';
+      formData.value.synopsis = '';
+      formData.value.selectedTrend = null;
+    }
+  }
+});
+
 watch(() => formData.value.episodeDurationSeconds, (sec) => {
   formData.value.episodeDurationMinutes = Number((sec / 60).toFixed(2));
 });
 
-function formatDuration(totalSeconds: number): string {
-  const sec = Number(totalSeconds) || 90;
+function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   if (m > 0 && s > 0) {
@@ -77,47 +119,154 @@ function formatDuration(totalSeconds: number): string {
   }
 }
 
-// ─── Step 2: Master Plan State & Actions ──────────────────────────────────────
-const masterPlan = ref<any>(null);
-const isGeneratingPlan = ref(false);
-const planError = ref('');
-const planChatMessages = ref<PlanChatMessage[]>([]);
-const isPlanChatSending = ref(false);
+// ─── Agentic Stream Helper ───────────────────────────────────────────────────
+async function executeAgenticStream(
+  prompt: string,
+  onUpdate?: (type: string, data: any) => void,
+  onChunk?: (chunk: string, accumulated: string) => void
+): Promise<{ fullText: string }> {
+  let fullText = '';
+  let lastIndex = 0;
+
+  await http.post(
+    '/ai/agentic/stream',
+    {
+      sessionId: wizardSessionId.value,
+      message: prompt,
+      context: {
+        title: formData.value.title || formData.value.selectedTrend?.topic || '',
+        genre: formData.value.genre,
+        visualStyle: formData.value.visualStyle,
+        visualStylePrompt: (formData.value as any).visualStylePrompt || '',
+        country: formData.value.country,
+        language: formData.value.language,
+        targetEpisodes: formData.value.targetEpisodes,
+        episodeDurationSeconds: formData.value.episodeDurationSeconds,
+        synopsis: formData.value.synopsis || formData.value.selectedTrend?.description || '',
+        ratio: formData.value.ratio,
+        currentPlan: masterPlan.value,
+      },
+    },
+    {
+      responseType: 'text',
+      onDownloadProgress: (progressEvent: any) => {
+        const rawText = progressEvent.event?.target?.responseText || progressEvent.event?.target?.response || progressEvent.currentTarget?.response || '';
+        const newChunk = rawText.slice(lastIndex);
+        lastIndex = rawText.length;
+
+        const lines = newChunk.split('\n\n');
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let eventType = 'message';
+          const eventMatch = line.match(/^event:\s*(.+)$/m);
+          if (eventMatch) eventType = eventMatch[1].trim();
+
+          const dataMatch = line.match(/^data:\s*([\s\S]+)$/m);
+          if (dataMatch) {
+            try {
+              const parsed = JSON.parse(dataMatch[1].trim());
+              if (eventType === 'chunk') {
+                const chunkStr = parsed?.text || '';
+                fullText += chunkStr;
+                onChunk?.(chunkStr, fullText);
+              } else if (eventType === 'item_updated') {
+                onUpdate?.(parsed?.type, parsed?.data);
+              } else if (eventType === 'suggestions') {
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  dynamicSuggestions.value = parsed;
+                }
+              }
+            } catch {}
+          }
+        }
+      },
+    }
+  );
+
+  return { fullText };
+}
+
+// ─── Step 2: Master Plan State & Actions (Agentic) ───────────────────────────
+const dynamicSuggestions = ref<Array<{ label: string; prompt: string }>>([]);
 
 async function generateMasterPlan() {
+  currentStep.value = 2; // Immediately switch to Step 3 so user sees live streaming & skeleton
   isGeneratingPlan.value = true;
   planError.value = '';
-  try {
-    const currentStyle = formData.value.visualStyle || 'realistic';
-    const styleObj = getVisualStyleById(currentStyle);
 
-    const res: any = await http.post('/ai/generate-master-plan', {
-      title: formData.value.title || (formData.value.selectedTrend?.topic) || 'Untitled Series',
-      genre: formData.value.genre,
-      visualStyle: currentStyle,
-      visualStylePrompt: styleObj.promptModifier,
-      synopsis: formData.value.description || (formData.value.selectedTrend?.description),
-      totalEpisodes: formData.value.targetEpisodes,
-      episodeDurationSeconds: formData.value.episodeDurationSeconds,
-      country: formData.value.country,
-      language: formData.value.language,
-      ratio: formData.value.ratio,
-      viralTopic: formData.value.selectedTrend?.topic || '',
-    });
-    masterPlan.value = res?.data;
-    planChatMessages.value = [{
-      role: 'assistant',
-      text: t('wizard.masterPlanCreatedMsg', {
+  const currentStyle = formData.value.visualStyle || 'realistic';
+  const styleObj = getVisualStyleById(currentStyle);
+  const topicTitle = formData.value.title || formData.value.selectedTrend?.topic || 'Original Micro-Drama';
+
+  const assistantMsg = ref<PlanChatMessage>({
+    role: 'assistant',
+    text: '',
+    thinking: t('wizard.thinking1'),
+  });
+
+  planChatMessages.value = [
+    {
+      role: 'user',
+      text: `🚀 **Initiating Series Master Plan Generation**\n\n- **Title / Topic:** ${topicTitle}\n- **Genre:** ${formData.value.genre}\n- **Setting Country:** ${formData.value.country}\n- **Script Language:** ${formData.value.language}\n- **Format:** ${formData.value.targetEpisodes} Episodes × ${formData.value.episodeDurationSeconds}s (${formData.value.ratio})\n- **Visual Aesthetic:** ${styleObj.name}`,
+    },
+    assistantMsg.value,
+  ];
+
+  const stepTimers: any[] = [];
+  stepTimers.push(setTimeout(() => { if (isGeneratingPlan.value) assistantMsg.value.thinking = t('wizard.thinking2'); }, 2500));
+  stepTimers.push(setTimeout(() => { if (isGeneratingPlan.value) assistantMsg.value.thinking = t('wizard.thinking3'); }, 5500));
+  stepTimers.push(setTimeout(() => { if (isGeneratingPlan.value) assistantMsg.value.thinking = t('wizard.thinking4'); }, 8500));
+
+  try {
+    const prompt = `Please generate a complete micro-drama master plan for title "${formData.value.title || formData.value.selectedTrend?.topic || 'Untitled'}", genre "${formData.value.genre}", visualStyle "${currentStyle}", target country "${formData.value.country}", language "${formData.value.language}", ${formData.value.targetEpisodes} episodes @ ${formData.value.episodeDurationSeconds}s/ep in ${formData.value.ratio} format. Synopsis: "${formData.value.synopsis || formData.value.selectedTrend?.description || ''}".`;
+
+    await executeAgenticStream(
+      prompt,
+      (type, data) => {
+        if (type === 'master_plan_generated' || type === 'master_plan_updated') {
+          masterPlan.value = data;
+          if (data.title) formData.value.title = data.title;
+          if (data.synopsis) formData.value.synopsis = data.synopsis;
+          assistantMsg.value.thinking = null;
+        }
+      },
+      (_chunk, accumulated) => {
+        assistantMsg.value.text = accumulated;
+      }
+    );
+
+    if (!masterPlan.value) {
+      const res: any = await http.post('/ai/generate-master-plan', {
+        wizard_session_id: wizardSessionId.value,
+        title: formData.value.title || (formData.value.selectedTrend?.topic) || 'Untitled Series',
+        genre: formData.value.genre,
+        visual_style: currentStyle,
+        visual_style_prompt: styleObj.promptModifier,
+        synopsis: formData.value.synopsis || (formData.value.selectedTrend?.description),
+        total_episodes: formData.value.targetEpisodes,
+        episode_duration_seconds: formData.value.episodeDurationSeconds,
+        country: formData.value.country,
+        language: formData.value.language,
+        ratio: formData.value.ratio,
+        viral_topic: formData.value.selectedTrend?.topic || '',
+      });
+      masterPlan.value = res?.data;
+      if (masterPlan.value?.title) formData.value.title = masterPlan.value.title;
+    }
+
+    if (!assistantMsg.value.text) {
+      assistantMsg.value.text = t('wizard.masterPlanCreatedMsg', {
         episodes: formData.value.targetEpisodes,
         duration: formatDuration(formData.value.episodeDurationSeconds),
         country: formData.value.country,
-        hook: res?.data?.viralHook || t('wizard.defaultHook'),
-      }),
-    }];
-    currentStep.value = 2;
-  } catch {
-    planError.value = t('wizard.planErrorMsg');
+        hook: masterPlan.value?.viralHook || t('wizard.defaultHook'),
+      });
+    }
+  } catch (err: any) {
+    planError.value = err?.message || t('wizard.planErrorMsg');
   } finally {
+    stepTimers.forEach(clearTimeout);
+    assistantMsg.value.thinking = null;
     isGeneratingPlan.value = false;
   }
 }
@@ -125,23 +274,57 @@ async function generateMasterPlan() {
 async function sendPlanChat(customMsg?: string) {
   const msg = (typeof customMsg === 'string' ? customMsg : '').trim();
   if (!msg || isPlanChatSending.value) return;
-  if (typeof customMsg !== 'string') {
-    planChatMessages.value.push({ role: 'user', text: msg });
-  } else {
-    planChatMessages.value.push({ role: 'user', text: msg });
-  }
+
+  planChatMessages.value.push({ role: 'user', text: msg });
   isPlanChatSending.value = true;
+
+  const assistantMsg = ref<PlanChatMessage>({
+    role: 'assistant',
+    text: '',
+    thinking: t('wizard.thinkingRefining'),
+  });
+  planChatMessages.value.push(assistantMsg.value);
+
   try {
-    const res: any = await http.post('/ai/refine-master-plan', { currentPlan: masterPlan.value, userInstruction: msg });
-    if (res?.data?.updatedPlan) {
-      masterPlan.value = res.data.updatedPlan;
-      if (res.data.updatedPlan.totalEpisodes) formData.value.targetEpisodes = res.data.updatedPlan.totalEpisodes;
-      if (res.data.updatedPlan.title) formData.value.title = res.data.updatedPlan.title;
+    let createdSeriesId = '';
+    const prompt = msg;
+    await executeAgenticStream(
+      prompt,
+      (type, data) => {
+        if (type === 'master_plan_updated' || type === 'master_plan_generated') {
+          masterPlan.value = data;
+          if (data.totalEpisodes) formData.value.targetEpisodes = data.totalEpisodes;
+          if (data.title) formData.value.title = data.title;
+          if (data.totalDurationSeconds) formData.value.episodeDurationSeconds = data.totalDurationSeconds;
+          assistantMsg.value.thinking = null;
+        } else if (type === 'series_created') {
+          createdSeriesId = data.id || data.seriesId;
+        }
+      },
+      (_chunk, accumulated) => {
+        assistantMsg.value.text = accumulated;
+      }
+    );
+
+    if (createdSeriesId) {
+      try {
+        await http.post('/ai/agentic/transfer-session', {
+          oldSessionId: wizardSessionId.value,
+          newSeriesId: createdSeriesId,
+        });
+      } catch {}
+      toast.success(t('wizard.createSeriesSuccess'));
+      emit('created', createdSeriesId);
+      setTimeout(() => {
+        emit('update:modelValue', false);
+        router.push(`/project/${createdSeriesId}`);
+      }, 500);
+      return;
     }
-    planChatMessages.value.push({
-      role: 'assistant',
-      text: res?.data?.explanation || res?.data?.aiResponse || t('wizard.aiDoneUpdating'),
-    });
+
+    if (!assistantMsg.value.text) {
+      assistantMsg.value.text = t('wizard.aiDoneUpdating');
+    }
   } catch (err: any) {
     const errorDetail = err?.response?.data?.message || err?.message || t('wizard.planErrorMsg');
     planChatMessages.value.push({
@@ -151,6 +334,7 @@ async function sendPlanChat(customMsg?: string) {
     });
     toast.error(errorDetail);
   } finally {
+    assistantMsg.value.thinking = null;
     isPlanChatSending.value = false;
   }
 }
@@ -160,7 +344,7 @@ function retryPlanChat(failedPrompt: string, errorIdx: number) {
   sendPlanChat(failedPrompt);
 }
 
-// ─── Step 3: Compliance State & Actions ────────────────────────────────────────
+// ─── Step 3: Compliance State & Actions (Agentic) ─────────────────────────────
 const isVerifyingCompliance = ref(false);
 const complianceError = ref('');
 const complianceResult = ref<ComplianceResult>({
@@ -185,13 +369,20 @@ async function runComplianceVerification() {
   isVerifyingCompliance.value = true;
   complianceError.value = '';
   try {
-    const res: any = await http.post('/ai/verify-compliance', {
-      masterPlan: masterPlan.value,
-      country: formData.value.country || 'Vietnam',
-      ratio: formData.value.ratio || '9:16',
+    const prompt = `Verify compliance, platform safety, and copyright for the following master plan in ${formData.value.country} (${formData.value.ratio}): ${JSON.stringify(masterPlan.value)}`;
+    await executeAgenticStream(prompt, (type, data) => {
+      if (type === 'compliance_verified') {
+        complianceResult.value = data;
+      }
     });
-    if (res?.data) {
-      complianceResult.value = res.data;
+
+    if (!complianceResult.value?.overallScore) {
+      const res: any = await http.post('/ai/verify-compliance', {
+        masterPlan: masterPlan.value,
+        country: formData.value.country || 'Vietnam',
+        ratio: formData.value.ratio || '9:16',
+      });
+      if (res?.data) complianceResult.value = res.data;
     }
   } catch (err: any) {
     complianceError.value = err?.response?.data?.message || err?.message || t('wizard.complianceErrorMsg');
@@ -208,9 +399,9 @@ async function refineMasterPlanFromSuggestions(specificSuggestion?: string) {
   let instruction = '';
   if (specificSuggestion && typeof specificSuggestion === 'string') {
     instruction = `Please refine and optimize the series master plan to strictly implement this supervision recommendation:\n"${specificSuggestion}"`;
-  } else if (complianceResult.value.recommendations && complianceResult.value.recommendations.length > 0) {
+  } else if (complianceResult.value?.recommendations && complianceResult.value?.recommendations.length > 0) {
     instruction = `Please refine and optimize the series master plan to address all of the following supervision recommendations and quality gates:\n` +
-      complianceResult.value.recommendations.map((r: string, idx: number) => `${idx + 1}. ${r}`).join('\n');
+      complianceResult.value?.recommendations.map((r: string, idx: number) => `${idx + 1}. ${r}`).join('\n');
   } else {
     return;
   }
@@ -219,16 +410,15 @@ async function refineMasterPlanFromSuggestions(specificSuggestion?: string) {
   toast.info(t('wizard.refiningFromSuggestions'));
 
   try {
-    const res: any = await http.post('/ai/refine-master-plan', {
-      currentPlan: masterPlan.value,
-      userInstruction: instruction,
+    const prompt = `Refine master plan according to supervision recommendations: ${instruction}. Current plan: ${JSON.stringify(masterPlan.value)}`;
+    await executeAgenticStream(prompt, (type, data) => {
+      if (type === 'master_plan_updated') {
+        masterPlan.value = data;
+        if (data.totalEpisodes) formData.value.targetEpisodes = data.totalEpisodes;
+        if (data.title) formData.value.title = data.title;
+        if (data.totalDurationSeconds) formData.value.episodeDurationSeconds = data.totalDurationSeconds;
+      }
     });
-    if (res?.data?.updatedPlan) {
-      masterPlan.value = res.data.updatedPlan;
-      if (res.data.updatedPlan.totalEpisodes) formData.value.targetEpisodes = res.data.updatedPlan.totalEpisodes;
-      if (res.data.updatedPlan.title) formData.value.title = res.data.updatedPlan.title;
-      if (res.data.updatedPlan.totalDurationSeconds) formData.value.episodeDurationSeconds = res.data.updatedPlan.totalDurationSeconds;
-    }
 
     planChatMessages.value.push({
       role: 'user',
@@ -236,7 +426,7 @@ async function refineMasterPlanFromSuggestions(specificSuggestion?: string) {
     });
     planChatMessages.value.push({
       role: 'assistant',
-      text: res?.data?.explanation || res?.data?.aiResponse || t('wizard.aiDoneUpdating'),
+      text: t('wizard.aiDoneUpdating'),
     });
 
     toast.success(t('wizard.planRefinedSuccess'));
@@ -249,7 +439,7 @@ async function refineMasterPlanFromSuggestions(specificSuggestion?: string) {
   }
 }
 
-// ─── Finish & Submit ──────────────────────────────────────────────────────────
+// ─── Finish & Submit (Agentic Series Creation) ────────────────────────────────
 const isSubmitting = ref(false);
 
 async function handleFinish() {
@@ -258,33 +448,57 @@ async function handleFinish() {
   }
   isSubmitting.value = true;
   try {
+    let createdSeriesId = '';
     const currentStyle = formData.value.visualStyle || 'realistic';
     const styleObj = getVisualStyleById(currentStyle);
 
-    const finalPayload = {
-      title: formData.value.title,
-      genre: formData.value.genre,
-      visualStyle: currentStyle,
-      visualStylePrompt: styleObj.promptModifier,
-      country: formData.value.country,
-      language: formData.value.language,
-      ratio: formData.value.ratio,
-      episodeCount: masterPlan.value?.totalEpisodes || formData.value.targetEpisodes,
-      episodeDurationSeconds: masterPlan.value?.totalDurationSeconds || formData.value.episodeDurationSeconds,
-      episodeDurationMinutes: masterPlan.value?.episodeDurationMinutes || formData.value.episodeDurationMinutes || 1.5,
-      userId: authStore.user?.id,
-      description: formData.value.description || masterPlan.value?.storyCore?.coreAttraction,
-      masterPlan: masterPlan.value,
-      characters: masterPlan.value?.characters || [],
-      locations: masterPlan.value?.locations || [],
-      props: masterPlan.value?.props || [],
-    };
-    const newSeries = await seriesStore.createSeries(finalPayload);
+    const prompt = `Create series project "${formData.value.title}" (${formData.value.genre}, ${formData.value.country}) from the approved master plan.`;
+    await executeAgenticStream(prompt, (type, data) => {
+      if (type === 'series_created') {
+        createdSeriesId = data.id || data.seriesId;
+      }
+    });
+
+    if (!createdSeriesId) {
+      const finalPayload = {
+        title: formData.value.title,
+        genre: formData.value.genre,
+        visualStyle: currentStyle,
+        visualStylePrompt: styleObj.promptModifier,
+        country: formData.value.country,
+        language: formData.value.language,
+        ratio: formData.value.ratio,
+        episodeCount: masterPlan.value?.totalEpisodes || formData.value.targetEpisodes,
+        episodeDurationSeconds: masterPlan.value?.totalDurationSeconds || formData.value.episodeDurationSeconds,
+        episodeDurationMinutes: masterPlan.value?.episodeDurationMinutes || formData.value.episodeDurationMinutes || 1.5,
+        userId: authStore.user?.id,
+        synopsis: formData.value.synopsis || masterPlan.value?.synopsis || masterPlan.value?.description || masterPlan.value?.storyCore?.coreAttraction,
+        masterPlan: masterPlan.value,
+        characters: masterPlan.value?.characters || [],
+        locations: masterPlan.value?.locations || [],
+        props: masterPlan.value?.props || [],
+      };
+      const newSeries = await seriesStore.createSeries(finalPayload);
+      createdSeriesId = newSeries.id;
+    }
+
+    if (createdSeriesId) {
+      try {
+        await http.post('/ai/agentic/transfer-session', {
+          oldSessionId: wizardSessionId.value,
+          newSeriesId: createdSeriesId,
+        });
+      } catch {}
+    }
+
     toast.success(t('wizard.createSeriesSuccess'));
-    emit('update:modelValue', false);
-    emit('created', newSeries.id);
-  } catch {
-    // handled by http interceptor
+    emit('created', createdSeriesId);
+    setTimeout(() => {
+      emit('update:modelValue', false);
+      router.push(`/project/${createdSeriesId}`);
+    }, 400);
+  } catch (err: any) {
+    toast.error(err?.message || 'Failed to create series');
   } finally {
     isSubmitting.value = false;
   }
@@ -389,7 +603,7 @@ const canProceed = computed(() => {
       <WizardSidebar :current-step="currentStep" />
 
       <!-- Main Content -->
-      <main class="flex-1 p-8 lg:p-12 overflow-y-auto pb-32">
+      <main :class="currentStep === 2 ? 'flex-1 p-4 lg:p-6 overflow-hidden flex flex-col' : 'flex-1 p-8 lg:p-12 overflow-y-auto pb-32'">
         <WizardStepMode
           v-if="currentStep === 0"
           :form-data="formData"
@@ -408,6 +622,7 @@ const canProceed = computed(() => {
           :plan-error="planError"
           :plan-chat-messages="planChatMessages"
           :is-plan-chat-sending="isPlanChatSending"
+          :dynamic-suggestions="dynamicSuggestions"
           @generate-plan="generateMasterPlan"
           @send-chat="sendPlanChat"
           @retry-chat="retryPlanChat"

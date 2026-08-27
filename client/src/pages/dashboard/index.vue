@@ -3,16 +3,19 @@ import { ref, onMounted, computed, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { ElMessageBox } from 'element-plus';
-import { useSeriesStore, type Series } from '@/stores/useSeriesStore';
+import { useSeriesStore } from '@/stores/useSeriesStore';
+import { type Series } from '@/types/api';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useAssetsStore } from '@/stores/useAssetsStore';
 import { useBillingStore } from '@/stores/billingStore';
 import SeriesWizardModal from '@/components/modals/SeriesWizardModal.vue';
+import CountryFlag from '@/components/common/CountryFlag.vue';
+import { WORLD_COUNTRIES, findCountry } from '@/constants/countries';
 import ApexCharts from 'apexcharts';
 import http from '@/utils/http';
 import { toast } from 'vue-sonner';
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const router = useRouter();
 const seriesStore = useSeriesStore();
 const authStore = useAuthStore();
@@ -20,9 +23,20 @@ const assetsStore = useAssetsStore();
 const billingStore = useBillingStore();
 
 const isWizardOpen = ref(false);
+const selectedTrendForWizard = ref<any>(null);
+
+// Hot Trend Widget state
+const selectedTrendCountry = ref<string>('United States');
+const selectedCountryObj = computed(() => findCountry(selectedTrendCountry.value));
+const viralTopics = ref<any[]>([]);
+const isFetchingTrends = ref<boolean>(false);
+const trendsError = ref<string>('');
+
+const popularCountries = computed(() => WORLD_COUNTRIES.filter((c) => c.isPopular));
+const allCountries = WORLD_COUNTRIES;
 
 const userName = computed(() => authStore.user?.name || 'Creator');
-const userCredits = computed(() => authStore.user?.credits ?? billingStore.currentTier?.creditBalance ?? 0);
+const userCredits = computed(() => authStore.user?.credits ?? billingStore.currentTier?.credit_balance ?? 0);
 
 // Search, Filter & Pagination states for Projects section
 const projectSearchQuery = ref('');
@@ -32,11 +46,11 @@ const pageSize = ref(8);
 
 // Active series items (loaded from real backend API, with clean fallback images)
 const fallbackImages = [
-  'https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?w=600&q=80',
-  'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&q=80',
-  'https://images.unsplash.com/photo-1614850523459-c2f4c699c52e?w=600&q=80',
-  'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=600&q=80',
-  'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=600&q=80',
+  '/images/dashboard/poster-1.jpg',
+  '/images/dashboard/poster-2.jpg',
+  '/images/dashboard/poster-3.jpg',
+  '/images/dashboard/poster-4.jpg',
+  '/images/dashboard/poster-5.jpg',
 ];
 
 const allSeriesList = computed(() => {
@@ -170,6 +184,45 @@ function handleSeriesAction(command: string, series: any) {
   }
 }
 
+function handleWithdraw() {
+  if ((analyticsData.value.stats.projectedYield || 0) <= 0) {
+    toast.info(t('toast.noBalanceToWithdraw'));
+  } else {
+    toast.success(t('toast.payoutRequested'));
+  }
+}
+
+async function fetchViralTrends(countryName?: string) {
+  if (countryName && typeof countryName === 'string') {
+    selectedTrendCountry.value = countryName;
+  }
+  isFetchingTrends.value = true;
+  trendsError.value = '';
+  const currentLang = locale.value || localStorage.getItem('shine_language') || localStorage.getItem('shine_locale') || 'en';
+  try {
+    const targetCountry = selectedTrendCountry.value || 'United States';
+    const res: any = await http.get(`/ai/trends/viral-topics?region=${encodeURIComponent(targetCountry)}&lang=${currentLang}`);
+    viralTopics.value = res?.data || [];
+    if (viralTopics.value.length === 0) trendsError.value = t('wizard.noTrendsMsg');
+  } catch {
+    trendsError.value = t('wizard.trendsErrorMsg');
+    viralTopics.value = [];
+  } finally {
+    isFetchingTrends.value = false;
+  }
+}
+
+function handleCreateFromTrend(topic: any) {
+  const topicCopy = { ...topic, country: selectedTrendCountry.value };
+  selectedTrendForWizard.value = topicCopy;
+  isWizardOpen.value = true;
+}
+
+function handleOpenWizardDefault() {
+  selectedTrendForWizard.value = null;
+  isWizardOpen.value = true;
+}
+
 // Dynamic assets computed from real assetsStore or contextual items
 const displayAssets = computed(() => {
   if (assetsStore.assets && assetsStore.assets.length > 0) {
@@ -178,13 +231,11 @@ const displayAssets = computed(() => {
       type: file.type.toUpperCase(),
       size: file.size || '12 MB',
       status: 'Rendered',
-      icon: file.type === 'video' ? 'fa-solid fa-video' : file.type === 'audio' ? 'fa-solid fa-wave-square' : 'fa-solid fa-cube',
+      icon: file.type === 'video' ? 'VideoPlay' : file.type === 'audio' ? 'Headset' : 'Document',
       statusClass: 'text-[var(--el-color-primary-dark-2)] bg-[var(--el-color-primary-light-9)]',
     }));
   }
-  return [
-    
-  ];
+  return [];
 });
 
 // Dynamic Dashboard Analytics from live backend API
@@ -192,30 +243,30 @@ const analyticsData = ref<any>({
   stats: {
     totalSeries: 0,
     activeSeries: 0,
-    renderHours: 142.8,
-    assetLibrarySizeGb: 48.2,
-    creatorEarnings: 4290,
-    projectedYield: 5140,
-    viewerEngagementPct: 92.4,
-    modelEfficiencyPct: 87.1,
-    tokenVelocityPerHr: 1284,
+    renderHours: 0.0,
+    assetLibrarySizeGb: 0.0,
+    creatorEarnings: 0.0,
+    projectedYield: 0.0,
+    viewerEngagementPct: 0.0,
+    modelEfficiencyPct: 0.0,
+    tokenVelocityPerHr: 0,
   },
   sparklines: {
-    viewerEngagement: [40, 55, 48, 70, 65, 80, 76, 92],
-    modelEfficiency: [60, 65, 58, 72, 68, 74, 70, 87],
-    tokenVelocity: [800, 920, 880, 1050, 1100, 1180, 1220, 1284],
+    viewerEngagement: [0, 0, 0, 0, 0, 0, 0, 0],
+    modelEfficiency: [0, 0, 0, 0, 0, 0, 0, 0],
+    tokenVelocity: [0, 0, 0, 0, 0, 0, 0, 0],
   },
   cashflow: {
     categories: ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr'],
-    income: [1200, 1800, 1500, 2100, 1900, 2400],
-    expense: [-400, -600, -500, -700, -550, -800],
+    income: [0, 0, 0, 0, 0, 0],
+    expense: [0, 0, 0, 0, 0, 0],
   },
 });
 
 async function fetchDashboardAnalytics() {
   try {
     const res: any = await http.get('/analytics/dashboard', {
-      params: { userId: authStore.user?.id || 'usr_default' },
+      params: { userId: authStore.user?.id || '' },
     });
     if (res && res.data && res.data.stats) {
       analyticsData.value = res.data;
@@ -251,9 +302,9 @@ function initCharts() {
     }).render();
   };
 
-  renderSpark('#spark1', analyticsData.value.sparklines?.viewerEngagement || [40, 55, 48, 70, 65, 80, 76, 92]);
-  renderSpark('#spark2', analyticsData.value.sparklines?.modelEfficiency || [60, 65, 58, 72, 68, 74, 70, 87]);
-  renderSpark('#spark3', analyticsData.value.sparklines?.tokenVelocity || [800, 920, 880, 1050, 1100, 1180, 1220, 1284]);
+  renderSpark('#spark1', analyticsData.value.sparklines?.viewerEngagement || [0, 0, 0, 0]);
+  renderSpark('#spark2', analyticsData.value.sparklines?.modelEfficiency || [0, 0, 0, 0]);
+  renderSpark('#spark3', analyticsData.value.sparklines?.tokenVelocity || [0, 0, 0, 0]);
 
   const cashflowEl = document.querySelector('#cashflow') as HTMLElement | null;
   if (cashflowEl) {
@@ -261,8 +312,8 @@ function initCharts() {
     new ApexCharts(cashflowEl, {
       chart: { type: 'bar', height: 200, toolbar: { show: false }, fontFamily: 'Outfit' },
       series: [
-        { name: t('dashboard.income'), data: analyticsData.value.cashflow?.income || [1200, 1800, 1500, 2100, 1900, 2400] },
-        { name: t('dashboard.expense'), data: analyticsData.value.cashflow?.expense || [-400, -600, -500, -700, -550, -800] },
+        { name: t('dashboard.income'), data: analyticsData.value.cashflow?.income || [0, 0, 0, 0, 0, 0] },
+        { name: t('dashboard.expense'), data: analyticsData.value.cashflow?.expense || [0, 0, 0, 0, 0, 0] },
       ],
       colors: [mint, expenseBar],
       plotOptions: { bar: { columnWidth: '52%', borderRadius: 5 } },
@@ -290,6 +341,7 @@ onMounted(async () => {
     seriesStore.fetchSeriesList({ userId: authStore.user?.id }),
     billingStore.fetchTierInfo(),
     fetchDashboardAnalytics(),
+    fetchViralTrends(),
   ]);
   nextTick(() => {
     initCharts();
@@ -329,39 +381,39 @@ onMounted(async () => {
     <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
       <div class="bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-3xl p-6 shadow-soft hover:shadow-md transition-all">
         <div class="flex items-center gap-2 text-[var(--el-text-color-secondary)] text-xs font-medium mb-4">
-          <i class="fa-solid fa-folder-open text-sm"></i> {{ t('dashboard.statActiveSeries') }}
+          <el-icon class="text-sm"><FolderOpened /></el-icon> {{ t('dashboard.statActiveSeries') }}
         </div>
-        <div class="text-3xl font-semibold tracking-tight">{{ analyticsData.stats.totalSeries || seriesStore.seriesList?.length || 0 }}</div>
+        <div class="text-3xl font-semibold tracking-tight">{{ analyticsData.stats.activeSeries ?? seriesStore.seriesList?.filter(s => s.status !== 'ARCHIVED').length ?? 0 }}</div>
         <span class="inline-flex items-center gap-1 mt-3 text-xs font-medium text-[var(--el-color-primary-dark-2)] bg-[var(--el-color-primary-light-9)] px-2 py-0.5 rounded-md">
-          {{ t('dashboard.tagTop5') }}
+          {{ (analyticsData.stats.activeSeries || 0) > 0 ? t('dashboard.tagTop5') : t('series.active') }}
         </span>
       </div>
 
       <div class="bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-3xl p-6 shadow-soft hover:shadow-md transition-all">
         <div class="flex items-center gap-2 text-[var(--el-text-color-secondary)] text-xs font-medium mb-4">
-          <i class="fa-solid fa-clock text-sm"></i> {{ t('home.renderingStatus') }} {{ t('analytics.hrs') }}
+          <el-icon class="text-sm"><Timer /></el-icon> {{ t('home.renderingStatus') }} {{ t('analytics.hrs') }}
         </div>
         <div class="text-3xl font-semibold tracking-tight">{{ analyticsData.stats.renderHours }} <span class="text-base text-[var(--el-text-color-secondary)] font-normal">{{ t('dashboard.hrsUnit') }}</span></div>
         <div class="mt-4 h-1 rounded-full bg-[var(--el-bg-color)] overflow-hidden">
-          <div class="h-full w-[71%] bg-[var(--el-color-primary)] rounded-full"></div>
+          <div class="h-full bg-[var(--el-color-primary)] rounded-full transition-all duration-500" :style="{ width: `${Math.min(100, Math.round(((analyticsData.stats.renderHours || 0) / 20) * 100))}%` }"></div>
         </div>
       </div>
 
       <div class="bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-3xl p-6 shadow-soft hover:shadow-md transition-all">
         <div class="flex items-center gap-2 text-[var(--el-text-color-secondary)] text-xs font-medium mb-4">
-          <i class="fa-solid fa-hard-drive text-sm"></i> {{ t('editor.assetLibrary') }}
+          <el-icon class="text-sm"><Folder /></el-icon> {{ t('editor.assetLibrary') }}
         </div>
         <div class="text-3xl font-semibold tracking-tight">{{ analyticsData.stats.assetLibrarySizeGb }} <span class="text-base text-[var(--el-text-color-secondary)] font-normal">{{ t('dashboard.gbUnit') }}</span></div>
-        <p class="text-xs text-[var(--el-text-color-secondary)] mt-3">82% {{ t('dashboard.ofLimit') }}</p>
+        <p class="text-xs text-[var(--el-text-color-secondary)] mt-3">{{ Math.min(100, Math.round(((analyticsData.stats.assetLibrarySizeGb || 0) / 10) * 100)) }}% {{ t('dashboard.ofLimit') }}</p>
       </div>
 
       <div class="bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-3xl p-6 shadow-soft hover:shadow-md transition-all">
         <div class="flex items-center gap-2 text-[var(--el-text-color-secondary)] text-xs font-medium mb-4">
-          <i class="fa-solid fa-coins text-sm"></i> {{ t('dashboard.statTotalRevenue') }}
+          <el-icon class="text-sm"><Coin /></el-icon> {{ t('dashboard.statTotalRevenue') }}
         </div>
-        <div class="text-3xl font-semibold tracking-tight">${{ (analyticsData.stats.creatorEarnings || 4290).toLocaleString() }}<span class="text-[var(--el-text-color-secondary)] font-normal">.00</span></div>
+        <div class="text-3xl font-semibold tracking-tight">${{ (analyticsData.stats.creatorEarnings || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</div>
         <span class="inline-flex items-center gap-1 mt-3 text-xs font-medium text-[var(--el-color-primary-dark-2)] bg-[var(--el-color-primary-light-9)] px-2 py-0.5 rounded-md">
-          <i class="fa-solid fa-arrow-up text-[9px]"></i> 12.4%
+          <el-icon class="text-[9px]"><Top /></el-icon> {{ (analyticsData.stats.creatorEarnings || 0) > 0 ? '+12.4%' : '0.0%' }}
         </span>
       </div>
     </section>
@@ -371,7 +423,7 @@ onMounted(async () => {
       <div class="bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-3xl p-6 shadow-soft hover:shadow-md transition-all">
         <div class="flex items-center justify-between mb-2">
           <div class="flex items-center gap-2 text-[var(--el-text-color-secondary)] text-xs font-medium">
-            <i class="fa-solid fa-eye text-sm"></i> {{ t('dashboard.statAvgRetention') }}
+            <el-icon class="text-sm"><View /></el-icon> {{ t('dashboard.statAvgRetention') }}
           </div>
           <span class="w-2 h-2 rounded-full bg-[var(--el-color-primary)] animate-pulse"></span>
         </div>
@@ -382,7 +434,7 @@ onMounted(async () => {
       <div class="bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-3xl p-6 shadow-soft hover:shadow-md transition-all">
         <div class="flex items-center justify-between mb-2">
           <div class="flex items-center gap-2 text-[var(--el-text-color-secondary)] text-xs font-medium">
-            <i class="fa-solid fa-cube text-sm"></i> Model Render Efficiency
+            <el-icon class="text-sm"><Platform /></el-icon> {{ t('dashboard.modelRenderEfficiency') }}
           </div>
           <span class="w-2 h-2 rounded-full bg-[var(--el-color-primary)] animate-pulse"></span>
         </div>
@@ -393,7 +445,7 @@ onMounted(async () => {
       <div class="bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-3xl p-6 shadow-soft hover:shadow-md transition-all">
         <div class="flex items-center justify-between mb-2">
           <div class="flex items-center gap-2 text-[var(--el-text-color-secondary)] text-xs font-medium">
-            <i class="fa-solid fa-coins text-sm"></i> Token Velocity
+            <el-icon class="text-sm"><Coin /></el-icon> {{ t('dashboard.tokenVelocity') }}
           </div>
           <span class="w-2 h-2 rounded-full bg-[var(--el-color-primary)] animate-pulse"></span>
         </div>
@@ -437,14 +489,17 @@ onMounted(async () => {
 
           <!-- Search Input -->
           <div class="relative w-48 sm:w-60">
-            <i class="fa-solid fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--el-text-color-secondary)] text-xs"></i>
-            <input
+            <el-input
               v-model="projectSearchQuery"
               @input="handleSearchInput"
               type="text"
               :placeholder="t('dashboard.searchPlaceholder')"
-              class="w-full bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-2xl pl-9 pr-3 py-1.5 text-xs text-[var(--el-text-color-primary)] placeholder:text-[var(--el-text-color-secondary)] outline-none focus:border-[var(--el-color-primary)] transition-colors shadow-soft"
-            />
+              class="w-full bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-2xl p-1 placeholder:text-[var(--el-text-color-secondary)] outline-none focus:border-[var(--el-color-primary)] transition-colors shadow-soft"
+            >
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
           </div>
         </div>
       </div>
@@ -454,7 +509,7 @@ onMounted(async () => {
         <!-- Add New Series Quick Card -->
         <div
           class="rounded-[24px] border-2 border-dashed border-[var(--el-border-color)] hover:border-[var(--el-color-primary)] bg-[var(--el-card-bg-color)]/50 hover:bg-[var(--el-card-bg-color)] transition-all cursor-pointer p-6 flex flex-col items-center justify-center text-center group min-h-[300px] shadow-soft"
-          @click="isWizardOpen = true"
+          @click="handleOpenWizardDefault"
         >
           <div class="w-14 h-14 rounded-2xl bg-[var(--el-color-primary)]/15 text-[var(--el-text-color-primary)] flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
             <el-icon class="text-xl"><Plus /></el-icon>
@@ -477,7 +532,7 @@ onMounted(async () => {
                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                 :preview-src-list="[series.image]">
                 <template #error>
-                  <img src="https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?w=600&q=80" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                  <img src="/images/dashboard/poster-1.jpg" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
                 </template>
               </el-image>
               <el-tag class="absolute top-3.5 left-3.5" type="primary" size="small" round>{{ series.tag }}</el-tag>
@@ -488,13 +543,13 @@ onMounted(async () => {
                   <template #dropdown>
                     <el-dropdown-menu>
                       <el-dropdown-item command="rename">
-                        <i class="fa-solid fa-pen mr-2 text-xs"></i> Rename
+                        <el-icon class="mr-2 text-xs"><Edit /></el-icon> {{ t('common.edit') }}
                       </el-dropdown-item>
                       <el-dropdown-item :command="series.status === 'ARCHIVED' ? 'unarchive' : 'archive'">
-                        <i class="fa-solid fa-box-archive mr-2 text-xs"></i> {{ series.status === 'ARCHIVED' ? 'Unarchive' : 'Archive' }}
+                        <el-icon class="mr-2 text-xs"><Folder /></el-icon> {{ series.status === 'ARCHIVED' ? 'Unarchive' : t('series.archived') }}
                       </el-dropdown-item>
                       <el-dropdown-item divided command="delete" class="!text-red-500 font-semibold">
-                        <i class="fa-solid fa-trash mr-2 text-xs"></i> Delete Permanently
+                        <el-icon class="mr-2 text-xs"><Delete /></el-icon> {{ t('common.delete') }}
                       </el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
@@ -509,7 +564,7 @@ onMounted(async () => {
           <div class="px-5 pb-5 pt-0 flex items-center justify-between text-xs text-[var(--el-text-color-secondary)] border-t border-[var(--el-border-color)]/40 mt-auto pt-3">
             <span>{{ series.status === 'PUBLISHED' ? '100% ' + t('dashboard.completeLabel') : '75% ' + t('dashboard.completeLabel') }}</span>
             <span class="font-semibold text-[var(--el-color-primary)] group-hover:underline flex items-center gap-1">
-              {{ t('dashboard.openStudioBtn') }} <i class="fa-solid fa-arrow-right text-[10px]"></i>
+              {{ t('dashboard.openStudioBtn') }} <el-icon class="text-[10px]"><Right /></el-icon>
             </span>
           </div>
         </div>
@@ -521,14 +576,15 @@ onMounted(async () => {
         class="bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-3xl p-12 text-center shadow-soft"
       >
         <div class="w-14 h-14 rounded-full bg-[var(--el-bg-color)] flex items-center justify-center text-[var(--el-text-color-secondary)] mx-auto mb-4 text-xl">
-          <i class="fa-solid fa-folder-open"></i>
+          <el-icon :size="24"><FolderOpened /></el-icon>
         </div>
         <h4 class="font-semibold text-lg text-[var(--el-text-color-primary)] mb-1">{{ t('dashboard.noSeries') }}</h4>
         <p class="text-xs text-[var(--el-text-color-secondary)] mb-5">{{ t('dashboard.noSeriesDesc') }}</p>
         <el-button
           type="primary"
-          round
-          @click="isWizardOpen = true"
+          round size="large"
+          @click="handleOpenWizardDefault"
+          icon="Plus"
         >
           {{ t('dashboard.newSeriesBtn') }}
         </el-button>
@@ -544,6 +600,156 @@ onMounted(async () => {
           background
           class="!text-[var(--el-text-color-primary)]"
         />
+      </div>
+    </section>
+
+    <!-- Row 3.5: Viral Hot Trends & Topics Widget -->
+    <section class="bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-3xl p-6 sm:p-8 shadow-soft">
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+        <div>
+          <div class="flex items-center gap-2 mb-1">
+            <span class="inline-flex items-center justify-center w-7 h-7 rounded-xl bg-orange-500/10 text-orange-500">
+              <el-icon :size="16"><TrendCharts /></el-icon>
+            </span>
+            <h3 class="font-semibold text-lg tracking-tight text-[var(--el-text-color-primary)]">
+              {{ t('trends.hotTrendsTitle') }}
+            </h3>
+            <el-tag size="small" type="danger" effect="plain" round class="text-[10px] font-bold tracking-wider uppercase">
+              {{ t('trends.trendingNow') }}
+            </el-tag>
+          </div>
+          <p class="text-xs text-[var(--el-text-color-secondary)]">
+            {{ t('trends.hotTrendsSubtitle') }}
+          </p>
+        </div>
+
+        <!-- Country Filter & Actions -->
+        <div class="flex flex-wrap items-center gap-2.5">
+          <!-- Popular country chips -->
+          <div class="hidden sm:flex items-center gap-1.5">
+            <el-button
+              v-for="c in popularCountries.slice(0, 4)"
+              :key="c.code"
+              :type="selectedTrendCountry === c.name ? 'primary' : ''"
+              round plain size="small" class="!ml-0"
+              @click="fetchViralTrends(c.name)"
+            >
+              <CountryFlag :code="c.code" :flag="c.flag" size="small" />
+              <span class="!ml-1">{{ c.nativeName || c.name }}</span>
+            </el-button>
+          </div>
+
+          <!-- All Countries Select with CountryFlag -->
+          <el-select
+            v-model="selectedTrendCountry"
+            @change="fetchViralTrends"
+            filterable round
+            class="!w-[200px]"
+          >
+            <template #prefix>
+              <CountryFlag :code="selectedCountryObj?.code" size="small" class="mr-1 shrink-0" />
+            </template>
+            <el-option
+              v-for="c in allCountries"
+              :key="c.code"
+              :label="c.name"
+              :value="c.name"
+            >
+              <div class="flex items-center gap-2 py-0.5">
+                <CountryFlag :code="c.code" size="small" />
+                <span class="font-medium text-xs">{{ c.name }}</span>
+                <span v-if="c.nativeName && c.nativeName !== c.name" class="text-[11px] text-[var(--el-text-color-secondary)]">({{ c.nativeName }})</span>
+              </div>
+            </el-option>
+          </el-select>
+
+          <!-- Refresh Button -->
+          <el-button
+            :loading="isFetchingTrends"
+            @click="fetchViralTrends()"
+            circle
+            icon="Refresh"
+          />
+        </div>
+      </div>
+
+      <!-- Loading State Skeleton -->
+      <div v-if="isFetchingTrends" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+        <div
+          v-for="n in 3"
+          :key="n"
+          class="rounded-2xl border border-[var(--el-border-color)] bg-[var(--el-bg-color)]/50 p-5 animate-pulse flex flex-col justify-between min-h-[200px]"
+        >
+          <div class="space-y-2.5">
+            <div class="h-4 bg-[var(--el-fill-color)] rounded w-1/3"></div>
+            <div class="h-5 bg-[var(--el-fill-color-dark)] rounded w-3/4"></div>
+            <div class="h-3 bg-[var(--el-fill-color)] rounded w-full"></div>
+            <div class="h-3 bg-[var(--el-fill-color)] rounded w-2/3"></div>
+          </div>
+          <div class="h-9 bg-[var(--el-fill-color)] rounded-xl mt-4"></div>
+        </div>
+      </div>
+
+      <!-- Loaded Viral Topics Grid -->
+      <div v-else-if="viralTopics.length > 0" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+        <div
+          v-for="topic in viralTopics"
+          :key="topic.topic || topic.title"
+          class="group rounded-2xl border border-[var(--el-border-color)] hover:border-[var(--el-color-primary)] bg-[var(--el-bg-color)]/40 hover:bg-[var(--el-card-bg-color)] p-5 shadow-soft hover:shadow-md transition-all flex flex-col justify-between relative"
+        >
+          <div>
+            <div class="flex items-center justify-between gap-2 mb-2.5">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <el-tag size="small" type="primary" effect="plain" round class="text-[10px] font-bold">
+                  {{ topic.genre || topic.category || 'Drama' }}
+                </el-tag>
+                <el-tag v-if="topic.hookType" size="small" type="warning" effect="plain" round class="text-[10px] font-bold">
+                  {{ topic.hookType }}
+                </el-tag>
+              </div>
+              <el-tag round type="danger" effect="plain" size="small">
+                <el-icon><TrendCharts /></el-icon>
+                <span>{{ topic.engagementScore || 88 }}%</span>
+              </el-tag>
+            </div>
+
+            <h4 class="font-semibold text-sm text-[var(--el-text-color-primary)] group-hover:text-[var(--el-color-primary)] transition-colors mb-1.5 line-clamp-1">
+              {{ topic.topic || topic.title }}
+            </h4>
+            <p class="text-xs leading-relaxed text-[var(--el-text-color-secondary)] line-clamp-3 mb-4">
+              {{ topic.description || topic.competitorHook || topic.trope }}
+            </p>
+          </div>
+
+          <div class="pt-3.5 border-t border-[var(--el-border-color)]/60 flex items-center justify-between gap-3">
+            <div class="text-[11px] text-[var(--el-text-color-secondary)] flex items-center gap-1">
+              <span>{{ topic.targetEpisodes || 24 }} {{ t('dashboard.statEpisodes') }}</span>
+              <span>·</span>
+              <span>60s</span>
+            </div>
+            <el-button
+              type="primary"
+              size="small"
+              round
+              @click="handleCreateFromTrend(topic)"
+              class="!font-bold shadow-xs hover:scale-105 transition-transform"
+            >
+              <el-icon class="mr-1"><MagicStick /></el-icon>
+              <span>{{ t('wizard.createSeries') }}</span>
+            </el-button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty / Error state -->
+      <div
+        v-else
+        class="py-8 text-center text-xs text-[var(--el-text-color-secondary)]"
+      >
+        <p class="mb-3">{{ trendsError || t('wizard.noTrendsMsg') }}</p>
+        <el-button type="primary" round size="small" @click="fetchViralTrends()">
+          {{ t('common.refresh') }}
+        </el-button>
       </div>
     </section>
 
@@ -592,8 +798,8 @@ onMounted(async () => {
       <div class="lg:col-span-5 flex flex-col gap-5">
         <div class="bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-3xl p-6 shadow-soft">
           <div class="flex items-center justify-between mb-1">
-            <h3 class="text-sm font-medium tracking-wide text-[var(--el-text-color-primary)]">Cash Flow</h3>
-            <span class="text-xs text-[var(--el-text-color-secondary)]">Last 6 mo</span>
+            <h3 class="text-sm font-medium tracking-wide text-[var(--el-text-color-primary)]">{{ t('dashboard.cashFlow') }}</h3>
+            <span class="text-xs text-[var(--el-text-color-secondary)]">{{ t('dashboard.last6Mo') }}</span>
           </div>
           <div id="cashflow" class="-ml-2 mt-2 min-h-[200px]"></div>
         </div>
@@ -601,19 +807,26 @@ onMounted(async () => {
         <div class="bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] text-[var(--el-text-color-primary)] rounded-3xl p-6 relative overflow-hidden shadow-soft">
           <div class="absolute -right-6 -bottom-6 w-40 h-40 bg-[var(--el-color-primary)]/10 blur-[50px] rounded-full pointer-events-none"></div>
           <div class="relative">
-            <p class="text-[var(--el-text-color-secondary)] text-xs font-medium mb-1">Projected Yield</p>
-            <div class="text-3xl font-semibold tracking-tight text-[var(--el-text-color-primary)]">${{ (analyticsData.stats.projectedYield || 5140).toLocaleString() }}<span class="text-[var(--el-text-color-secondary)]">.00</span></div>
-            <p class="text-xs text-[var(--el-text-color-secondary)] mt-2">Est. payout on May 28, 2026</p>
-            <button class="mt-4 bg-[var(--el-color-primary)] hover:bg-[var(--el-color-primary-dark-2)] text-[var(--el-color-primary-foreground,#002112)] font-semibold text-sm py-2.5 px-5 rounded-xl transition-all duration-200 cursor-pointer shadow-soft hover:shadow active:scale-[0.98]">
-              Withdraw
-            </button>
+            <p class="text-[var(--el-text-color-secondary)] text-xs font-medium mb-1">{{ t('dashboard.projectedYield') }}</p>
+            <div class="text-3xl font-semibold tracking-tight text-[var(--el-text-color-primary)]">${{ (analyticsData.stats.projectedYield || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</div>
+            <p class="text-xs text-[var(--el-text-color-secondary)] mt-2">{{ t('dashboard.estPayout') }}</p>
+            <el-button type="primary"
+              round size="large"
+              icon="Money"
+              @click="handleWithdraw"
+            >
+              {{ t('dashboard.withdraw') }}
+            </el-button>
           </div>
         </div>
       </div>
     </section>
 
     <!-- Series Wizard Modal -->
-    <SeriesWizardModal v-model="isWizardOpen" @created="id => router.push(`/project/${id}`)" />
+    <SeriesWizardModal 
+      v-model="isWizardOpen" 
+      :initial-trend="selectedTrendForWizard"
+      @created="id => router.push(`/project/${id}`)" 
+    />
   </div>
 </template>
-

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
 
@@ -7,6 +8,7 @@ const props = defineProps<{
   clip: any;
 }>();
 
+const { t } = useI18n();
 const duration = ref(2);
 
 watch(
@@ -29,9 +31,9 @@ const handleDurationChange = (vals: number[] | undefined) => {
 
 <template>
   <div class="space-y-4 text-xs">
-    <div class="font-semibold text-sm">Transition Properties</div>
+    <div class="font-semibold text-sm">{{ t('editor.transitionProperties') }}</div>
     <div class="space-y-2">
-      <Label class="text-xs">Transition Duration (seconds)</Label>
+      <Label class="text-xs">{{ t('editor.transitionDuration') }}</Label>
       <div class="flex items-center gap-3">
         <Slider
           :model-value="[duration]"

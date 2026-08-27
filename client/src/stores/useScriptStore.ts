@@ -1,14 +1,14 @@
 import { defineStore } from 'pinia';
 import http from '@/utils/http';
 import { useSeriesStore } from '@/stores/useSeriesStore';
-import type { ScriptItem, SeriesOutline, SupervisionResult } from '@/types/api';
+import type { Episode, ScriptItem, SeriesOutline, SupervisionResult } from '@/types/api';
 
-export interface Episode {
-  id?: string;
-  number: number;
-  title: string;
-  status: 'draft' | 'in_progress' | 'done';
-}
+// export interface Episode {
+//   id?: string;
+//   number: number;
+//   title: string;
+//   status: 'draft' | 'in_progress' | 'done';
+// }
 
 export const useScriptStore = defineStore('script', {
   state: () => ({
@@ -45,10 +45,10 @@ export const useScriptStore = defineStore('script', {
             return await this.generateFullScript({
               title: s.title,
               genre: s.genre || 'Suspense',
-              visualStyle: s.visual_style || s.visualStyle || 'realistic',
+              visual_style: s.visual_style || 'realistic',
               synopsis: s.synopsis || s.description || `${s.title} official series synopsis.`,
-              episodeNumber: episodeNumber || 1,
-              totalEpisodes: s.episode_count || 20,
+              episode_number: episodeNumber || 1,
+              total_episodes: s.episode_count || 20,
             });
           }
         } catch (e) {
@@ -65,10 +65,10 @@ export const useScriptStore = defineStore('script', {
           return await this.generateFullScript({
             title: s.title,
             genre: s.genre || 'Suspense',
-            visualStyle: s.visual_style || s.visualStyle || 'realistic',
+            visual_style: s.visual_style || 'realistic',
             synopsis: s.synopsis || s.description || `${s.title} official series synopsis.`,
-            episodeNumber: episodeNumber || 1,
-            totalEpisodes: s.episode_count || 20,
+            episode_number: episodeNumber || 1,
+            total_episodes: s.episode_count || 20,
           });
         }
       } catch (e) {
@@ -78,13 +78,13 @@ export const useScriptStore = defineStore('script', {
       throw new Error('No series found to generate script. Please select or create a series first.');
     },
 
-    async generateFullScript(payload: { title: string; genre: string; visualStyle?: string; synopsis: string; episodeNumber?: number; totalEpisodes?: number }) {
+    async generateFullScript(payload: { title: string; genre: string; visual_style?: string; synopsis: string; episode_number?: number; total_episodes?: number }) {
       this.isGenerating = true;
       try {
         const res = await http.post('/ai/generate-script', payload) as any;
         if (res.data) {
           this.outline = res.data.outline;
-          this.activeScript = res.data.scriptItem;
+          this.activeScript = res.data.script_item;
           this.supervision = res.data.supervision;
         }
         return res.data;
@@ -135,8 +135,8 @@ export const useScriptStore = defineStore('script', {
       const epId = episodeId || (seriesStore.activeEpisode as any)?.id;
       const res: any = await http.post('/assets/screenplay/extract', {
         screenplay,
-        seriesId: sId,
-        episodeId: epId,
+        series_id: sId,
+        episode_id: epId,
       });
       return res.data || { characters: [], locations: [], props: [] };
     },
@@ -146,62 +146,63 @@ export const useScriptStore = defineStore('script', {
       characters?: string[];
       locations?: string[];
       props?: string[];
-      seriesId?: string;
-      episodeId?: string;
+      series_id?: string;
+      episode_id?: string;
     }) {
       const seriesStore = useSeriesStore();
-      const sId = payload.seriesId || seriesStore.currentSeries?.id;
-      const epId = payload.episodeId || (seriesStore.activeEpisode as any)?.id;
+      const sId = payload.series_id || seriesStore.currentSeries?.id;
+      const epId = payload.episode_id || (seriesStore.activeEpisode as any)?.id;
       const res: any = await http.post('/assets/screenplay/describe-assets', {
         ...payload,
-        seriesId: sId,
-        episodeId: epId,
+        series_id: sId,
+        episode_id: epId,
       });
       return res.data || { characters: {}, locations: {}, props: {} };
     },
 
     async analyzeScreenplay(payload: {
       screenplay: string;
-      seriesId?: string;
-      episodeId?: string;
-      existingCharacters?: any[];
-      existingLocations?: any[];
-      existingProps?: any[];
+      series_id?: string;
+      episode_id?: string;
+      existing_characters?: any[];
+      existing_locations?: any[];
+      existing_props?: any[];
+      target_duration_seconds?: number;
     }) {
       const seriesStore = useSeriesStore();
-      const sId = payload.seriesId || seriesStore.currentSeries?.id;
-      const epId = payload.episodeId || (seriesStore.activeEpisode as any)?.id;
+      const sId = payload.series_id || seriesStore.currentSeries?.id;
+      const epId = payload.episode_id || (seriesStore.activeEpisode as any)?.id;
       const res: any = await http.post('/assets/screenplay/analyze', {
         ...payload,
-        seriesId: sId,
-        episodeId: epId,
+        series_id: sId,
+        episode_id: epId,
       });
-      return res.data || { characters: [], locations: [], props: [], scenes: [], totalDurationSeconds: 0 };
+      return res.data || { characters: [], locations: [], props: [], scenes: [], total_duration_seconds: 0 };
     },
 
-    async generateCharacterSheet(payload: { characterName: string; physicalCharacteristics: string; clothingAndAccessories?: string; visualStyle?: string; referenceImageUrl?: string }) {
+    async generateCharacterSheet(payload: { character_name: string; physical_characteristics: string; clothing_and_accessories?: string; visual_style?: string; reference_image_url?: string }) {
       const res: any = await http.post('/assets/character/sheet', payload);
-      return res.data || { imageUrl: '' };
+      return res.data || { image_url: '' };
     },
 
-    async generateLocationSheet(payload: { locationName: string; physicalCharacteristics: string; timeOfDay?: string; visualStyle?: string }) {
+    async generateLocationSheet(payload: { location_name: string; physical_characteristics: string; time_of_day?: string; visual_style?: string }) {
       const res: any = await http.post('/assets/location/sheet', payload);
-      return res.data || { imageUrl: '' };
+      return res.data || { image_url: '' };
     },
 
-    async generatePropSheet(payload: { propName: string; physicalCharacteristics: string; visualStyle?: string }) {
+    async generatePropSheet(payload: { prop_name: string; physical_characteristics: string; visual_style?: string }) {
       const res: any = await http.post('/assets/prop/sheet', payload);
-      return res.data || { imageUrl: '' };
+      return res.data || { image_url: '' };
     },
 
-    async breakdownSceneToShots(payload: { sceneTitle: string; sceneContent: string; availableAssets: any[] }) {
+    async breakdownSceneToShots(payload: { scene_title: string; scene_content: string; available_assets: any[] }) {
       const res: any = await http.post('/assets/screenplay/breakdown-shots', payload);
       return res.data?.shots || [];
     },
 
-    async generateShotImage(payload: { shot: any; assets: any[]; visualStyle?: string; aspectRatio?: string }) {
+    async generateShotImage(payload: { shot: any; assets: any[]; visual_style?: string; aspect_ratio?: string }) {
       const res: any = await http.post('/assets/storyboard/shot-image', payload);
-      return res.data || { imageUrl: '' };
+      return res.data || { image_url: '' };
     },
   },
 });

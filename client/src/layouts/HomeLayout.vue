@@ -1,167 +1,164 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { storeToRefs } from 'pinia';
 import LanguageSelect from '@/components/shared/LanguageSelect.vue';
 import { Moon, Sunny } from '@element-plus/icons-vue';
 
 const { t } = useI18n();
+const route = useRoute();
+const router = useRouter();
 const authStore = useAuthStore();
+const { isDark } = storeToRefs(authStore);
 
-const isDark = computed({
-  get: () => (authStore.user?.theme || localStorage.getItem('shine_theme') || 'dark') === 'dark',
-  set: (val: boolean) => {
-    const nextTheme = val ? 'dark' : 'light';
-    authStore.updatePreferences({ theme: nextTheme });
-  }
-});
-
-function toggleDarkMode(val: string | number | boolean) {
-  const isEnabled = Boolean(val);
-  const nextTheme = isEnabled ? 'dark' : 'light';
-  authStore.updatePreferences({ theme: nextTheme });
+function toggleDarkMode() {
+  authStore.updatePreferences({ theme: isDark.value ? 'dark' : 'light' });
 }
 
 const headerNavLinks = [
-  { key: 'nav.studio', href: '#' },
-  { key: 'nav.director', href: '#' },
-  { key: 'nav.pricing', href: '#' },
-  { key: 'nav.showcase', href: '#' },
+  { key: 'nav.engine', href: '/#engine' },
+  { key: 'nav.gallery', href: '/#gallery' },
+  { key: 'nav.pricing', href: '/#pricing' },
 ];
 
-const footerColumns = [
-  {
-    titleKey: 'footer.product',
-    links: [
-      { key: 'nav.capabilities', href: '#' },
-      { key: 'nav.pricing', href: '#' },
-      { key: 'nav.marketplace', href: '#' },
-    ],
-  },
-  {
-    titleKey: 'footer.company',
-    links: [
-      { key: 'nav.about', href: '/manual' },
-      { key: 'nav.careers', href: '#' },
-      { key: 'nav.press', href: '#' },
-    ],
-  },
-  {
-    titleKey: 'footer.resources',
-    links: [
-      { key: 'nav.blog', href: '#' },
-      { key: 'nav.helpCenter', href: '#' },
-      { key: 'nav.apiDocs', href: '#' },
-    ],
-  },
-  {
-    titleKey: 'footer.legal',
-    links: [
-      { key: 'nav.privacy', href: '/privacy' },
-      { key: 'nav.terms', href: '/terms' },
-      { key: 'nav.contactSales', href: '/contact' },
-    ],
-  },
-];
+function handleNavClick(href: string, e?: Event) {
+  if (href.startsWith('/#')) {
+    e?.preventDefault();
+    const hash = href.replace('/', '');
+    if (route.path === '/') {
+      const el = document.querySelector(hash);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+        history.pushState(null, '', href);
+        return;
+      }
+    }
+    router.push(href);
+  }
+}
 </script>
 
 <template>
-  <el-container class="min-h-screen flex flex-col font-['Outfit',sans-serif]">
-    <!-- Element Plus Header -->
-    <el-header id="public-header" height="72px" class="sticky top-0 z-50 border-b border-[#bbcabe]/30 bg-[var(--el-bg-color-page)]/90 backdrop-blur-md px-0">
-      <div class="flex justify-between items-center px-8 h-full max-w-[1440px] mx-auto w-full">
-        <!-- Logo -->
-        <router-link to="/" class="flex items-center gap-2.5">
-          <el-image src="/logo.png" alt="Shine Logo" fit="contain" class="h-9 w-auto" />
-          <el-text class="!text-2xl uppercase tracking-tight">{{ t('footer.appName') }}</el-text>
+  <div class="min-h-screen flex flex-col font-sans bg-[var(--el-bg-color-page)] text-[var(--el-text-color-primary)] selection:bg-[#72e3ad] selection:text-[#0f0f11]">
+    <!-- Navigation -->
+    <header id="public-header" class="fixed top-0 left-0 w-full z-50 px-6 py-4 flex justify-between items-center bg-[var(--el-bg-color-page)]/80 backdrop-blur-md border-b border-[var(--el-border-color)]/60">
+      <div class="flex items-center space-x-8">
+        <router-link to="/" class="flex items-center gap-2 text-xl font-bold font-heading tracking-tight text-[var(--el-text-color-primary)]">
+          <img src="/logo.png" alt="Shine Logo" class="h-7 w-auto object-contain" />
+          <span>SHINE</span>
         </router-link>
-
-        <!-- Nav Links -->
-        <div class="hidden md:flex items-center gap-8 text-sm font-medium">
-          <el-link
+        <div class="hidden md:flex space-x-6 text-[11px] font-medium uppercase tracking-widest text-[var(--el-text-color-secondary)]">
+          <a
             v-for="link in headerNavLinks"
-            :key="link.key"
+            :key="link.href"
             :href="link.href"
-            :underline="false"
-            class="!text-[var(--el-text-color-regular)] hover:!text-[var(--el-color-primary)] font-medium"
+            class="nav-link-shine relative py-1 hover:text-[var(--el-text-color-primary)] transition-colors cursor-pointer"
+            @click="(e: MouseEvent) => handleNavClick(link.href, e)"
           >
             {{ t(link.key) }}
-          </el-link>
-        </div>
-
-        <!-- Right Controls: Dark Mode Switch, Language, Login, Get Started Button -->
-        <div class="flex items-center gap-4">
-          <el-switch
-            v-model="isDark"
-            :active-icon="Moon"
-            :inactive-icon="Sunny"
-            inline-prompt
-            @change="toggleDarkMode"
-          />
-          <LanguageSelect />
-
-          <!-- <router-link to="/auth/login" class="hidden md:block">
-            <el-button link class="!text-xs !font-bold uppercase tracking-widest !text-[var(--el-text-color-regular)] hover:!text-[var(--el-color-primary)]">
-              {{ t('nav.signIn') }}
-            </el-button>
-          </router-link> -->
-
-          <router-link to="/dashboard">
-            <el-button
-              type="primary"
-              round
-              class="!bg-primary !text-on-primary !border-none !px-6 !py-2.5 !font-bold text-xs uppercase tracking-widest hover:!opacity-90 shadow-sm"
-            >
-              {{ t('nav.getStarted') }}
-            </el-button>
-          </router-link>
+          </a>
         </div>
       </div>
-    </el-header>
+
+      <!-- Right Controls -->
+      <div class="flex items-center space-x-4">
+        <!-- Live Engine Indicator -->
+        <div class="hidden md:flex items-center space-x-2 text-[10px] font-bold uppercase tracking-widest text-[var(--el-text-color-secondary)] mr-2">
+          <span class="w-2 h-2 bg-[#72e3ad] rounded-full animate-pulse-dot"></span>
+          <span>{{ t('home.liveEngine') }}</span>
+        </div>
+
+        <!-- Dark/Light Theme Switch -->
+        <el-switch
+          v-model="isDark"
+          :active-icon="Moon"
+          :inactive-icon="Sunny"
+          inline-prompt
+          @change="toggleDarkMode"
+        />
+
+        <!-- Language Select -->
+        <LanguageSelect />
+
+        <!-- Launch / Start Button -->
+        <router-link to="/dashboard">
+          <button class="bg-[#72e3ad] text-[#0f0f11] px-5 py-2 rounded-full text-[11px] font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-all shadow-sm">
+            {{ t('home.startBtn') }}
+          </button>
+        </router-link>
+      </div>
+    </header>
 
     <!-- Main Content Slot -->
-    <el-main class="flex-1 p-0">
+    <main class="flex-1 w-full">
       <router-view />
-    </el-main>
+    </main>
 
-    <!-- Element Plus Footer -->
-    <el-footer height="auto" class="w-full py-12 bg-[var(--el-border-color-lighter)] border-t border-[#bbcabe]/40 text-[var(--el-text-color-secondary)] px-0">
-      <div class="flex flex-col md:flex-row justify-between items-start px-8 gap-8 max-w-[1440px] mx-auto w-full">
-        <div class="max-w-xs space-y-3">
-          <div class="flex items-center gap-2">
-            <el-image src="https://lh3.googleusercontent.com/aida/AP1WRLuaPtDuN3RWNymo7PB6mSlvEnyP2qs9JFRcDj0AGUuHbhLQwknZMuhIFOuajtbm-xZlfZtubTtlsvS5ZabEAbxIVk1FT1Hew3MHLZGbJ6tJUNwO_EKDci4aN-7I_QJW9VCsiJQv1O_-Dd7eRqMS4s1J3cZjanzelx-9tA5Hrdt8EMVqpGUfi84wgkV4621eqn2b-x0tJ92n6ZFTXlWXnlRxdsEBDPeGokVZ-sWcF3FmGwBF0xwECoPvr_k" alt="Shine Logo" fit="contain" class="h-6 w-auto grayscale opacity-80" />
-            <el-text class="!font-black !text-lg !text-[var(--el-text-color-primary)] uppercase tracking-tight">Shine</el-text>
+    <!-- Footer -->
+    <footer class="bg-[var(--el-bg-color)] border-t border-[var(--el-border-color)] pt-24 pb-12 px-6">
+      <div class="container mx-auto max-w-[1440px]">
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-12 mb-20">
+          <!-- Brand Column -->
+          <div class="md:col-span-4 space-y-4">
+            <div class="flex items-center gap-2.5">
+              <img src="/logo.png" alt="Shine Logo" class="h-6 w-auto object-contain" />
+              <span class="text-2xl font-bold font-heading tracking-tight text-[#72e3ad]">SHINE</span>
+            </div>
+            <p class="text-sm text-[var(--el-text-color-secondary)] max-w-xs leading-relaxed">
+              {{ t('footer.tagline') || 'The future of short-form storytelling. Create, produce, and distribute vertical cinema with AI.' }}
+            </p>
           </div>
-          <el-text class="!text-xs !text-[var(--el-text-color-regular)] block leading-relaxed">
-            Empowering creators with enterprise-grade AI for vertical micro-dramas.
-          </el-text>
+
+          <!-- Product Links -->
+          <div class="md:col-span-2">
+            <h4 class="text-[10px] font-bold uppercase tracking-widest mb-6 text-[#72e3ad]/70 dark:text-[#72e3ad]/60">{{ t('footer.product') }}</h4>
+            <ul class="space-y-3 text-sm text-[var(--el-text-color-secondary)]">
+              <li><a href="/#engine" @click="handleNavClick('/#engine', $event)" class="hover:text-[#72e3ad] transition-colors">{{ t('nav.capabilities') || t('nav.engine') }}</a></li>
+              <li><a href="/#pricing" @click="handleNavClick('/#pricing', $event)" class="hover:text-[#72e3ad] transition-colors">{{ t('nav.pricing') }}</a></li>
+              <li><a href="/#gallery" @click="handleNavClick('/#gallery', $event)" class="hover:text-[#72e3ad] transition-colors">{{ t('nav.showcase') || t('nav.gallery') }}</a></li>
+            </ul>
+          </div>
+
+          <!-- Resources Links -->
+          <div class="md:col-span-2">
+            <h4 class="text-[10px] font-bold uppercase tracking-widest mb-6 text-[#72e3ad]/70 dark:text-[#72e3ad]/60">{{ t('footer.resources') }}</h4>
+            <ul class="space-y-3 text-sm text-[var(--el-text-color-secondary)]">
+              <li><a href="#" class="hover:text-[#72e3ad] transition-colors">{{ t('nav.blog') }}</a></li>
+              <li><a href="#" class="hover:text-[#72e3ad] transition-colors">{{ t('nav.helpCenter') }}</a></li>
+              <li><a href="#" class="hover:text-[#72e3ad] transition-colors">{{ t('nav.apiDocs') }}</a></li>
+            </ul>
+          </div>
+
+          <!-- Company Links -->
+          <div class="md:col-span-2">
+            <h4 class="text-[10px] font-bold uppercase tracking-widest mb-6 text-[#72e3ad]/70 dark:text-[#72e3ad]/60">{{ t('footer.company') }}</h4>
+            <ul class="space-y-3 text-sm text-[var(--el-text-color-secondary)]">
+              <li><router-link to="/manual" class="hover:text-[#72e3ad] transition-colors">{{ t('nav.about') }}</router-link></li>
+              <li><a href="#" class="hover:text-[#72e3ad] transition-colors">{{ t('nav.careers') }}</a></li>
+              <li><router-link to="/privacy" class="hover:text-[#72e3ad] transition-colors">{{ t('footer.legal') }}</router-link></li>
+            </ul>
+          </div>
+
+          <!-- Social Links -->
+          <div class="md:col-span-2 flex flex-col justify-end md:items-end">
+            <div class="flex space-x-4 text-lg text-[var(--el-text-color-secondary)]">
+              <a href="#" aria-label="Twitter" class="w-8 h-8 rounded-full bg-[var(--el-border-color)]/30 flex items-center justify-center font-bold text-xs hover:bg-[#72e3ad] hover:text-[#0f0f11] transition-all">𝕏</a>
+              <a href="#" aria-label="Instagram" class="w-8 h-8 rounded-full bg-[var(--el-border-color)]/30 flex items-center justify-center font-bold text-xs hover:bg-[#72e3ad] hover:text-[#0f0f11] transition-all">📷</a>
+              <a href="#" aria-label="LinkedIn" class="w-8 h-8 rounded-full bg-[var(--el-border-color)]/30 flex items-center justify-center font-bold text-xs hover:bg-[#72e3ad] hover:text-[#0f0f11] transition-all">🔗</a>
+            </div>
+          </div>
         </div>
 
-        <!-- 4 Footer Link Columns -->
-        <el-row :gutter="32" class="w-full md:w-auto">
-          <el-col v-for="col in footerColumns" :key="col.titleKey" :span="6" :xs="12" class="flex flex-col gap-3">
-            <el-text class="!font-bold !text-[var(--el-text-color-primary)] uppercase tracking-widest mb-1 block">{{ t(col.titleKey) }}</el-text>
-            <router-link
-              v-for="link in col.links"
-              :key="link.key"
-              :to="link.href"
-            >
-              <el-link :underline="false" class="!text-xs !text-[var(--el-text-color-regular)] hover:!text-[var(--el-text-color-primary)]">
-                {{ t(link.key) }}
-              </el-link>
-            </router-link>
-          </el-col>
-        </el-row>
-      </div>
-
-      <div class="px-8 max-w-[1440px] mx-auto mt-12 pt-6 border-t border-[#bbcabe]/40 flex flex-col md:flex-row justify-between items-center gap-4 text-xs w-full">
-        <el-text class="!text-xs uppercase tracking-wider text-[var(--el-text-color-secondary)]">© 2026 Shine Intelligence. Enterprise-grade AI Cinema.</el-text>
-        <div class="flex gap-4">
-          <div aria-label="Twitter" class="w-7 h-7 rounded-full bg-[#bbcabe]/30 flex items-center justify-center font-bold text-xs hover:bg-primary hover:text-on-primary transition-colors cursor-pointer">𝕏</div>
-          <div aria-label="LinkedIn" class="w-7 h-7 rounded-full bg-[#bbcabe]/30 flex items-center justify-center font-bold text-xs hover:bg-primary hover:text-on-primary transition-colors cursor-pointer">🔗</div>
-          <div aria-label="Instagram" class="w-7 h-7 rounded-full bg-[#bbcabe]/30 flex items-center justify-center font-bold text-xs hover:bg-primary hover:text-on-primary transition-colors cursor-pointer">📷</div>
+        <!-- Copyright & Legal -->
+        <div class="pt-8 border-t border-[var(--el-border-color)] flex flex-col md:flex-row justify-between items-center text-[10px] text-[var(--el-text-color-secondary)] uppercase tracking-widest">
+          <p>{{ t('home.copyrightText') }}</p>
+          <div class="flex space-x-6 mt-4 md:mt-0">
+            <router-link to="/privacy" class="hover:text-[#72e3ad] transition-colors">{{ t('nav.privacy') }}</router-link>
+            <router-link to="/terms" class="hover:text-[#72e3ad] transition-colors">{{ t('nav.terms') }}</router-link>
+          </div>
         </div>
       </div>
-    </el-footer>
-  </el-container>
+    </footer>
+  </div>
 </template>

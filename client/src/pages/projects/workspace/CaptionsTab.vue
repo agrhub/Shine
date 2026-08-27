@@ -15,6 +15,7 @@ import { TabPaneName } from 'element-plus';
 import { core } from '@/utils/project';
 import { fontManager } from '@openvideo/engine-pixi';
 import { getGroupedFonts, getFontByPostScriptName } from '@/utils/font-utils';
+import http from '@/utils/http';
 
 const emit = defineEmits<{
   (e: 'apply-captions'): void;
@@ -52,20 +53,86 @@ const mainTargetLang = computed<GeminiSpeechLanguage>(() => {
 });
 
 // Language track state
-const activeCapLang = ref('vi-VN');
-const translateSourceLang = ref('vi-VN');
-const activeTrackCodes = ref<string[]>([]);
+const activeCapLang = ref('en-US');
+const translateSourceLang = ref('en-US');
+const activeTrackCodes = computed(() => seriesStore.captionLanguages);
 const selectedBatchLangs = ref<string[]>([]);
 const isBatchMode = ref(false);
 const isEnableCaption = ref(true);
 const selectedLangToAdd = ref<string>('');
 
+// Hydrate caption settings from active episode
+watch(() => seriesStore.activeEpisode?.caption_settings, (settings) => {
+  if (settings) {
+    if (settings.isEnableCaption !== undefined) isEnableCaption.value = settings.isEnableCaption;
+    if (settings.selectedCaptionStyle) selectedCaptionStyle.value = settings.selectedCaptionStyle;
+    if (settings.selectedFontFamily) selectedFontFamily.value = settings.selectedFontFamily;
+    if (settings.captionFontSize !== undefined) captionFontSize.value = settings.captionFontSize;
+    if (settings.captionTextColor) captionTextColor.value = settings.captionTextColor;
+    if (settings.activeWordHighlightColor) activeWordHighlightColor.value = settings.activeWordHighlightColor;
+    if (settings.captionOutlineColor) captionOutlineColor.value = settings.captionOutlineColor;
+    if (settings.captionOutlineWeight !== undefined) captionOutlineWeight.value = settings.captionOutlineWeight;
+    if (settings.captionVerticalPos !== undefined) captionVerticalPos.value = settings.captionVerticalPos;
+    if (settings.selectedVerticalAlign) selectedVerticalAlign.value = settings.selectedVerticalAlign;
+    if (settings.selectedTextAlign) selectedTextAlign.value = settings.selectedTextAlign;
+    if (settings.selectedWordsPerLine) selectedWordsPerLine.value = settings.selectedWordsPerLine;
+    if (settings.selectedTextCase) selectedTextCase.value = settings.selectedTextCase;
+    if (settings.enableBackgroundBox !== undefined) enableBackgroundBox.value = settings.enableBackgroundBox;
+    if (settings.captionBgColor) captionBgColor.value = settings.captionBgColor;
+    if (settings.aiHighlightAnimate !== undefined) aiHighlightAnimate.value = settings.aiHighlightAnimate;
+  }
+}, { immediate: true, deep: true });
+
+function persistCaptionSettings() {
+  const epId = seriesStore.activeEpisodeId;
+  const sId = seriesStore.currentSeries?.id;
+  if (!epId) return;
+  seriesStore.updateEpisodeCaptionSettings(epId, {
+    isEnableCaption: isEnableCaption.value,
+    selectedCaptionStyle: selectedCaptionStyle.value,
+    selectedFontFamily: selectedFontFamily.value,
+    captionFontSize: captionFontSize.value,
+    captionTextColor: captionTextColor.value,
+    activeWordHighlightColor: activeWordHighlightColor.value,
+    captionOutlineColor: captionOutlineColor.value,
+    captionOutlineWeight: captionOutlineWeight.value,
+    captionVerticalPos: captionVerticalPos.value,
+    selectedVerticalAlign: selectedVerticalAlign.value,
+    selectedTextAlign: selectedTextAlign.value,
+    selectedWordsPerLine: selectedWordsPerLine.value,
+    selectedTextCase: selectedTextCase.value,
+    enableBackgroundBox: enableBackgroundBox.value,
+    captionBgColor: captionBgColor.value,
+    aiHighlightAnimate: aiHighlightAnimate.value,
+  });
+  if (sId) seriesStore.saveEpisodeScenes(sId, epId);
+}
+
+watch([
+  isEnableCaption,
+  selectedCaptionStyle,
+  selectedFontFamily,
+  captionFontSize,
+  captionTextColor,
+  activeWordHighlightColor,
+  captionOutlineColor,
+  captionOutlineWeight,
+  captionVerticalPos,
+  selectedVerticalAlign,
+  selectedTextAlign,
+  selectedWordsPerLine,
+  selectedTextCase,
+  enableBackgroundBox,
+  captionBgColor,
+  aiHighlightAnimate
+], () => {
+  persistCaptionSettings();
+});
+
 // Auto-sync main language when active series changes
 watch(mainTargetLang, (newMain) => {
   if (newMain) {
-    if (!activeTrackCodes.value.includes(newMain.code)) {
-      activeTrackCodes.value.unshift(newMain.code);
-    }
+    seriesStore.addCaptionLanguage(newMain.code);
     if (!activeCapLang.value || (activeCapLang.value === 'en-US' && newMain.code !== 'en-US')) {
       activeCapLang.value = newMain.code;
     }
@@ -75,11 +142,13 @@ watch(mainTargetLang, (newMain) => {
 
 function handleAddLanguage(code: string) {
   if (!code) return;
-  if (!activeTrackCodes.value.includes(code)) {
-    activeTrackCodes.value.push(code);
-  }
+  seriesStore.addCaptionLanguage(code);
   activeCapLang.value = code;
+  seriesStore.setPreviewCaptionLanguage(code);
   selectedLangToAdd.value = '';
+  if (isEnableCaption.value && code !== mainTargetLang.value?.code) {
+    handleTranslateActiveLanguage();
+  }
 }
 
 const scenes = computed(() => seriesStore.activeScript?.scenes || seriesStore.activeEpisode?.scenes || []);
@@ -305,7 +374,7 @@ function handleExportSRT() {
   a.download = `subtitles_${activeCapLang.value}.srt`;
   a.click();
   URL.revokeObjectURL(url);
-  toast.success(`Exported subtitles_${activeCapLang.value}.srt successfully!`);
+  toast.success(t('toast.subtitlesExported'));
 }
 
 // Shift All Captions Calibration (+/- ms)
@@ -332,7 +401,7 @@ function shiftAllCaptions(offsetMs: number) {
 
   if (updated) {
     core.store.setState({ ...state, clips });
-    toast.info(`Shifted all captions by ${offsetMs > 0 ? `+${offsetMs}` : offsetMs}ms`);
+    toast.info(t('toast.captionsShifted'));
   }
 }
 
@@ -353,7 +422,7 @@ function getSceneCues(sceneIndex: number) {
   const epId = seriesStore.activeEpisodeId;
   if (!epId) return [];
   const tracks = seriesStore.getLanguageTracks(epId);
-  return tracks.find(t => t.languageCode === activeCapLang.value)?.sceneCaptions[sceneIndex] || [];
+  return tracks.find(t => t.language_code === activeCapLang.value)?.scene_captions[sceneIndex] || [];
 }
 
 function hasCaptions(sceneIndex: number) {
@@ -403,12 +472,12 @@ async function generateCaptions() {
 }
 
 function handleRemoveLanguage(lang: TabPaneName) {
-  if (activeTrackCodes.value.length === 1) {
+  if (seriesStore.captionLanguages.length === 1) {
     return;
   }
-  activeTrackCodes.value.splice(activeTrackCodes.value.indexOf(lang as string), 1);
+  seriesStore.removeCaptionLanguage(lang as string);
   if (activeCapLang.value === lang) {
-    activeCapLang.value = activeTrackCodes.value[0];
+    activeCapLang.value = seriesStore.captionLanguages[0];
   }
 }
 </script>
@@ -426,7 +495,9 @@ function handleRemoveLanguage(lang: TabPaneName) {
           <p class="text-xs font-semibold" style="color: var(--el-text-color-primary);">{{ t('workspace.aiAutoCaption', 'AI Auto Caption') }}</p>
           <p class="text-[10px]" style="color: var(--el-text-color-secondary);">{{ t('workspace.autoGenerateEpisodeCaption', 'Auto generate & synchronize episode captions') }}</p>
         </div>
-        <el-switch v-model="isEnableCaption" size="small" />
+        <el-badge value="Comming soon" class="item">
+          <el-switch v-model="isEnableCaption" :disabled="true" size="small" />
+        </el-badge>
       </div>
     </div>
 
@@ -556,7 +627,7 @@ function handleRemoveLanguage(lang: TabPaneName) {
                         style="background-color: var(--el-card-bg-color); border-color: var(--el-border-color-lighter);"
                       >
                         <div class="flex items-center gap-2 min-w-0 flex-1">
-                          <span class="shrink-0 font-mono text-[9px]" style="color: var(--el-text-color-secondary);">{{ cue.startMs }}ms</span>
+                          <span class="shrink-0 font-mono text-[9px]" style="color: var(--el-text-color-secondary);">{{ cue.start_ms }}ms</span>
                           <span class="truncate font-medium" style="color: var(--el-text-color-primary);">{{ cue.text }}</span>
                         </div>
                       </div>

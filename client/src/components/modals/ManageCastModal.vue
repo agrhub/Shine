@@ -72,18 +72,16 @@ function getCharStatus(charId: string) {
           class="w-28 sm:w-32 aspect-[3/4] shrink-0 rounded-xl overflow-hidden relative border shadow-sm flex items-center justify-center"
           style="border-color: var(--el-border-color); background-color: var(--el-fill-color-darker);"
         >
-          <img
-            v-if="char.avatarUrl"
-            :src="char.avatarUrl"
-            :alt="char.name"
-            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          />
-          <div v-else class="flex flex-col items-center justify-center p-2 text-center text-xs space-y-1" style="color: var(--el-text-color-placeholder);">
-            <el-icon :size="32"><User /></el-icon>
-            <span class="text-[10px]">{{ t('workspace.noAvatarYet', 'No render yet') }}</span>
-          </div>
+          <el-image :src="char.avatar as any" :alt="char.name" fit="cover" class="w-full h-full group-hover:scale-105 transition-transform duration-300">
+            <template #error>
+              <div class="flex flex-col items-center justify-center p-2 text-center text-xs space-y-1" style="color: var(--el-text-color-placeholder);">
+                <el-icon :size="32"><User /></el-icon>
+                <span class="text-[10px]">{{ t('workspace.noAvatarYet', 'No render yet') }}</span>
+              </div>
+            </template>
+          </el-image>
           <div
-            v-if="getCharStatus(char.id) === 'done' || char.avatarUrl"
+            v-if="getCharStatus(char.id) === 'done' || char.avatar"
             class="absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center shadow"
             style="background-color: var(--el-color-success);"
           >
@@ -115,11 +113,11 @@ function getCharStatus(charId: string) {
               <el-tag v-if="char.nationality" size="small" type="info" effect="plain" round class="!text-[9px]">
                 🌐 {{ char.nationality }}
               </el-tag>
-              <el-tag v-if="char.voiceId" size="small" type="success" effect="plain" round class="!text-[9px]">
-                🎙 {{ char.voiceId }}
+              <el-tag v-if="char.voice_id" size="small" type="success" effect="plain" round class="!text-[9px]">
+                🎙 {{ char.voice_id }}
               </el-tag>
-              <el-tag v-if="char.loraModel" size="small" type="info" effect="plain" class="!text-[9px] !font-mono truncate max-w-[100px]">
-                {{ char.loraModel }}
+              <el-tag v-if="char.lora_model" size="small" type="info" effect="plain" class="!text-[9px] !font-mono truncate max-w-[100px]">
+                {{ char.lora_model }}
               </el-tag>
             </div>
           </div>
@@ -135,7 +133,7 @@ function getCharStatus(charId: string) {
               :loading="getCharStatus(char.id) === 'running'"
               @click="handleRenderCharacter(char)"
             >
-              {{ char.avatarUrl ? 'Re-render' : (getCharStatus(char.id) === 'running' ? t('workspace.renderingCharacter') : t('workspace.renderCharacter')) }}
+              {{ char.avatar ? (t('workspace.rerender') || 'Re-render') : (getCharStatus(char.id) === 'running' ? t('workspace.renderingCharacter') : t('workspace.renderCharacter')) }}
             </el-button>
             <el-button
               size="small"
@@ -144,7 +142,7 @@ function getCharStatus(charId: string) {
               @click="viewCharacter(char)"
               class="!ml-0"
             >
-              Detail
+              {{ t('common.detail') }}
             </el-button>
           </div>
         </div>

@@ -24,9 +24,9 @@ export const useChatStore = defineStore('chat', {
       'Enhance character lighting',
     ] as string[],
     costGuardrails: {
-      maxBudgetUsd: 3.50,
-      currentSpendUsd: 1.25,
-      lowResProxyMode: false,
+      max_budget_usd: 3.50,
+      current_spend_usd: 1.25,
+      low_res_proxy_mode: false,
     } as CostGuardrails,
   }),
 

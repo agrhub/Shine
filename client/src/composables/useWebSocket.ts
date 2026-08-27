@@ -39,9 +39,9 @@ export function useWebSocket() {
   const broadcastPatch = (seriesId: string, commands: Command[], sessionId: string = 'session-1', userId: string = 'user-1') => {
     if (!socketRef.value || !isConnected.value) return;
     const event: PatchEvent = {
-      userId,
-      sessionId,
-      seriesId,
+      user_id: userId,
+      session_id: sessionId,
+      series_id: seriesId,
       commands,
       timestamp: Date.now(),
     };

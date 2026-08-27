@@ -4,12 +4,11 @@ import { createPinia } from 'pinia';
 import { createApp } from 'vue';
 
 import 'element-plus/dist/index.css';
-// import 'element-plus/theme-chalk/dark/css-vars.css'
+import 'element-plus/theme-chalk/dark/css-vars.css';
 
 import App from './App.vue';
 import i18n from './i18n';
 import router from './router';
-import 'uno.css';
 import './style.css';
 import 'flag-icons/css/flag-icons.min.css';
 import { Toaster } from 'vue-sonner';

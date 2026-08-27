@@ -8,7 +8,7 @@ export interface WizardFormData {
   genre: string;
   visualStyle: string;
   visualStylePrompt?: string;
-  description: string;
+  synopsis: string;
   targetEpisodes: number;
   episodeDurationSeconds: number;
   episodeDurationMinutes: number;
@@ -21,6 +21,7 @@ export interface WizardFormData {
 export interface PlanChatMessage {
   role: 'user' | 'assistant' | 'error';
   text: string;
+  thinking?: string | null;
   failedPrompt?: string;
 }
 

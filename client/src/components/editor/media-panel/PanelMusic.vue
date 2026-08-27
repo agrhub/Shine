@@ -116,7 +116,7 @@ const handleAddAudio = async (url: string, name: string) => {
 
       <div v-else-if="searchResults.length === 0" class="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
         <IconMusic :size="32" class="opacity-50" />
-        <span class="text-sm">No music found</span>
+        <span class="text-sm">{{ $t('editor.noMusicFound') }}</span>
       </div>
 
       <div v-else class="flex flex-col gap-2">

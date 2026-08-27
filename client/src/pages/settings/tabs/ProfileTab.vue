@@ -120,21 +120,21 @@ const platformDefinitions = [
   {
     id: 'youtube',
     name: 'YouTube Shorts',
-    icon: 'fa-brands fa-youtube',
+    icon: 'VideoPlay',
     color: 'text-red-500 bg-red-500/10',
     description: 'Auto-publish 9:16 vertical shorts directly to your YouTube channel.',
   },
   {
     id: 'tiktok',
     name: 'TikTok for Creators',
-    icon: 'fa-brands fa-tiktok',
+    icon: 'Film',
     color: 'text-cyan-400 bg-cyan-500/10',
     description: 'Direct publishing to TikTok feeds with hashtags and scheduled drops.',
   },
   {
     id: 'facebook',
     name: 'Meta Reels & Pages',
-    icon: 'fa-brands fa-facebook',
+    icon: 'Share',
     color: 'text-blue-500 bg-blue-600/10',
     description: 'Publish high-engagement reels across Facebook pages and Instagram.',
   },
@@ -242,7 +242,7 @@ async function handleAvatarFileChange(e: Event) {
   reader.onerror = () => {
     isUploadingAvatar.value = false;
     target.value = '';
-    toast.error('Failed to read image file');
+    toast.error(t('toast.imageFileReadError'));
   };
   reader.readAsDataURL(file);
 }
@@ -393,7 +393,7 @@ onUnmounted(() => {
       <div class="flex items-center gap-6 p-4 bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-2xl shadow-soft">
         <div class="relative group">
           <img
-            :src="avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=160&h=160&fit=crop&crop=faces'"
+            :src="avatarUrl || '/images/avatars/avatar-default.jpg'"
             alt="Avatar"
             class="w-20 h-20 rounded-full object-cover ring-2 ring-[var(--el-border-color)] group-hover:opacity-80 transition"
           />
@@ -460,7 +460,7 @@ onUnmounted(() => {
             <div class="flex items-start justify-between">
               <div class="flex items-center gap-3">
                 <div :class="['w-10 h-10 rounded-xl flex items-center justify-center text-lg', platform.color]">
-                  <i :class="platform.icon"></i>
+                  <el-icon :size="20"><component :is="platform.icon" /></el-icon>
                 </div>
                 <div>
                   <h4 class="font-bold text-sm text-[var(--el-text-color-primary)]">{{ platform.name }}</h4>
@@ -477,7 +477,7 @@ onUnmounted(() => {
                 v-if="getChannelsForProvider(platform.id).length === 0"
                 class="text-center py-4 bg-[var(--el-bg-color-page)] rounded-xl border border-dashed border-[var(--el-border-color)]"
               >
-                <p class="text-xs text-[var(--el-text-color-secondary)]">No channels connected yet</p>
+                <p class="text-xs text-[var(--el-text-color-secondary)]">{{ t('settings.noChannelsConnected') }}</p>
               </div>
 
               <div
@@ -487,7 +487,7 @@ onUnmounted(() => {
               >
                 <div class="flex items-center gap-2.5 overflow-hidden">
                   <img
-                    :src="ch.channelAvatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${ch.channelName}`"
+                    :src="ch.channelAvatar || '/images/avatars/avatar-default.jpg'"
                     alt="Channel"
                     class="w-7 h-7 rounded-full object-cover flex-shrink-0"
                   />
@@ -505,7 +505,7 @@ onUnmounted(() => {
                   title="Disconnect Channel"
                   @click="handleDisconnectChannel(ch.id)"
                 >
-                  <i class="fa-solid fa-link-slash text-xs"></i>
+                  <el-icon class="text-xs"><Link /></el-icon>
                 </el-button>
               </div>
             </div>
@@ -519,7 +519,7 @@ onUnmounted(() => {
               :loading="isConnectingProvider === platform.id"
               @click="connectPlatformPopup(platform.id)"
             >
-              <i class="fa-solid fa-plus mr-1.5 text-xs"></i>
+              <el-icon class="mr-1.5 text-xs"><Plus /></el-icon>
               {{ getChannelsForProvider(platform.id).length > 0 ? (t('settings.addAnotherChannel') || 'Add Channel') : (t('settings.connectChannel') || 'Connect Channel') }}
             </el-button>
           </div>
@@ -557,7 +557,7 @@ onUnmounted(() => {
       <div class="p-5 bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-2xl shadow-soft flex items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center text-base">
-            <i class="fa-solid fa-shield-halved"></i>
+            <el-icon><Lock /></el-icon>
           </div>
           <div>
             <h4 class="font-bold text-xs text-[var(--el-text-color-primary)]">{{ t('settings.twoFactor') }}</h4>
@@ -585,7 +585,7 @@ onUnmounted(() => {
       <div class="space-y-5 py-2">
         <div class="flex items-center gap-3 p-3.5 bg-primary/5 border border-primary/20 rounded-2xl">
           <div class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
-            <i class="fa-solid fa-envelope text-sm"></i>
+            <el-icon class="text-sm"><Message /></el-icon>
           </div>
           <div class="text-xs text-[var(--el-text-color-secondary)]">
             {{ t('dialog.otpSentTo') }} <strong class="text-[var(--el-text-color-primary)]">{{ maskedEmail }}</strong>

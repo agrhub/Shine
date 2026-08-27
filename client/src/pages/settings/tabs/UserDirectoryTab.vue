@@ -36,7 +36,7 @@ async function loadUsers() {
     }
   } catch (err: any) {
     console.error('Failed to load user directory', err);
-    toast.error('Failed to load user directory from database');
+    toast.error(t('toast.userDirectoryLoadError'));
   } finally {
     isLoading.value = false;
   }
@@ -62,11 +62,11 @@ async function saveUserRole() {
       role: editUserRoleValue.value,
     });
     selectedDirectoryUser.value.role = editUserRoleValue.value;
-    toast.success(`Role updated to "${editUserRoleValue.value}"`);
+    toast.success(t('toast.userRoleUpdated'));
     isEditRoleModalOpen.value = false;
     loadUsers();
   } catch (err: any) {
-    toast.error(err?.response?.data?.message || 'Failed to update user role');
+    toast.error(err?.response?.data?.message || t('toast.userDirectoryLoadError'));
   } finally {
     isUpdatingRole.value = false;
   }
@@ -92,11 +92,11 @@ async function saveUserCredits() {
     });
     selectedDirectoryUser.value.creditBalance = creditsValue.value;
     selectedDirectoryUser.value.credits = creditsValue.value;
-    toast.success('User credit balance updated');
-    isCreditsModalOpen.value = false;
+    toast.success(t('toast.userCreditsUpdated'));
+    isEditRoleModalOpen.value = false;
     loadUsers();
   } catch (err: any) {
-    toast.error(err?.response?.data?.message || 'Failed to update credits');
+    toast.error(err?.response?.data?.message || t('toast.userDirectoryLoadError'));
   } finally {
     isUpdatingCredits.value = false;
   }
@@ -112,17 +112,17 @@ onMounted(() => {
     <div class="flex justify-between items-center pb-5 border-b border-[var(--el-border-color)]">
       <div>
         <h2 class="text-2xl font-semibold tracking-tight text-[var(--el-text-color-primary)] flex items-center gap-2">
-          <i class="fa-solid fa-user-shield text-amber-500"></i>
-          User Directory & Role Management
+          <el-icon class="text-amber-500"><Lock /></el-icon>
+          {{ t('settings.userDirTitle') }}
         </h2>
         <p class="text-xs text-[var(--el-text-color-secondary)] mt-1">
-          Manage all registered studio users, subscription tiers, and role permissions
+          {{ t('settings.userDirDesc') }}
         </p>
       </div>
       <div class="flex items-center gap-3">
-        <el-tag type="info" size="small" round effect="plain">Total Users: {{ filteredUserDirectory.length }}</el-tag>
+        <el-tag type="info" size="small" round effect="plain">{{ t('settings.totalUsersLabel') }} {{ filteredUserDirectory.length }}</el-tag>
         <el-button size="small" round :loading="isLoading" @click="loadUsers">
-          <i class="fa-solid fa-arrows-rotate mr-1.5 text-xs"></i> Refresh
+          <el-icon class="mr-1.5"><Refresh /></el-icon> {{ t('common.refresh') }}
         </el-button>
       </div>
     </div>
@@ -137,7 +137,7 @@ onMounted(() => {
         size="small"
       >
         <template #prefix>
-          <i class="fa-solid fa-magnifying-glass text-xs text-gray-400"></i>
+          <el-icon class="text-gray-400"><Search /></el-icon>
         </template>
       </el-input>
       <el-select v-model="userTierFilter" placeholder="Filter Tier" style="width: 150px" size="small">
@@ -156,7 +156,7 @@ onMounted(() => {
           <template #default="{ row }">
             <div class="flex items-center gap-3 py-1">
               <img
-                :src="row.avatarUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + row.id"
+                :src="row.avatarUrl || '/images/avatars/avatar-default.jpg'"
                 class="w-9 h-9 rounded-full bg-surface-container object-cover border border-white/10 shrink-0"
               />
               <div class="min-w-0">
@@ -185,7 +185,7 @@ onMounted(() => {
         <el-table-column prop="creditBalance" label="Credits" width="130">
           <template #default="{ row }">
             <div class="flex items-center gap-1.5 font-mono text-xs font-bold text-primary">
-              <i class="fa-solid fa-coins text-amber-500 text-[10px]"></i>
+              <el-icon class="text-amber-500 text-[10px]"><Coin /></el-icon>
               <span>{{ (row.creditBalance ?? row.credits ?? 0).toLocaleString() }}</span>
             </div>
           </template>

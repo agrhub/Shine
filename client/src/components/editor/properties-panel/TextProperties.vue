@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Textarea } from '@/components/ui/textarea'
 import { Slider } from '@/components/ui/slider'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { NumberInput } from '@/components/ui/number-input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+
+const { t } = useI18n()
 import {
   IconRotate,
   IconAlignLeft,
@@ -473,11 +476,11 @@ const textCaseOptions = [
     <!-- Spacing Section (Line Height & Letter Spacing) -->
     <div class="flex flex-col gap-2 border-t border-border/40 pt-4">
       <label class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-        Spacing
+        {{ t('editor.spacing') }}
       </label>
       <div class="grid grid-cols-2 gap-2">
         <div class="flex flex-col gap-1">
-          <span class="text-[10px] text-muted-foreground">Line Height</span>
+          <span class="text-[10px] text-muted-foreground">{{ t('editor.lineHeight') }}</span>
           <InputGroup>
             <NumberInput
               :model-value="style.lineHeight || 1.2"
@@ -494,7 +497,7 @@ const textCaseOptions = [
         </div>
 
         <div class="flex flex-col gap-1">
-          <span class="text-[10px] text-muted-foreground">Letter Spacing</span>
+          <span class="text-[10px] text-muted-foreground">{{ t('editor.letterSpacing') }}</span>
           <InputGroup>
             <NumberInput
               :model-value="style.letterSpacing || 0"
@@ -519,63 +522,56 @@ const textCaseOptions = [
         <button
           v-for="item in alignmentOptions"
           :key="item.value"
-          @click="handleUpdate({ textAlign: item.value })"
           :class="cn(
-            'flex-1 flex items-center justify-center rounded-sm py-1 transition-colors',
-            textClip.textAlign === item.value
-              ? 'bg-white/10 text-white'
-              : 'text-muted-foreground hover:bg-white/5'
+            'flex-1 flex items-center justify-center h-7 rounded hover:bg-white/5 transition-colors',
+            style.align === item.value && 'bg-accent text-accent-foreground shadow-xs'
           )"
+          @click="() => handleStyleUpdate({ align: item.value })"
         >
-          <component :is="item.icon" class="size-3.5" />
+          <component :is="item.icon" class="size-4" />
         </button>
       </div>
 
-      <!-- Vertical Alignment -->
+      <!-- Vertical Alignment (Text Decoration) -->
       <div class="flex bg-input/30 rounded-md p-1 gap-1">
         <button
           v-for="item in verticalAlignOptions"
           :key="item.value"
-          @click="handleUpdate({ verticalAlign: item.value })"
           :class="cn(
-            'flex-1 flex items-center justify-center rounded-sm py-1 transition-colors',
-            textClip.verticalAlign === item.value
-              ? 'bg-white/10 text-white'
-              : 'text-muted-foreground hover:bg-white/5'
+            'flex-1 flex items-center justify-center h-7 rounded hover:bg-white/5 transition-colors',
+            style.textDecoration === item.value && 'bg-accent text-accent-foreground shadow-xs'
           )"
+          @click="() => handleStyleUpdate({ textDecoration: item.value })"
         >
-          <component :is="item.icon" class="size-3.5" />
+          <component :is="item.icon" class="size-4" />
         </button>
       </div>
     </div>
 
-    <!-- Case & Color Section -->
-    <div class="grid grid-cols-2 gap-2">
-      <!-- Text Case -->
-      <div class="flex bg-secondary/30 rounded-md p-1 gap-1">
-        <button
-          v-for="item in textCaseOptions"
-          :key="item.value"
-          @click="handleUpdate({ textCase: item.value })"
-          :class="cn(
-            'flex-1 text-[10px] font-medium flex items-center justify-center rounded-sm py-1 transition-colors',
-            (textClip.textCase || 'none') === item.value
-              ? 'bg-white/10 text-white'
-              : 'text-muted-foreground hover:bg-white/5'
-          )"
-        >
-          {{ item.label }}
-        </button>
-      </div>
+    <!-- Text Case Selector -->
+    <div class="flex bg-input/30 rounded-md p-1 gap-1">
+      <button
+        v-for="item in textCaseOptions"
+        :key="item.value"
+        :class="cn(
+          'flex-1 flex items-center justify-center h-7 rounded hover:bg-white/5 transition-colors text-xs font-semibold',
+          (style.textTransform || 'none') === item.value && 'bg-accent text-accent-foreground shadow-xs'
+        )"
+        @click="() => handleStyleUpdate({ textTransform: item.value })"
+      >
+        {{ item.label }}
+      </button>
+    </div>
 
-      <!-- Fill Color -->
-      <InputGroup class="flex-1">
+    <!-- Text Color Section (Fill Color) -->
+    <div class="flex flex-col gap-2">
+      <InputGroup>
         <InputGroupAddon align="inline-start" class="relative p-0">
           <Popover>
             <PopoverTrigger as-child>
               <button class="h-full w-8 flex items-center justify-center hover:bg-white/5">
                 <div
-                  class="h-4 w-4 border border-white/10 shadow-sm"
+                  class="h-4 w-4 rounded-full border border-white/10 shadow-sm"
                   :style="{ backgroundColor: style.fill || '#000000' }"
                 />
               </button>
@@ -602,7 +598,7 @@ const textCaseOptions = [
     <!-- Opacity Section -->
     <div class="flex flex-col gap-2">
       <label class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-        Opacity
+        {{ t('editor.opacity') }}
       </label>
       <div class="flex items-center gap-4">
         <IconCircle class="size-4 text-muted-foreground" />
@@ -626,7 +622,7 @@ const textCaseOptions = [
     <div class="flex flex-col gap-2">
       <div class="flex items-center justify-between">
         <label class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-          Stroke
+          {{ t('editor.stroke') }}
         </label>
       </div>
 
@@ -675,7 +671,7 @@ const textCaseOptions = [
     <div class="flex flex-col gap-2">
       <div class="flex items-center justify-between">
         <label class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-          Shadow
+          {{ t('editor.shadow') }}
         </label>
       </div>
 

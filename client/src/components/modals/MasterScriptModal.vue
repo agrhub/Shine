@@ -49,7 +49,7 @@ function copyScript() {
   <el-dialog
     :model-value="props.modelValue"
     @update:model-value="val => emit('update:modelValue', val)"
-    title="Master Plan Script breakdown"
+    :title="t('workspace.masterPlanScriptBreakdown')"
     width="700px"
     class="!rounded-2xl border !bg-[var(--el-bg-color-page)]"
     align-center
@@ -62,12 +62,12 @@ function copyScript() {
             <el-icon><Document /></el-icon>
           </div>
           <div>
-            <h3 class="text-lg font-bold" style="color: var(--el-text-color-primary);">Master Plan Script — {{ props.episodeTitle || seriesStore.activeEpisode?.title || 'Episode Script' }}</h3>
-            <p class="text-xs" style="color: var(--el-text-color-secondary);">AI Director Breakdown & Scene Lines</p>
+            <h3 class="text-lg font-bold" style="color: var(--el-text-color-primary);">{{ t('workspace.masterPlanScript') }} — {{ props.episodeTitle || seriesStore.activeEpisode?.title || 'Episode Script' }}</h3>
+            <p class="text-xs" style="color: var(--el-text-color-secondary);">{{ t('workspace.aiDirectorBreakdown') }}</p>
           </div>
         </div>
 
-        <el-button size="small" :icon="CopyDocument" @click="copyScript">Copy Script</el-button>
+        <el-button size="small" :icon="CopyDocument" @click="copyScript">{{ t('common.copy') }}</el-button>
       </div>
     </template>
 
@@ -81,7 +81,7 @@ function copyScript() {
       <div class="flex justify-between items-center">
         <el-tag type="success" effect="plain" round class="font-bold">AI VERIFIED</el-tag>
         <el-button type="primary" round class="!font-bold" @click="emit('update:modelValue', false)">
-          Done
+          {{ t('common.done') }}
         </el-button>
       </div>
     </template>
