@@ -6,8 +6,8 @@ import { usePipelineStore } from '@/stores/usePipelineStore';
 import { useScriptStore } from '@/stores/useScriptStore';
 import { toast } from 'vue-sonner';
 import { ElMessageBox } from 'element-plus';
+import { Character, CharacterWardrobeVariant } from '@/types/api';
 import http from '@/utils/http';
-import { Character, CharacterEpisode, CharacterWardrobeVariant } from '@/types/api';
 
 const emit = defineEmits<{
   (e: 'open-master-script'): void;
@@ -73,7 +73,7 @@ const isExtracting = ref(false);
 const isGeneratingAssetImage = ref<Record<string, boolean>>({});
 const selectedWardrobeVariant = ref<Record<string, string>>({});
 
-function getActiveWardrobeDesc(char: CharacterEpisode) {
+function getActiveWardrobeDesc(char: Character) {
   const selectedId = selectedWardrobeVariant.value[char.id];
   const variants = char.wardrobe_variants;
   if (selectedId && Array.isArray(variants)) {
@@ -89,7 +89,7 @@ function getCharacterAvatar(char: Character | {id: string, name: string, avatar:
   return master?.avatar || char.avatar || '';
 }
 
-function getActiveCharacterImage(char: CharacterEpisode): string {
+function getActiveCharacterImage(char: Character): string {
   if (!char) return '';
   const selectedId = selectedWardrobeVariant.value[char.id];
   const variants = char.wardrobe_variants;
@@ -166,10 +166,19 @@ async function saveEpisodeAssets() {
   const sId = seriesStore.currentSeries?.id;
   if (!epId || !sId) return;
   try {
+    if (extractedCharacters.value.length > 0 || extractedLocations.value.length > 0 || extractedProps.value.length > 0) {
+      await http.patch(`/series/${sId}`, {
+        characters: extractedCharacters.value,
+        locations: extractedLocations.value,
+        props: extractedProps.value,
+      });
+    }
     await http.patch(`/series/${sId}/episodes/${epId}`, {
-      characters: extractedCharacters.value,
-      locations: extractedLocations.value,
-      props: extractedProps.value,
+      reference_assets: {
+        character_ids: extractedCharacters.value.map((c: any) => c.id || c.name),
+        location_ids: extractedLocations.value.map((l: any) => l.id || l.name),
+        prop_ids: extractedProps.value.map((p: any) => p.id || p.name),
+      },
     });
   } catch (e) {
     console.warn('[saveEpisodeAssets] Failed to save assets to database:', e);
@@ -351,7 +360,7 @@ async function handleRenderProps(agentMode = false){
   }
 }
 
-async function handleGenerateCharacterSheet(char: CharacterEpisode, variantId?: string, agentMode = false) {
+async function handleGenerateCharacterSheet(char: Character, variantId?: string, agentMode = false) {
   isGeneratingAssetImage.value[char.id] = true;
   try {
     const selectedVariantId = variantId || selectedWardrobeVariant.value[char.id];
@@ -528,453 +537,431 @@ async function handleRenderAllAssetsAndStoryboard() {
 <template>
   <div class="space-y-4">
     <!-- Google Flow Navigation Sub-Tabs -->
-    <div class="flex items-center justify-between p-1.5 rounded-2xl border" style="background-color: var(--el-card-bg-color); border-color: var(--el-border-color);">
-      <div class="flex items-center gap-1">
-        <el-button
-          round
-          size="small"
-          :type="activeFlowTab === 'script' ? 'primary' : 'default'"
-          class="!font-bold !text-xs !px-3"
-          @click="activeFlowTab = 'script'"
-        >
-          <el-icon class="mr-1"><Document /></el-icon> 1. {{ t('workspace.tabScript', 'Script') }}
-        </el-button>
-        <el-button
-          round
-          size="small"
-          :type="activeFlowTab === 'assets' ? 'primary' : 'default'"
-          class="!font-bold !text-xs !px-3"
-          @click="activeFlowTab = 'assets'"
-        >
-          <el-icon class="mr-1"><Box /></el-icon> 2. {{ t('workspace.tabAssets', 'Assets') }} ({{ extractedCharacters.length + extractedLocations.length + extractedProps.length }})
-        </el-button>
-        <el-button
-          round
-          size="small"
-          :type="activeFlowTab === 'storyboard' ? 'primary' : 'default'"
-          class="!font-bold !text-xs !px-3"
-          @click="activeFlowTab = 'storyboard'"
-        >
-          <el-icon class="mr-1"><Picture /></el-icon> 3. {{ t('workspace.tabStoryboard', 'Storyboard') }}
-        </el-button>
-      </div>
-
-      <!-- <div class="flex items-center gap-1">
-        <el-button
-          round
-          size="small"
-          type="primary"
-          icon="MagicStick"
-          :loading="b2Step?.status === 'running'"
-          class="!font-bold !text-xs !px-3"
-          @click="handleRenderAllAssetsAndStoryboard"
-        >
-          {{ t('workspace.renderAssetsAndStoryboard', 'Assets & Storyboard') }}
-        </el-button>
-      </div> -->
-    </div>
-
-    <!-- ════════════════════════════════════════════════════════════════════════ -->
-    <!-- SUB-TAB 1: SCREENPLAY SCRIPT                                             -->
-    <!-- ════════════════════════════════════════════════════════════════════════ -->
-    <div v-if="activeFlowTab === 'script'" class="space-y-4">
-      <div class="p-4 rounded-2xl border shadow-soft space-y-3" style="background-color: var(--el-card-bg-color); border-color: var(--el-border-color);">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2" style="color: var(--el-color-primary);">
-            <el-icon :size="16"><Document /></el-icon>
-            <span class="text-xs font-bold uppercase tracking-wider">{{ t('workspace.screenplayEditor', 'Screenplay Editor') }}</span>
-          </div>
-          <el-button
-            type="primary"
-            round
-            size="small"
-            icon="MagicStick"
-            :loading="isExtracting"
-            @click="handleExtractAssets"
-          >
-            {{ t('workspace.extractAssetsBtn', 'Analysis') }}
-          </el-button>
-        </div>
-
-        <el-input
-          v-model="screenplayText"
-          type="textarea"
-          :rows="18"
-          class="font-mono text-xs leading-relaxed"
-          :placeholder="t('workspace.screenplayPlaceholder', 'Paste or write your screenplay here in standard screenplay format (# TITLE, ### EXT./INT., **CHARACTER**, etc.)...')"
-        />
-      </div>
-    </div>
-
-    <!-- ════════════════════════════════════════════════════════════════════════ -->
-    <!-- SUB-TAB 2: PRE-PRODUCTION ASSETS (Characters, Locations, Props)          -->
-    <!-- ════════════════════════════════════════════════════════════════════════ -->
-    <div v-else-if="activeFlowTab === 'assets'" class="space-y-6">
-      <!-- 1. Characters Section (2-in-1 Sheet: Portrait + Full Body) -->
-      <div class="space-y-3">
-        <div class="flex items-center justify-between">
-          <h3 class="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style="color: var(--el-color-primary);">
-            <el-icon :size="14"><User /></el-icon> {{ t('workspace.characters', 'Characters') }} ({{ extractedCharacters.length }})
-          </h3>
-          <el-button link type="primary" size="small" icon="MagicStick" @click="handleRenderCharacters(true)">
-            {{ t('workspace.autofill', 'Autofill') }}
-          </el-button>
-        </div>
-
-        <div v-if="extractedCharacters.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div
-            v-for="char in extractedCharacters"
-            :key="char.id"
-            class="p-3 rounded-xl border flex flex-col gap-2 shadow-soft"
-            style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);"
-          >
-            <!-- 2-in-1 Preview / Placeholder -->
-            <div class="w-full aspect-[16/9] relative rounded-lg border overflow-hidden relative flex items-center justify-center" style="border-color: var(--el-border-color);">
-              <el-image :src="getActiveCharacterImage(char)" :preview-src-list="[getActiveCharacterImage(char)]" :alt="char.name" class="w-full h-full object-cover">
-                <template #error>
-                  <div class="flex flex-col items-center justify-center p-2 text-center h-full">
-                    <el-icon :size="24"><User /></el-icon>
-                    <span class="text-[9px] font-medium" style="color: var(--el-text-color-placeholder);">{{ t('workspace.noRenderYet') }}</span>
-                  </div>
-                </template>
-              </el-image>
-              
-              <!-- Active Rendering Lock Overlay -->
-              <div v-if="isCharacterLocked(char)" class="absolute inset-0 z-20 backdrop-blur-[2px] bg-black/60 flex flex-col items-center justify-center gap-1.5 p-2 text-center transition-all animate-pulse">
-                <el-icon class="animate-spin text-lg text-primary"><Loading /></el-icon>
-                <span class="text-[10px] font-bold text-white tracking-wide">AI Generating...</span>
-              </div>
-            </div>
-
+    <el-tabs v-model="activeFlowTab" stretch>
+      <el-tab-pane name="script">
+        <template #label>
+          <span class="custom-tabs-label">
+            <el-icon><Document /></el-icon>
+            <span>{{ t('workspace.tabScript', 'Script') }}</span>
+          </span>
+        </template>
+        <!-- ════════════════════════════════════════════════════════════════════════ -->
+        <!-- SUB-TAB 1: SCREENPLAY SCRIPT                                             -->
+        <!-- ════════════════════════════════════════════════════════════════════════ -->
+        <div class="space-y-4">
+          <div class="p-4 rounded-2xl border shadow-soft space-y-3" style="background-color: var(--el-card-bg-color); border-color: var(--el-border-color);">
             <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2 min-w-0">
-                <el-avatar
-                  v-if="getCharacterAvatar(char)"
-                  :size="22"
-                  :src="getCharacterAvatar(char)"
-                  shape="circle"
-                  class="border border-white/20 bg-black/40 flex-shrink-0"
-                />
-                <span class="font-bold text-xs truncate" style="color: var(--el-text-color-primary);">{{ char.name }}</span>
+              <div class="flex items-center gap-2" style="color: var(--el-color-primary);">
+                <el-icon :size="16"><Document /></el-icon>
+                <span class="text-xs font-bold uppercase tracking-wider">{{ t('workspace.screenplayEditor', 'Screenplay Editor') }}</span>
               </div>
-            </div>
-            <p v-if="char.physical_characteristics" :title="char.physical_characteristics" class="text-[10px] line-clamp-2 leading-tight" style="color: var(--el-text-color-secondary);">
-              <strong style="color: var(--el-text-color-primary);">Face/Body:</strong> {{ char.physical_characteristics }}
-            </p>
-            <p class="text-[10px] line-clamp-2 leading-tight" :title="getActiveWardrobeDesc(char)" style="color: var(--el-text-color-secondary);">
-              <strong style="color: var(--el-text-color-primary);">Wardrobe:</strong> {{ getActiveWardrobeDesc(char) }}
-            </p>
-            <div v-if="char.wardrobe_variants && char.wardrobe_variants.length > 0" :title="getActiveWardrobeDesc(char)" class="flex gap-1 flex-wrap items-center">
-              <span class="text-[9px] font-semibold opacity-70">Wardrobe:</span>
-              <el-tag
-                v-for="wv in char.wardrobe_variants"
-                :key="wv.variant_id"
-                size="small"
-                :type="selectedWardrobeVariant[char.id] === wv.variant_id ? 'primary' : 'warning'"
-                :effect="selectedWardrobeVariant[char.id] === wv.variant_id ? 'dark' : 'plain'"
+              <el-button
+                type="primary"
                 round
-                class="text-[8px] cursor-pointer"
-                @click="selectWardrobeVariant(char.id, wv.variant_id)"
+                size="small"
+                icon="MagicStick"
+                :loading="isExtracting"
+                @click="handleExtractAssets"
               >
-                👔 {{ wv.name }}
-              </el-tag>
+                {{ t('workspace.extractAssetsBtn', 'Analysis') }}
+              </el-button>
             </div>
 
-            <el-button
-              size="small"
-              round
-              type="primary"
-              :plain="!!getActiveCharacterImage(char)"
-              :icon="getActiveCharacterImage(char) ? 'RefreshLeft' : 'Picture'"
-              :loading="isCharacterLocked(char)"
-              :disabled="isCharacterLocked(char)"
-              class="!w-full !text-[10px] mt-auto"
-              @click="handleGenerateCharacterSheet(char)"
-            >
-              {{ isCharacterLocked(char) ? 'Rendering...' : (getActiveCharacterImage(char) ? t('workspace.reRender', 'Re-render') : t('workspace.render', 'Render')) }}
-            </el-button>
+            <el-input
+              v-model="screenplayText"
+              type="textarea"
+              :rows="18"
+              class="font-mono text-xs leading-relaxed"
+              :placeholder="t('workspace.screenplayPlaceholder', 'Paste or write your screenplay here in standard screenplay format (# TITLE, ### EXT./INT., **CHARACTER**, etc.)...')"
+            />
           </div>
         </div>
-        <div v-else class="p-4 rounded-xl border border-dashed text-center text-xs" style="border-color: var(--el-border-color); color: var(--el-text-color-placeholder);">
-          {{ t('workspace.noCharactersYet', 'No characters extracted yet. Click "Analysis" in the Script tab.') }}
-        </div>
-      </div>
-
-      <!-- 2. Locations Section (4-in-1 Sheet: 1 Wide + 3 Perspectives) -->
-      <div class="space-y-3">
-        <div class="flex items-center justify-between">
-          <h3 class="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style="color: var(--el-color-primary);">
-            <el-icon :size="14"><Location /></el-icon> {{ t('workspace.locations', 'Locations') }} ({{ extractedLocations.length }})
-          </h3>
-          <el-button link type="primary" size="small" icon="MagicStick" @click="handleRenderLocations(true)">
-            {{ t('workspace.autofill', 'Autofill') }}
-          </el-button>
-        </div>
-
-        <div v-if="extractedLocations.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div
-            v-for="loc in extractedLocations"
-            :key="loc.id"
-            class="p-3 rounded-xl border flex flex-col gap-2 shadow-soft"
-            style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);"
-          >
-            <!-- 4-in-1 Preview / Placeholder -->
-            <div class="w-full aspect-[16/9] relative rounded-lg border overflow-hidden relative flex items-center justify-center" style="border-color: var(--el-border-color);">
-              <el-image :src="loc.image_url" :preview-src-list="loc.image_url ? [loc.image_url] : []" :alt="loc.name" class="w-full h-full object-cover">
-                <template #error>
-                  <div class="flex flex-col items-center justify-center p-2 text-center h-full">
-                    <el-icon :size="24"><Location /></el-icon>
-                    <span class="text-[9px] font-medium" style="color: var(--el-text-color-placeholder);">{{ t('workspace.noRenderYet') }}</span>
-                  </div>
-                </template>
-              </el-image>
-              <el-tag size="small" effect="plain" round class="text-[9px] absolute top-2 right-2">{{ loc.time_of_day || 'Daytime' }}</el-tag>
-
-              <!-- Active Rendering Lock Overlay -->
-              <div v-if="isLocationLocked(loc)" class="absolute inset-0 z-20 backdrop-blur-[2px] bg-black/60 flex flex-col items-center justify-center gap-1.5 p-2 text-center transition-all animate-pulse">
-                <el-icon class="animate-spin text-lg text-primary"><Loading /></el-icon>
-                <span class="text-[10px] font-bold text-white tracking-wide">AI Generating...</span>
-              </div>
-            </div>
-
-            <div class="flex justify-between items-center">
-              <span class="font-bold text-xs" style="color: var(--el-text-color-primary);">{{ loc.name }}</span>
-            </div>
-            <p class="text-[10px] line-clamp-2 leading-tight" :title="loc.physical_characteristics" style="color: var(--el-text-color-secondary);">
-              {{ loc.physical_characteristics }}
-            </p>
-
-            <el-button
-              size="small"
-              round
-              type="primary"
-              :plain="!!loc.image_url"
-              :icon="loc.image_url ? 'RefreshLeft' : 'Picture'"
-              :loading="isLocationLocked(loc)"
-              :disabled="isLocationLocked(loc)"
-              class="!w-full !text-[10px] mt-auto"
-              @click="handleGenerateLocationSheet(loc)"
-            >
-              {{ isLocationLocked(loc) ? 'Rendering...' : (loc.image_url ? t('workspace.reRender', 'Re-render') : t('workspace.render', 'Render')) }}
-            </el-button>
-          </div>
-        </div>
-        <div v-else class="p-4 rounded-xl border border-dashed text-center text-xs" style="border-color: var(--el-border-color); color: var(--el-text-color-placeholder);">
-          {{ t('workspace.noLocationsYet', 'No locations extracted yet. Click "Analysis" in the Script tab.') }}
-        </div>
-      </div>
-
-      <!-- 3. Props Section (Isolated Product Shots) -->
-      <div class="space-y-3">
-        <div class="flex items-center justify-between">
-          <h3 class="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style="color: var(--el-color-primary);">
-            <el-icon :size="14"><Box /></el-icon> {{ t('workspace.props', 'Props & Objects') }} ({{ extractedProps.length }})
-          </h3>
-          <el-button link type="primary" size="small" icon="MagicStick" @click="handleRenderProps(true)">
-            {{ t('workspace.autofill', 'Autofill') }}
-          </el-button>
-        </div>
-
-        <div v-if="extractedProps.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div
-            v-for="prop in extractedProps"
-            :key="prop.id"
-            class="p-3 rounded-xl border flex flex-col gap-2 shadow-soft"
-            style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);"
-          >
-            <!-- Product Shot Preview -->
-            <div class="w-full aspect-[16/9] rounded-lg border overflow-hidden relative flex items-center justify-center" style="border-color: var(--el-border-color);">
-              <el-image :src="prop.image_url" :preview-src-list="prop.image_url ? [prop.image_url] : []" :alt="prop.name" class="w-full h-full object-cover">
-                <template #error>
-                  <div class="flex flex-col items-center justify-center p-2 text-center h-full">
-                    <el-icon :size="24"><Box /></el-icon>
-                    <span class="text-[9px] font-medium" style="color: var(--el-text-color-placeholder);">{{ t('workspace.noRenderYet') }}</span>
-                  </div>
-                </template>
-              </el-image>
-
-              <!-- Active Rendering Lock Overlay -->
-              <div v-if="isPropLocked(prop)" class="absolute inset-0 z-20 backdrop-blur-[2px] bg-black/60 flex flex-col items-center justify-center gap-1.5 p-2 text-center transition-all animate-pulse">
-                <el-icon class="animate-spin text-lg text-primary"><Loading /></el-icon>
-                <span class="text-[10px] font-bold text-white tracking-wide">AI Generating...</span>
-              </div>
-            </div>
-
+      </el-tab-pane>
+      <el-tab-pane name="assets">
+        <template #label>
+          <span class="custom-tabs-label">
+            <el-icon><Box /></el-icon>
+            <span>{{ t('workspace.tabAssets', 'Assets') }} ({{ extractedCharacters.length + extractedLocations.length + extractedProps.length }})</span>
+          </span>
+        </template>
+        <!-- ════════════════════════════════════════════════════════════════════════ -->
+        <!-- SUB-TAB 2: PRE-PRODUCTION ASSETS (Characters, Locations, Props)          -->
+        <!-- ════════════════════════════════════════════════════════════════════════ -->
+        <div class="space-y-6">
+          <!-- 1. Characters Section (2-in-1 Sheet: Portrait + Full Body) -->
+          <div class="space-y-3">
             <div class="flex items-center justify-between">
-              <span class="font-bold text-xs" style="color: var(--el-text-color-primary);">{{ prop.name }}</span>
+              <h3 class="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style="color: var(--el-color-primary);">
+                <el-icon :size="14"><User /></el-icon> {{ t('workspace.characters', 'Characters') }} ({{ extractedCharacters.length }})
+              </h3>
+              <el-button link type="primary" size="small" icon="MagicStick" @click="handleRenderCharacters(true)">
+                {{ t('workspace.autofill', 'Autofill') }}
+              </el-button>
             </div>
-            <p class="text-[10px] line-clamp-2 leading-tight" :title="prop.physical_characteristics" style="color: var(--el-text-color-secondary);">
-              {{ prop.physical_characteristics }}
-            </p>
 
-            <el-button
-              size="small"
-              round
-              type="primary"
-              :plain="!!prop.image_url"
-              :icon="prop.image_url ? 'RefreshLeft' : 'Picture'"
-              :loading="isPropLocked(prop)"
-              :disabled="isPropLocked(prop)"
-              class="!w-full !text-[10px] mt-auto"
-              @click="handleGeneratePropSheet(prop)"
-            >
-              {{ isPropLocked(prop) ? 'Rendering...' : (prop.image_url ? t('workspace.reRender', 'Re-render') : t('workspace.render', 'Render')) }}
-            </el-button>
-          </div>
-        </div>
-        <div v-else class="p-4 rounded-xl border border-dashed text-center text-xs" style="border-color: var(--el-border-color); color: var(--el-text-color-placeholder);">
-          {{ t('workspace.noPropsYet', 'No props extracted yet. Click "Analysis" in the Script tab.') }}
-        </div>
-      </div>
-    </div>
-
-    <!-- ════════════════════════════════════════════════════════════════════════ -->
-    <!-- SUB-TAB 3: STORYBOARD SHOTS BREAKDOWN & VIDEO INTERPOLATION             -->
-    <!-- ════════════════════════════════════════════════════════════════════════ -->
-    <div v-else-if="activeFlowTab === 'storyboard'" class="space-y-4">
-      <div class="space-y-3">
-        <div class="flex items-center justify-between">
-          <h3 class="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style="color: var(--el-color-primary);">
-            <el-icon :size="14"><VideoCamera /></el-icon> {{ t('workspace.storyboard', 'Storyboard') }} ({{ scenes.length }} {{ t('workspace.scenes', 'Scenes') }})
-          </h3>
-          <el-button link type="primary" size="small" icon="MagicStick" @click="renderAllScenes(true)">
-            {{ t('workspace.autofill', 'Autofill') }}
-          </el-button>
-        </div>
-      </div>
-
-      <!-- Scenes List with Frames -->
-      <div v-if="scenes.length > 0" class="space-y-4">
-        <div
-          v-for="(scene, sIdx) in scenes"
-          :key="scene.index || sIdx"
-          class="p-3.5 rounded-2xl border flex gap-3.5 transition-all shadow-soft"
-          style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);"
-        >
-          <!-- Left: Thumbnail Box & Render Buttons -->
-          <div class="w-28 sm:w-32 shrink-0 flex flex-col gap-2">
-            <div
-              class="w-full aspect-[9/14] rounded-xl overflow-hidden relative border flex items-center justify-center group select-none cursor-pointer"
-              style="border-color: var(--el-border-color);"
-            >
-              <el-image
-                :src="scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url"
-                :alt="`Scene ${scene.index}`"
-                :preview-teleported="true"
-                :preview-src-list="[scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url || '']"
-                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            <div v-if="extractedCharacters.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div
+                v-for="char in extractedCharacters"
+                :key="char.id"
+                class="p-3 rounded-xl border flex flex-col gap-2 shadow-soft"
+                style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);"
               >
-                <template #error>
-                  <div class="flex flex-col items-center justify-center p-2 text-center h-full">
-                    <el-icon :size="24"><Picture /></el-icon>
-                    <span class="text-[9px] font-medium" style="color: var(--el-text-color-placeholder);">{{ t('workspace.noRenderYet') }}</span>
+                <!-- 2-in-1 Preview / Placeholder -->
+                <div class="w-full aspect-[16/9] relative rounded-lg border overflow-hidden relative flex items-center justify-center" style="border-color: var(--el-border-color);">
+                  <el-image :src="getActiveCharacterImage(char)" :preview-src-list="[getActiveCharacterImage(char)]" :alt="char.name" class="w-full h-full object-cover">
+                    <template #error>
+                      <div class="flex flex-col items-center justify-center p-2 text-center h-full">
+                        <el-icon :size="24"><User /></el-icon>
+                        <span class="text-[9px] font-medium" style="color: var(--el-text-color-placeholder);">{{ t('workspace.noRenderYet') }}</span>
+                      </div>
+                    </template>
+                  </el-image>
+                  
+                  <!-- Active Rendering Lock Overlay -->
+                  <div v-if="isCharacterLocked(char)" class="absolute inset-0 z-20 backdrop-blur-[2px] bg-black/60 flex flex-col items-center justify-center gap-1.5 p-2 text-center transition-all animate-pulse">
+                    <el-icon class="animate-spin text-lg text-primary"><Loading /></el-icon>
+                    <span class="text-[10px] font-bold text-white tracking-wide">AI Generating...</span>
                   </div>
-                </template>
-              </el-image>
+                </div>
 
-              <!-- Active Rendering Lock Overlay -->
-              <div v-if="isSceneLocked(scene)" class="absolute inset-0 z-20 backdrop-blur-[2px] bg-black/60 flex flex-col items-center justify-center gap-1.5 p-2 text-center transition-all animate-pulse">
-                <el-icon class="animate-spin text-lg text-primary"><Loading /></el-icon>
-                <span class="text-[10px] font-bold text-white tracking-wide">AI Rendering...</span>
-              </div>
-              
-              <div v-if="scene.video_url || getSceneStatus(scene.index).video_url" @click.stop="openVideoPreview(scene)" class="absolute bottom-2 right-2 z-10">
-                <el-button type="primary" icon="VideoPlay" size="small" circle></el-button>
-              </div>
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <el-avatar
+                      v-if="getCharacterAvatar(char)"
+                      :size="22"
+                      :src="getCharacterAvatar(char)"
+                      shape="circle"
+                      class="border border-white/20 bg-black/40 flex-shrink-0"
+                    />
+                    <span class="font-bold text-xs truncate" style="color: var(--el-text-color-primary);">{{ char.name }}</span>
+                  </div>
+                </div>
+                <p v-if="char.physical_characteristics" :title="char.physical_characteristics" class="text-[10px] line-clamp-2 leading-tight" style="color: var(--el-text-color-secondary);">
+                  <strong style="color: var(--el-text-color-primary);">Face/Body:</strong> {{ char.physical_characteristics }}
+                </p>
+                <p class="text-[10px] line-clamp-2 leading-tight" :title="getActiveWardrobeDesc(char)" style="color: var(--el-text-color-secondary);">
+                  <strong style="color: var(--el-text-color-primary);">Wardrobe:</strong> {{ getActiveWardrobeDesc(char) }}
+                </p>
+                <div v-if="char.wardrobe_variants && char.wardrobe_variants.length > 0" :title="getActiveWardrobeDesc(char)" class="flex gap-1 flex-wrap items-center">
+                  <span class="text-[9px] font-semibold opacity-70">Wardrobe:</span>
+                  <el-tag
+                    v-for="wv in char.wardrobe_variants"
+                    :key="wv.variant_id"
+                    size="small"
+                    :type="selectedWardrobeVariant[char.id] === wv.variant_id ? 'primary' : 'warning'"
+                    :effect="selectedWardrobeVariant[char.id] === wv.variant_id ? 'dark' : 'plain'"
+                    round
+                    class="text-[8px] cursor-pointer"
+                    @click="selectWardrobeVariant(char.id, wv.variant_id)"
+                  >
+                    👔 {{ wv.name }}
+                  </el-tag>
+                </div>
 
-              <el-tag size="small" effect="plain" round class="text-[9px] absolute top-2 right-2">
-                #{{ sIdx + 1 }} | {{ scene.duration_seconds || 6 }}s
-              </el-tag>
+                <el-button
+                  size="small"
+                  round
+                  type="primary"
+                  :plain="!!getActiveCharacterImage(char)"
+                  :icon="getActiveCharacterImage(char) ? 'RefreshLeft' : 'Picture'"
+                  :loading="isCharacterLocked(char)"
+                  :disabled="isCharacterLocked(char)"
+                  class="!w-full !text-[10px] mt-auto"
+                  @click="handleGenerateCharacterSheet(char)"
+                >
+                  {{ isCharacterLocked(char) ? 'Rendering...' : (getActiveCharacterImage(char) ? t('workspace.reRender', 'Re-render') : t('workspace.render', 'Render')) }}
+                </el-button>
+              </div>
             </div>
-
-            <el-button
-              size="small"
-              round
-              :type="scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url ? '' : 'primary'"
-              :plain="!!(scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url)"
-              :icon="scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url ? 'RefreshLeft' : 'Picture'"
-              :loading="isSceneLocked(scene)"
-              :disabled="isSceneLocked(scene)"
-              class="!w-full !text-[10px] !px-1.5"
-              @click="renderScene(scene)"
-            >
-              {{ scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url ? t('workspace.reRender') : t('workspace.renderScene') }}
-            </el-button>
-
-            <el-button
-              v-if="scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url"
-              size="small"
-              round
-              :type="scene.video_url || getSceneStatus(scene.index).video_url ? '' : 'success'"
-              :plain="!!(scene.video_url || getSceneStatus(scene.index).video_url)"
-              :icon="scene.video_url || getSceneStatus(scene.index).video_url ? 'RefreshLeft' : 'Film'"
-              :loading="isSceneLocked(scene)"
-              :disabled="isSceneLocked(scene)"
-              class="!w-full !text-[10px] !px-1.5 !ml-0"
-              @click="renderSceneVideo(scene)"
-            >
-              {{ scene.video_url || getSceneStatus(scene.index).video_url ? t('workspace.reRenderVideo') : t('workspace.renderVideo') }}
-            </el-button>
-
-            <el-button
-              v-if="scene.video_url || getSceneStatus(scene.index).video_url"
-              size="small"
-              round
-              type="warning"
-              plain
-              icon="Microphone"
-              :loading="isSceneLocked(scene)"
-              :disabled="isSceneLocked(scene)"
-              class="!w-full !text-[10px] !px-1.5 !ml-0"
-              @click="handleSyncAudio(scene)"
-            >
-              {{ isSyncingAudio[scene.index] ? t('workspace.syncing', 'Syncing...') : t('workspace.syncVoiceoverCaption', 'Sync Voice & Sub') }}
-            </el-button>
+            <div v-else class="p-4 rounded-xl border border-dashed text-center text-xs" style="border-color: var(--el-border-color); color: var(--el-text-color-placeholder);">
+              {{ t('workspace.noCharactersYet', 'No characters extracted yet. Click "Analysis" in the Script tab.') }}
+            </div>
           </div>
 
-          <!-- Right: Details -->
-          <div class="flex-1 min-w-0 flex flex-col space-y-2 py-0.5">
-            <div class="flex justify-between items-start gap-2 mb-1.5">
-              <span class="text-[11px] font-bold uppercase tracking-wide leading-snug line-clamp-1" style="color: var(--el-color-primary);">
-                {{ scene.heading || `SCENE ${String(scene.index || (sIdx + 1)).padStart(2, '0')}` }}
-              </span>
-              <!-- <div class="flex items-center gap-1.5 shrink-0">
-                <el-tag v-if="scene.scene_number && scene.shot_number" size="small" type="warning" effect="dark" round class="text-[9px] font-mono">
-                  S{{ scene.scene_number }} · SHOT {{ scene.shot_number }}
-                </el-tag>
-                <span class="text-[10px] font-mono" style="color: var(--el-text-color-secondary);">{{ scene.duration_seconds || 6 }}s</span>
-              </div> -->
+          <!-- 2. Locations Section (4-in-1 Sheet: 1 Wide + 3 Perspectives) -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style="color: var(--el-color-primary);">
+                <el-icon :size="14"><Location /></el-icon> {{ t('workspace.locations', 'Locations') }} ({{ extractedLocations.length }})
+              </h3>
+              <el-button link type="primary" size="small" icon="MagicStick" @click="handleRenderLocations(true)">
+                {{ t('workspace.autofill', 'Autofill') }}
+              </el-button>
             </div>
 
-            <div class="flex gap-1.5 flex-wrap mb-2">
-              <el-tag v-if="scene.location" size="small" type="info" effect="plain" round class="text-[10px]">{{ scene.location }}</el-tag>
-              <el-tag v-if="scene.time_of_day" size="small" effect="plain" round class="text-[10px]">{{ scene.time_of_day }}</el-tag>
-              <el-tag v-for="p in (scene.props || [])" :key="p" size="small" type="success" effect="plain" round class="text-[10px]">
-                📦 {{ p }}
-              </el-tag>
-            </div>
+            <div v-if="extractedLocations.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div
+                v-for="loc in extractedLocations"
+                :key="loc.id"
+                class="p-3 rounded-xl border flex flex-col gap-2 shadow-soft"
+                style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);"
+              >
+                <!-- 4-in-1 Preview / Placeholder -->
+                <div class="w-full aspect-[16/9] relative rounded-lg border overflow-hidden relative flex items-center justify-center" style="border-color: var(--el-border-color);">
+                  <el-image :src="loc.image_url" :preview-src-list="loc.image_url ? [loc.image_url] : []" :alt="loc.name" class="w-full h-full object-cover">
+                    <template #error>
+                      <div class="flex flex-col items-center justify-center p-2 text-center h-full">
+                        <el-icon :size="24"><Location /></el-icon>
+                        <span class="text-[9px] font-medium" style="color: var(--el-text-color-placeholder);">{{ t('workspace.noRenderYet') }}</span>
+                      </div>
+                    </template>
+                  </el-image>
+                  <el-tag size="small" effect="plain" round class="text-[9px] absolute top-2 right-2">{{ loc.time_of_day || 'Daytime' }}</el-tag>
 
-            <p v-if="scene.action" class="text-[11px] leading-relaxed line-clamp-2" style="color: var(--el-text-color-secondary);">
-              {{ scene.action }}
-            </p>
+                  <!-- Active Rendering Lock Overlay -->
+                  <div v-if="isLocationLocked(loc)" class="absolute inset-0 z-20 backdrop-blur-[2px] bg-black/60 flex flex-col items-center justify-center gap-1.5 p-2 text-center transition-all animate-pulse">
+                    <el-icon class="animate-spin text-lg text-primary"><Loading /></el-icon>
+                    <span class="text-[10px] font-bold text-white tracking-wide">AI Generating...</span>
+                  </div>
+                </div>
 
-            <div v-if="scene.dialogue && scene.dialogue.length > 0" class="space-y-1.5 pt-1.5 border-t" style="border-color: var(--el-border-color-lighter);">
-              <div v-for="(dlg, dIdx) in scene.dialogue.slice(0, 2)" :key="dIdx" class="pl-2 border-l-2" style="border-color: var(--el-color-primary);">
-                <div class="text-[10px] font-bold" style="color: var(--el-text-color-primary);">{{ dlg.character }}</div>
-                <p class="text-[11px] italic leading-snug line-clamp-2 mt-0.5" style="color: var(--el-text-color-primary);">"{{ dlg.line }}"</p>
+                <div class="flex justify-between items-center">
+                  <span class="font-bold text-xs" style="color: var(--el-text-color-primary);">{{ loc.name }}</span>
+                </div>
+                <p class="text-[10px] line-clamp-2 leading-tight" :title="loc.physical_characteristics" style="color: var(--el-text-color-secondary);">
+                  {{ loc.physical_characteristics }}
+                </p>
+
+                <el-button
+                  size="small"
+                  round
+                  type="primary"
+                  :plain="!!loc.image_url"
+                  :icon="loc.image_url ? 'RefreshLeft' : 'Picture'"
+                  :loading="isLocationLocked(loc)"
+                  :disabled="isLocationLocked(loc)"
+                  class="!w-full !text-[10px] mt-auto"
+                  @click="handleGenerateLocationSheet(loc)"
+                >
+                  {{ isLocationLocked(loc) ? 'Rendering...' : (loc.image_url ? t('workspace.reRender', 'Re-render') : t('workspace.render', 'Render')) }}
+                </el-button>
               </div>
+            </div>
+            <div v-else class="p-4 rounded-xl border border-dashed text-center text-xs" style="border-color: var(--el-border-color); color: var(--el-text-color-placeholder);">
+              {{ t('workspace.noLocationsYet', 'No locations extracted yet. Click "Analysis" in the Script tab.') }}
+            </div>
+          </div>
+
+          <!-- 3. Props Section (Isolated Product Shots) -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style="color: var(--el-color-primary);">
+                <el-icon :size="14"><Box /></el-icon> {{ t('workspace.props', 'Props & Objects') }} ({{ extractedProps.length }})
+              </h3>
+              <el-button link type="primary" size="small" icon="MagicStick" @click="handleRenderProps(true)">
+                {{ t('workspace.autofill', 'Autofill') }}
+              </el-button>
+            </div>
+
+            <div v-if="extractedProps.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div
+                v-for="prop in extractedProps"
+                :key="prop.id"
+                class="p-3 rounded-xl border flex flex-col gap-2 shadow-soft"
+                style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);"
+              >
+                <!-- Product Shot Preview -->
+                <div class="w-full aspect-[16/9] rounded-lg border overflow-hidden relative flex items-center justify-center" style="border-color: var(--el-border-color);">
+                  <el-image :src="prop.image_url" :preview-src-list="prop.image_url ? [prop.image_url] : []" :alt="prop.name" class="w-full h-full object-cover">
+                    <template #error>
+                      <div class="flex flex-col items-center justify-center p-2 text-center h-full">
+                        <el-icon :size="24"><Box /></el-icon>
+                        <span class="text-[9px] font-medium" style="color: var(--el-text-color-placeholder);">{{ t('workspace.noRenderYet') }}</span>
+                      </div>
+                    </template>
+                  </el-image>
+
+                  <!-- Active Rendering Lock Overlay -->
+                  <div v-if="isPropLocked(prop)" class="absolute inset-0 z-20 backdrop-blur-[2px] bg-black/60 flex flex-col items-center justify-center gap-1.5 p-2 text-center transition-all animate-pulse">
+                    <el-icon class="animate-spin text-lg text-primary"><Loading /></el-icon>
+                    <span class="text-[10px] font-bold text-white tracking-wide">AI Generating...</span>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between">
+                  <span class="font-bold text-xs" style="color: var(--el-text-color-primary);">{{ prop.name }}</span>
+                </div>
+                <p class="text-[10px] line-clamp-2 leading-tight" :title="prop.physical_characteristics" style="color: var(--el-text-color-secondary);">
+                  {{ prop.physical_characteristics }}
+                </p>
+
+                <el-button
+                  size="small"
+                  round
+                  type="primary"
+                  :plain="!!prop.image_url"
+                  :icon="prop.image_url ? 'RefreshLeft' : 'Picture'"
+                  :loading="isPropLocked(prop)"
+                  :disabled="isPropLocked(prop)"
+                  class="!w-full !text-[10px] mt-auto"
+                  @click="handleGeneratePropSheet(prop)"
+                >
+                  {{ isPropLocked(prop) ? 'Rendering...' : (prop.image_url ? t('workspace.reRender', 'Re-render') : t('workspace.render', 'Render')) }}
+                </el-button>
+              </div>
+            </div>
+            <div v-else class="p-4 rounded-xl border border-dashed text-center text-xs" style="border-color: var(--el-border-color); color: var(--el-text-color-placeholder);">
+              {{ t('workspace.noPropsYet', 'No props extracted yet. Click "Analysis" in the Script tab.') }}
             </div>
           </div>
         </div>
-      </div>
+      </el-tab-pane>
+      <el-tab-pane name="storyboard">
+        <template #label>
+          <span class="custom-tabs-label">
+            <el-icon><Picture /></el-icon>
+            <span>{{ t('workspace.tabStoryBoard', 'Storyboard') }}</span>
+          </span>
+        </template>
+        <!-- ════════════════════════════════════════════════════════════════════════ -->
+        <!-- SUB-TAB 3: STORYBOARD SHOTS BREAKDOWN & VIDEO INTERPOLATION             -->
+        <!-- ════════════════════════════════════════════════════════════════════════ -->
+        <div class="space-y-4">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style="color: var(--el-color-primary);">
+                <el-icon :size="14"><VideoCamera /></el-icon> {{ t('workspace.storyboard', 'Storyboard') }} ({{ scenes.length }} {{ t('workspace.scenes', 'Scenes') }})
+              </h3>
+              <el-button link type="primary" size="small" icon="MagicStick" @click="renderAllScenes(true)">
+                {{ t('workspace.autofill', 'Autofill') }}
+              </el-button>
+            </div>
+          </div>
 
-      <div v-else class="p-6 rounded-xl border border-dashed text-center space-y-3" style="border-color: var(--el-border-color);">
-        <el-icon :size="32" style="color: var(--el-text-color-placeholder);"><Document /></el-icon>
-        <p class="text-xs" style="color: var(--el-text-color-secondary);">
-          {{ t('workspace.noScenesYet', 'No detailed scenes generated yet for this episode.') }}
-        </p>
-      </div>
-    </div>
+          <!-- Scenes List with Frames -->
+          <div v-if="scenes.length > 0" class="space-y-4">
+            <div
+              v-for="(scene, sIdx) in scenes"
+              :key="scene.index || sIdx"
+              class="p-3.5 rounded-2xl border flex gap-3.5 transition-all shadow-soft"
+              style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);"
+            >
+              <!-- Left: Thumbnail Box & Render Buttons -->
+              <div class="w-28 sm:w-32 shrink-0 flex flex-col gap-2">
+                <div
+                  class="w-full aspect-[9/14] rounded-xl overflow-hidden relative border flex items-center justify-center group select-none cursor-pointer"
+                  style="border-color: var(--el-border-color);"
+                >
+                  <el-image
+                    :src="scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url"
+                    :alt="`Scene ${scene.index}`"
+                    :preview-teleported="true"
+                    :preview-src-list="[scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url || '']"
+                    class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  >
+                    <template #error>
+                      <div class="flex flex-col items-center justify-center p-2 text-center h-full">
+                        <el-icon :size="24"><Picture /></el-icon>
+                        <span class="text-[9px] font-medium" style="color: var(--el-text-color-placeholder);">{{ t('workspace.noRenderYet') }}</span>
+                      </div>
+                    </template>
+                  </el-image>
+
+                  <!-- Active Rendering Lock Overlay -->
+                  <div v-if="isSceneLocked(scene)" class="absolute inset-0 z-20 backdrop-blur-[2px] bg-black/60 flex flex-col items-center justify-center gap-1.5 p-2 text-center transition-all animate-pulse">
+                    <el-icon class="animate-spin text-lg text-primary"><Loading /></el-icon>
+                    <span class="text-[10px] font-bold text-white tracking-wide">AI Rendering...</span>
+                  </div>
+                  
+                  <div v-if="scene.video_url || getSceneStatus(scene.index).video_url" @click.stop="openVideoPreview(scene)" class="absolute bottom-2 right-2 z-10">
+                    <el-button type="primary" icon="VideoPlay" size="small" circle></el-button>
+                  </div>
+
+                  <el-tag size="small" effect="plain" round class="text-[9px] absolute top-2 right-2">
+                    #{{ sIdx + 1 }} | {{ scene.duration_seconds || 6 }}s
+                  </el-tag>
+                </div>
+
+                <el-button
+                  size="small"
+                  round
+                  :type="scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url ? '' : 'primary'"
+                  :plain="!!(scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url)"
+                  :icon="scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url ? 'RefreshLeft' : 'Picture'"
+                  :loading="isSceneLocked(scene)"
+                  :disabled="isSceneLocked(scene)"
+                  class="!w-full !text-[10px] !px-1.5"
+                  @click="renderScene(scene)"
+                >
+                  {{ scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url ? t('workspace.reRender') : t('workspace.renderScene') }}
+                </el-button>
+
+                <el-button
+                  v-if="scene.storyboard_frame_url || getSceneStatus(scene.index).storyboard_url"
+                  size="small"
+                  round
+                  :type="scene.video_url || getSceneStatus(scene.index).video_url ? '' : 'success'"
+                  :plain="!!(scene.video_url || getSceneStatus(scene.index).video_url)"
+                  :icon="scene.video_url || getSceneStatus(scene.index).video_url ? 'RefreshLeft' : 'Film'"
+                  :loading="isSceneLocked(scene)"
+                  :disabled="isSceneLocked(scene)"
+                  class="!w-full !text-[10px] !px-1.5 !ml-0"
+                  @click="renderSceneVideo(scene)"
+                >
+                  {{ scene.video_url || getSceneStatus(scene.index).video_url ? t('workspace.reRenderVideo') : t('workspace.renderVideo') }}
+                </el-button>
+
+                <el-button
+                  v-if="scene.video_url || getSceneStatus(scene.index).video_url"
+                  size="small"
+                  round
+                  type="warning"
+                  plain
+                  icon="Microphone"
+                  :loading="isSceneLocked(scene)"
+                  :disabled="isSceneLocked(scene)"
+                  class="!w-full !text-[10px] !px-1.5 !ml-0"
+                  @click="handleSyncAudio(scene)"
+                >
+                  {{ isSyncingAudio[scene.index] ? t('workspace.syncing', 'Syncing...') : t('workspace.syncVoiceoverCaption', 'Sync Voice & Sub') }}
+                </el-button>
+              </div>
+
+              <!-- Right: Details -->
+              <div class="flex-1 min-w-0 flex flex-col space-y-2 py-0.5">
+                <div class="flex justify-between items-start gap-2 mb-1.5">
+                  <span class="text-[11px] font-bold uppercase tracking-wide leading-snug line-clamp-1" style="color: var(--el-color-primary);">
+                    {{ scene.heading || `SCENE ${String(scene.index || (sIdx + 1)).padStart(2, '0')}` }}
+                  </span>
+                  <!-- <div class="flex items-center gap-1.5 shrink-0">
+                    <el-tag v-if="scene.scene_number && scene.shot_number" size="small" type="warning" effect="dark" round class="text-[9px] font-mono">
+                      S{{ scene.scene_number }} · SHOT {{ scene.shot_number }}
+                    </el-tag>
+                    <span class="text-[10px] font-mono" style="color: var(--el-text-color-secondary);">{{ scene.duration_seconds || 6 }}s</span>
+                  </div> -->
+                </div>
+
+                <div class="flex gap-1.5 flex-wrap mb-2">
+                  <el-tag v-if="scene.location" size="small" type="info" effect="plain" round class="text-[10px]">{{ scene.location }}</el-tag>
+                  <el-tag v-if="scene.time_of_day" size="small" effect="plain" round class="text-[10px]">{{ scene.time_of_day }}</el-tag>
+                  <el-tag v-for="p in (scene.props || [])" :key="p" size="small" type="success" effect="plain" round class="text-[10px]">
+                    📦 {{ p }}
+                  </el-tag>
+                </div>
+
+                <p v-if="scene.action" class="text-[11px] leading-relaxed line-clamp-2" style="color: var(--el-text-color-secondary);">
+                  {{ scene.action }}
+                </p>
+
+                <div v-if="scene.dialogue && scene.dialogue.length > 0" class="space-y-1.5 pt-1.5 border-t" style="border-color: var(--el-border-color-lighter);">
+                  <div v-for="(dlg, dIdx) in scene.dialogue.slice(0, 2)" :key="dIdx" class="pl-2 border-l-2" style="border-color: var(--el-color-primary);">
+                    <div class="text-[10px] font-bold" style="color: var(--el-text-color-primary);">{{ dlg.character }}</div>
+                    <p class="text-[11px] italic leading-snug line-clamp-2 mt-0.5" style="color: var(--el-text-color-primary);">"{{ dlg.line }}"</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="p-6 rounded-xl border border-dashed text-center space-y-3" style="border-color: var(--el-border-color);">
+            <el-icon :size="32" style="color: var(--el-text-color-placeholder);"><Document /></el-icon>
+            <p class="text-xs" style="color: var(--el-text-color-secondary);">
+              {{ t('workspace.noScenesYet', 'No detailed scenes generated yet for this episode.') }}
+            </p>
+          </div>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
 
     <!-- ─── Video Preview Modal ──────────────────────────────────────────────── -->
     <el-dialog

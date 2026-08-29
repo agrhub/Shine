@@ -3,16 +3,20 @@ import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { useChatStore } from '@/stores/chatStore';
 import LanguageSelect from '@/components/shared/LanguageSelect.vue';
 import SeriesWizardModal from '@/components/modals/SeriesWizardModal.vue';
-import { Sunny, Moon, User, Lock, SwitchButton, Fold, Expand, Plus, Right, Bell } from '@element-plus/icons-vue';
+import ShineAssistantSidebar from '@/components/assistant/ShineAssistantSidebar.vue';
+import { Sunny, Moon, User, Lock, SwitchButton, Fold, Expand, Plus, Right, Bell, Cpu } from '@element-plus/icons-vue';
 import { storeToRefs } from 'pinia';
 
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const chatStore = useChatStore();
 const { isDark } = storeToRefs(authStore);
+const { isSidebarOpen } = storeToRefs(chatStore);
 
 const isWizardOpen = ref(false);
 const searchQuery = ref('');
@@ -217,6 +221,20 @@ function handleWizardCreated(id: string) {
             <el-icon :size="16"><Bell /></el-icon>
           </button>
 
+          <!-- Shine Assistant Right Sidebar Toggle Button -->
+          <button
+            @click="chatStore.toggleSidebar"
+            class="h-10 px-3.5 rounded-full border flex items-center gap-2 transition-all shadow-soft cursor-pointer text-xs font-semibold select-none"
+            :class="isSidebarOpen
+              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 shadow-emerald-500/10'
+              : 'bg-[var(--el-card-bg-color)] border-[var(--el-border-color)] text-[var(--el-text-color-regular)] hover:text-[var(--el-text-color-primary)] hover:border-emerald-500/30'"
+            title="Toggle Dedicated Shine Assistant"
+          >
+            <el-icon :size="15" class="text-emerald-400"><Cpu /></el-icon>
+            <span class="hidden sm:inline">Assistant</span>
+            <span class="w-2 h-2 rounded-full bg-emerald-500" :class="isSidebarOpen ? 'animate-pulse' : 'opacity-60'"></span>
+          </button>
+
           <!-- Profile avatar with Popover Menu -->
           <el-popover
             placement="bottom-end"
@@ -282,6 +300,9 @@ function handleWizardCreated(id: string) {
         <router-view />
       </div>
     </main>
+
+    <!-- Dedicated Right Sidebar Chatbot -->
+    <ShineAssistantSidebar />
 
     <!-- Series Wizard Modal -->
     <SeriesWizardModal v-model="isWizardOpen" @created="handleWizardCreated" />

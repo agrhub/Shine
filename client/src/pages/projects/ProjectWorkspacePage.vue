@@ -11,6 +11,7 @@ import { usePlaybackStore } from '@/composables/usePlaybackStore';
 import { core } from '@/utils/project';
 import { toast } from 'vue-sonner';
 import { ElMessageBox } from 'element-plus';
+import { Bot } from 'lucide-vue-next';
 import http from '@/utils/http';
 
 // Components & Modals
@@ -27,6 +28,7 @@ import CaptionsTab from './workspace/CaptionsTab.vue';
 import Chatbot from './workspace/Chatbot.vue';
 import ExportModal from '@/components/editor/ExportModal.vue';
 import CountryFlag from '@/components/common/CountryFlag.vue';
+import JobStatusPopover from '@/components/workspace/JobStatusPopover.vue';
 import { getLanguageByCode } from '@/constants/geminiLanguages';
 import { nextTick } from 'vue';
 import { data, sanitizeTimelineData } from '@/components/editor/data';
@@ -50,7 +52,7 @@ const currentEpisodeTitle = computed(() => {
   if (seriesStore.activeEpisode) {
     return `EP ${String(seriesStore.activeEpisode.number).padStart(2, '0')}: ${seriesStore.activeEpisode.title.toUpperCase()}`;
   }
-  return 'EP 01: THE ENCOUNTER';
+  return 'EP TITLE';
 });
 const isRendering = ref(false);
 const renderProgress = ref(0);
@@ -236,29 +238,21 @@ async function runPipelineStep(stepId: string) {
       if (activeEpisodeId.value) await loadEpisodeTimeline(activeEpisodeId.value);
       toast.success(t('toast.b4TtsSynced'));
     } else if (stepId === 'b5') {
-      // Smart batch: only render scenes without BGM
-      await pipelineStore.renderAllBgm();
-      if (activeEpisodeId.value) await loadEpisodeTimeline(activeEpisodeId.value);
-      toast.success(t('toast.b5BgmGenerated'));
-    } else if (stepId === 'b6') {
       // Generate captions for default language; saves per-scene immediately
       const defaultLang = seriesStore.currentSeries?.language || 'en-US';
       await pipelineStore.generateCaptionsForLanguage(defaultLang);
       if (activeEpisodeId.value) await loadEpisodeTimeline(activeEpisodeId.value);
       toast.success(t('toast.b6CaptionsSynced'));
-    } else if (stepId === 'b7') {
-      await loadEpisodeTimeline(activeEpisodeId.value);
-      toast.success(t('toast.b7PreviewPlaying'));
-    } else if (stepId === 'b8') {
+    } else if (stepId === 'b6') {
       // Dual-mode export: open ExportModal for local browser render
       // Server-side render available via the "Queue Server Render" button in the modal
       isExportModalOpen.value = true;
       // Don't mark done yet — wait for export to complete
       return;
-    } else if (stepId === 'b9') {
+    } else if (stepId === 'b7') {
       await saveAllWorkspaceData();
-      toast.success(t('toast.b9TimelineSaved'));
-    } else if (stepId === 'b10') {
+      toast.success(t('toast.b7TimelineSaved'));
+    } else if (stepId === 'b8') {
       await http.post('/publish/multi-platform', {
         seriesId: seriesId.value, episodeId: activeEpisodeId.value,
         platforms: ['tiktok', 'youtube_shorts', 'reels'],
@@ -796,333 +790,327 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div id="project-workspace-page" class="h-screen w-full flex flex-col font-sans overflow-hidden bg-[var(--el-bg-color-page)] text-[var(--el-text-color-primary)]">
-    
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    <!-- TOP BAR NAVIGATION                                                     -->
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    <header class="h-16 border-b flex items-center justify-between px-4 lg:px-6 shrink-0 z-10 relative" style="border-color: var(--el-border-color); background-color: var(--el-bg-color-overlay);">
-      <div class="flex items-center gap-4">
-        <el-button link circle @click="goBack" class="!p-1" icon="Back" />
+  <div id="project-workspace-page" class="h-screen w-screen font-sans overflow-hidden bg-[var(--el-bg-color-page)] text-[var(--el-text-color-primary)]">
+    <el-splitter>
+      <el-splitter-panel size="75%">
+        <el-container class="h-screen w-full flex flex-col">
+          <el-header class="h-16 border-b flex items-center justify-between px-4 lg:px-6 shrink-0 z-10 relative" style="border-color: var(--el-border-color); background-color: var(--el-bg-color-overlay);">
+            <!-- ═══════════════════════════════════════════════════════════════════════ -->
+            <!-- TOP BAR NAVIGATION                                                     -->
+            <!-- ═══════════════════════════════════════════════════════════════════════ -->
+            <!-- <header class="h-16 border-b flex items-center justify-between px-4 lg:px-6 shrink-0 z-10 relative" style="border-color: var(--el-border-color); background-color: var(--el-bg-color-overlay);"> -->
+              <div class="flex items-center gap-4">
+                <el-button link circle @click="goBack" class="!p-1" icon="Back" />
 
-        <div class="flex flex-col">
-          <div class="flex items-center gap-2">
-            <h1 class="font-bold text-sm sm:text-base leading-tight" style="color: var(--el-text-color-primary);">
-              {{ seriesTitle }}
-            </h1>
-            <el-tag size="small" type="primary" effect="plain" round class="font-bold font-mono text-[10px]">
-              {{ seriesStore.currentSeries?.ratio || '9:16' }}
-            </el-tag>
-          </div>
-          <div class="text-[11px] flex items-center gap-2" style="color: var(--el-text-color-secondary);">
-            <span>{{ currentEpisodeTitle }}</span>
-            <el-divider direction="vertical"></el-divider>
-            <span class="font-semibold flex items-center gap-1" style="color: var(--el-color-primary);">
-              <el-icon :size="12"><MagicStick /></el-icon>
-              {{ t('workspace.aiAssistantActive') }}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div class="flex items-center gap-3">
-        <div v-if="pipelineStore.isRendering" class="hidden md:flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-semibold" style="background-color: var(--el-color-primary-light-9); color: var(--el-color-primary); border: 1px solid var(--el-color-primary-light-7);">
-          <el-icon class="is-loading" :size="12"><Loading /></el-icon>
-          <span>{{ pipelineStore.currentRenderingMessage || (pipelineStore.currentRenderingScene ? t('workspace.renderingScene', { scene: pipelineStore.currentRenderingScene, percent: pipelineStore.currentRenderingPercent }) : `${t('common.processing')} (${pipelineStore.currentRenderingPercent}%)`) }}</span>
-        </div>
-
-        <el-button round icon="Upload" size="small" @click="saveAllWorkspaceData">
-          {{ t('common.save') }}
-        </el-button>
-
-        <el-button type="primary" icon="Promotion" size="small" round @click="triggerBulkPublish">
-          {{ t('workspace.publishSeries') }}
-        </el-button>
-
-        <!--<el-button circle plain icon="User" @click="isCollaboratorsModalOpen = true" />-->
-
-        <el-button circle plain icon="Cpu" :type="isAiSidebarOpen ? 'primary' : 'default'" @click="isAiSidebarOpen = !isAiSidebarOpen" :title="t('workspace.toggleAiSidebar', 'Toggle AI Copilot Sidebar')" />
-      </div>
-    </header>
-
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    <!-- WORKSPACE 3-COLUMN BODY                                                -->
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    <div class="flex flex-1 overflow-hidden">
-      
-      <!-- ─── 1. LEFT SIDEBAR: EPISODE LIBRARY ──────────────────────────────── -->
-      <aside
-        class="border-r flex flex-col shrink-0 z-10 transition-all duration-300"
-        :class="isLeftSidebarCollapsed ? 'w-16' : 'w-72'"
-        style="border-color: var(--el-border-color); background-color: var(--el-bg-color-overlay);"
-      >
-        <!-- Collapsed Mini View -->
-        <div v-if="isLeftSidebarCollapsed" class="p-2 flex-1 flex flex-col items-center overflow-hidden">
-          <el-button
-            circle plain size="small"
-            icon="Expand"
-            class="mb-3"
-            @click="isLeftSidebarCollapsed = false"
-            :title="t('workspace.expandSidebar', 'Expand Episode Library')"
-          />
-
-          <el-button
-            circle plain size="small"
-            type="primary"
-            icon="Plus"
-            class="mb-3 !ml-0"
-            @click="isAddEpisodeModalOpen = true"
-            :title="t('workspace.addEpisode', 'Add Episode')"
-          />
-
-          <!-- Mini Episodes List -->
-          <div class="flex-1 overflow-y-auto space-y-2.5 w-full flex flex-col items-center custom-scrollbar">
-            <div
-              v-for="(ep, idx) in episodesList"
-              :key="ep.id"
-              @click="selectEpisode(ep, idx)"
-              class="w-11 h-14 rounded-xl border transition-all cursor-pointer relative overflow-hidden shrink-0 group flex items-center justify-center"
-              :class="activeEpisodeId === ep.id ? 'ring-2 ring-emerald-500 ring-offset-1 ring-offset-neutral-900 border-emerald-500' : 'border-neutral-700 hover:border-neutral-500'"
-              :title="`EP #${ep.number}: ${ep.title}`"
-            >
-              <img
-                :src="(ep as any).thumbnail_url || (ep as any).cover_image || (ep.scenes && ep.scenes[0] && (ep.scenes[0].storyboard_frame_url || ep.scenes[0].video_url)) || '/images/dashboard/episode-thumb-default.jpg'"
-                :alt="ep.title"
-                class="w-full h-full object-cover group-hover:scale-105 transition-transform"
-              />
-              <div class="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-colors flex items-end justify-center pb-0.5">
-                <span class="text-[9px] font-black text-white font-mono drop-shadow">#{{ ep.number }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Bottom Mini Load Indicator -->
-          <div class="pt-2 border-t w-full flex justify-center" style="border-color: var(--el-border-color-light);">
-            <el-tag size="small" round type="info" class="!px-1.5 !text-[9px] font-mono">
-              {{ episodesList.length }}
-            </el-tag>
-          </div>
-        </div>
-
-        <!-- Expanded Full View -->
-        <div v-else class="p-4 flex-1 flex flex-col overflow-hidden">
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-[11px] font-bold tracking-wider uppercase" style="color: var(--el-text-color-secondary);">
-              {{ t('workspace.episodeLibrary') }}
-            </h2>
-            <div class="flex items-center gap-1">
-              <el-button circle plain size="small" icon="Plus" type="primary" :disabled="true" @click="isAddEpisodeModalOpen = true" />
-              <el-button circle plain icon="Fold" size="small" @click="isLeftSidebarCollapsed = true" :title="t('workspace.collapseSidebar', 'Collapse sidebar')" />
-            </div>
-          </div>
-
-          <!-- <el-button
-            type="primary"
-            round
-            class="w-full !mb-4 !font-semibold !py-2.5"
-            @click="triggerAutoPipeline(true)"
-            icon="Cpu" size="small"
-          >
-            {{ t('workspace.autoPipelineFlow') }}
-          </el-button> -->
-
-          <!-- Episodes Scroll Area -->
-          <div class="flex-1 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
-            <div
-              v-for="(ep, idx) in episodesList"
-              :key="ep.id"
-              @click="selectEpisode(ep, idx)"
-              class="p-2.5 rounded-2xl border transition-all cursor-pointer flex gap-3 group relative overflow-hidden"
-              :style="activeEpisodeId === ep.id
-                ? 'border-color: var(--el-color-primary); background-color: var(--el-color-primary-light-9);'
-                : 'border-color: var(--el-border-color-light); background-color: var(--el-fill-color-light);'"
-            >
-              <div class="w-16 h-20 rounded-xl overflow-hidden relative shrink-0 bg-neutral-900">
-                <img :src="(ep as any).thumbnail_url || (ep as any).cover_image || (ep.scenes && ep.scenes[0] && (ep.scenes[0].storyboard_frame_url || ep.scenes[0].video_url)) || '/images/dashboard/episode-thumb-default.jpg'" :alt="ep.title" class="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                <div class="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/70 text-white rounded text-[9px] font-mono">
-                  #{{ ep.number }}
+                <div class="flex flex-col">
+                  <div class="flex items-center gap-2">
+                    <h1 class="font-bold text-sm sm:text-base leading-tight" style="color: var(--el-text-color-primary);">
+                      {{ seriesTitle }}
+                    </h1>
+                    <el-tag size="small" type="primary" effect="plain" round class="font-bold font-mono text-[10px]">
+                      {{ seriesStore.currentSeries?.ratio || '9:16' }}
+                    </el-tag>
+                  </div>
+                  <div class="text-[11px] flex items-center gap-2" style="color: var(--el-text-color-secondary);">
+                    <span>{{ currentEpisodeTitle }}</span>
+                    <el-divider direction="vertical"></el-divider>
+                    <span class="font-semibold flex items-center gap-1" style="color: var(--el-color-primary);">
+                      <el-icon :size="12"><MagicStick /></el-icon>
+                      {{ t('workspace.aiAssistantActive') }}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <div class="flex flex-col justify-center py-1 flex-1 min-w-0">
-                <h3 class="font-bold text-xs truncate" style="color: var(--el-text-color-primary);">{{ ep.title }}</h3>
-                <p class="text-[11px] mt-0.5" style="color: var(--el-text-color-secondary);">{{ ep.duration }} • {{ ep.scenes_count }}</p>
-                <div class="flex items-center gap-1.5 mt-2">
-                  <el-tag type="primary" size="small" round effect="plain">{{ ep.status }}</el-tag>
+              <div class="flex items-center gap-3">
+                <JobStatusPopover />
+
+                <div v-if="pipelineStore.isRendering" class="hidden md:flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-semibold" style="background-color: var(--el-color-primary-light-9); color: var(--el-color-primary); border: 1px solid var(--el-color-primary-light-7);">
+                  <el-icon class="is-loading" :size="12"><Loading /></el-icon>
+                  <span>{{ pipelineStore.currentRenderingMessage || (pipelineStore.currentRenderingScene ? t('workspace.renderingScene', { scene: pipelineStore.currentRenderingScene, percent: pipelineStore.currentRenderingPercent }) : `${t('common.processing')} (${pipelineStore.currentRenderingPercent}%)`) }}</span>
+                </div>
+
+                <el-button circle
+                  plan bg 
+                  icon="Upload"
+                  :title="t('common.save', 'Save')"
+                  @click="saveAllWorkspaceData">
+                </el-button>
+
+                <el-button 
+                  plain bg circle
+                  :title="t('workspace.publishSeries', 'Publish series')"
+                  icon="Promotion"  
+                  @click="triggerBulkPublish">
+                  <!-- {{ t('workspace.publishSeries') }} -->
+                </el-button>
+
+                <!--<el-button circle plain icon="User" @click="isCollaboratorsModalOpen = true" />-->
+
+                <el-button circle 
+                  plain bg
+                  :icon="Bot" 
+                  :type="isAiSidebarOpen ? 'primary' : 'default'" 
+                  @click="isAiSidebarOpen = !isAiSidebarOpen" 
+                  :title="t('workspace.toggleAiSidebar', 'Toggle AI Copilot Sidebar')" 
+                />
+              </div>
+            <!-- </header> -->
+          </el-header>
+          <!-- <el-aside width="200px">Left Aside</el-aside>
+          <el-main>Main</el-main>
+          <el-aside width="200px">Right Aside</el-aside> -->
+          <!-- ═══════════════════════════════════════════════════════════════════════ -->
+          <!-- WORKSPACE 3-COLUMN BODY                                                -->
+          <!-- ═══════════════════════════════════════════════════════════════════════ -->
+          <div class="flex flex-1 overflow-hidden">
+            
+            <!-- ─── 1. LEFT SIDEBAR: EPISODE LIBRARY ──────────────────────────────── -->
+            <aside
+              class="border-r flex flex-col shrink-0 z-10 transition-all duration-300"
+              :class="isLeftSidebarCollapsed ? 'w-16' : 'w-72'"
+              style="border-color: var(--el-border-color); background-color: var(--el-bg-color-overlay);"
+            >
+              <!-- Collapsed Mini View -->
+              <div v-if="isLeftSidebarCollapsed" class="p-2 flex-1 flex flex-col items-center overflow-hidden">
+                <el-button
+                  circle plain size="small"
+                  icon="Expand"
+                  class="mb-3"
+                  @click="isLeftSidebarCollapsed = false"
+                  :title="t('workspace.expandSidebar', 'Expand Episode Library')"
+                />
+
+                <el-button
+                  circle plain size="small"
+                  type="primary"
+                  icon="Plus"
+                  class="mb-3 !ml-0"
+                  @click="isAddEpisodeModalOpen = true"
+                  :title="t('workspace.addEpisode', 'Add Episode')"
+                />
+
+                <!-- Mini Episodes List -->
+                <div class="flex-1 overflow-y-auto space-y-2.5 w-full flex flex-col items-center custom-scrollbar">
+                  <div
+                    v-for="(ep, idx) in episodesList"
+                    :key="ep.id"
+                    @click="selectEpisode(ep, idx)"
+                    class="w-11 h-14 rounded-xl border transition-all cursor-pointer relative overflow-hidden shrink-0 group flex items-center justify-center"
+                    :class="activeEpisodeId === ep.id ? 'ring-2 ring-emerald-500 ring-offset-1 ring-offset-neutral-900 border-emerald-500' : 'border-neutral-700 hover:border-neutral-500'"
+                    :title="`EP #${ep.number}: ${ep.title}`"
+                  >
+                    <img
+                      :src="(ep as any).thumbnail_url || (ep as any).cover_image || (ep.scenes && ep.scenes[0] && (ep.scenes[0].storyboard_frame_url || ep.scenes[0].video_url)) || '/images/dashboard/episode-thumb-default.jpg'"
+                      :alt="ep.title"
+                      class="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                    />
+                    <div class="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-colors flex items-end justify-center pb-0.5">
+                      <span class="text-[9px] font-black text-white font-mono drop-shadow">#{{ ep.number }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Bottom Mini Load Indicator -->
+                <div class="pt-2 border-t w-full flex justify-center" style="border-color: var(--el-border-color-light);">
+                  <el-tag size="small" round type="info" class="!px-1.5 !text-[9px] font-mono">
+                    {{ episodesList.length }}
+                  </el-tag>
                 </div>
               </div>
-            </div>
-          </div>
 
-          <!-- Batch Queue Status -->
-          <div class="mt-4 pt-4 border-t" style="border-color: var(--el-border-color-light);">
-            <div class="flex justify-between text-[10px] font-bold tracking-wide mb-2" style="color: var(--el-text-color-secondary);">
-              <span>{{ t('workspace.batchQueue') }} ({{ episodesList.length }}/{{ seriesStore.currentSeries?.total_episodes || 24 }})</span>
-              <span style="color: var(--el-color-primary);">{{ Math.round((episodesList.length / (seriesStore.currentSeries?.total_episodes || 24)) * 100) }}%</span>
-            </div>
-            <el-progress
-              :percentage="Math.min(100, Math.round((episodesList.length / (seriesStore.currentSeries?.total_episodes || 24)) * 100))"
-              :show-text="false"
-              :stroke-width="4"
-              color="var(--el-color-primary)"
-            />
-          </div>
+              <!-- Expanded Full View -->
+              <div v-else class="p-4 flex-1 flex flex-col overflow-hidden">
+                <div class="flex items-center justify-between mb-4">
+                  <h2 class="text-[11px] font-bold tracking-wider uppercase" style="color: var(--el-text-color-secondary);">
+                    {{ t('workspace.episodeLibrary') }}
+                  </h2>
+                  <div class="flex items-center gap-1">
+                    <el-button circle plain size="small" icon="Plus" type="primary" :disabled="true" @click="isAddEpisodeModalOpen = true" />
+                    <el-button circle plain icon="Fold" size="small" @click="isLeftSidebarCollapsed = true" :title="t('workspace.collapseSidebar', 'Collapse sidebar')" />
+                  </div>
+                </div>
 
-          <div class="mt-4 pt-2 border-t" style="border-color: var(--el-border-color-light);">
-            <div class="flex justify-between items-end">
-              <span class="text-[10px] font-bold tracking-widest uppercase" style="color: var(--el-text-color-secondary);">{{ t('workspace.seriesLoad') }}</span>
-              <span class="text-xs font-semibold" style="color: var(--el-text-color-primary);">{{ t('workspace.seriesLoadCount', { count: episodesList.length, total: seriesStore.currentSeries?.total_episodes || 100 }) }}</span>
-            </div>
-          </div>
-        </div>
-      </aside>
+                <!-- <el-button
+                  type="primary"
+                  round
+                  class="w-full !mb-4 !font-semibold !py-2.5"
+                  @click="triggerAutoPipeline(true)"
+                  icon="Cpu" size="small"
+                >
+                  {{ t('workspace.autoPipelineFlow') }}
+                </el-button> -->
 
-      <!-- ─── 2. MAIN CENTER AREA: 9:16 PREVIEW & TIMELINE ──────────────────── -->
-      <main class="flex-1 flex flex-col min-w-0 bg-[var(--el-bg-color-page)] relative z-0">
-        
-        <!-- Center Preview Area with OpenVideo CanvasPanel -->
-        <div ref="previewContainerRef" class="flex-1 flex items-center justify-center p-3 relative overflow-hidden min-h-0">
-          
-          <!-- Clean Preview Wrapper -->
-          <div class="w-full h-full rounded-2xl overflow-hidden relative border shadow-sm flex items-center justify-center" style="background-color: var(--el-bg-color); border-color: var(--el-border-color-light);">
-            <CanvasPanel class="w-full h-full" />
-          </div>
-        </div>
+                <!-- Episodes Scroll Area -->
+                <div class="flex-1 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
+                  <div
+                    v-for="(ep, idx) in episodesList"
+                    :key="ep.id"
+                    @click="selectEpisode(ep, idx)"
+                    class="p-2.5 rounded-2xl border transition-all cursor-pointer flex gap-3 group relative overflow-hidden"
+                    :style="activeEpisodeId === ep.id
+                      ? 'border-color: var(--el-color-primary); background-color: var(--el-color-primary-light-9);'
+                      : 'border-color: var(--el-border-color-light); background-color: var(--el-fill-color-light);'"
+                  >
+                    <div class="w-16 h-20 rounded-xl overflow-hidden relative shrink-0 bg-neutral-900">
+                      <img :src="(ep as any).thumbnail_url || (ep as any).cover_image || (ep.scenes && ep.scenes[0] && (ep.scenes[0].storyboard_frame_url || ep.scenes[0].video_url)) || '/images/dashboard/episode-thumb-default.jpg'" :alt="ep.title" class="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      <div class="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/70 text-white rounded text-[9px] font-mono">
+                        #{{ ep.number }}
+                      </div>
+                    </div>
 
-        <!-- Draggable Resizer Bar between Canvas Preview & Timeline -->
-        <div
-          class="h-2 hover:h-2.5 transition-all cursor-row-resize flex items-center justify-center group select-none z-20 border-y"
-          style="background-color: var(--el-border-color-lighter); border-color: var(--el-border-color);"
-          @mousedown="startTimelineResize"
-        >
-          <div class="w-12 h-1 rounded-full transition-colors" style="background-color: var(--el-text-color-placeholder);"></div>
-        </div>
+                    <div class="flex flex-col justify-center py-1 flex-1 min-w-0">
+                      <h3 class="font-bold text-xs truncate" style="color: var(--el-text-color-primary);">{{ ep.title }}</h3>
+                      <p class="text-[11px] mt-0.5" style="color: var(--el-text-color-secondary);">{{ ep.duration }} • {{ ep.scenes_count }}</p>
+                      <div class="flex items-center gap-1.5 mt-2">
+                        <el-tag type="primary" size="small" round effect="plain">{{ ep.status }}</el-tag>
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-        <!-- Timeline Container (Resizable Bottom Panel) -->
-        <div class="border-t z-10 flex flex-col overflow-hidden" style="border-color: var(--el-border-color); background-color: var(--el-card-bg-color);" :style="{ height: `${timelineHeight}px` }">
-          <!-- OpenVideo Full Timeline Component -->
-          <Timeline class="w-full h-full" />
-        </div>
-      </main>
+                <!-- Batch Queue Status -->
+                <div class="mt-4 pt-4 border-t" style="border-color: var(--el-border-color-light);">
+                  <div class="flex justify-between text-[10px] font-bold tracking-wide mb-2" style="color: var(--el-text-color-secondary);">
+                    <span>{{ t('workspace.batchQueue') }} ({{ episodesList.length }}/{{ seriesStore.currentSeries?.total_episodes || 24 }})</span>
+                    <span style="color: var(--el-color-primary);">{{ Math.round((episodesList.length / (seriesStore.currentSeries?.total_episodes || 24)) * 100) }}%</span>
+                  </div>
+                  <el-progress
+                    :percentage="Math.min(100, Math.round((episodesList.length / (seriesStore.currentSeries?.total_episodes || 24)) * 100))"
+                    :show-text="false"
+                    :stroke-width="4"
+                    color="var(--el-color-primary)"
+                  />
+                </div>
 
-      <!-- ─── 3. DEDICATED AI COPILOT RIGHT SIDEBAR ────────────────────────────── -->
-      <aside
-        v-if="isAiSidebarOpen"
-        class="w-80 lg:w-96 h-[calc(100vh-56px)] border-l flex flex-col shrink-0 z-10 shadow-soft p-4"
-        style="border-color: var(--el-border-color); background-color: var(--el-bg-color-overlay);"
-      >
-        <Chatbot @close="isAiSidebarOpen = false" />
-      </aside>
+                <div class="mt-4 pt-2 border-t" style="border-color: var(--el-border-color-light);">
+                  <div class="flex justify-between items-end">
+                    <span class="text-[10px] font-bold tracking-widest uppercase" style="color: var(--el-text-color-secondary);">{{ t('workspace.seriesLoad') }}</span>
+                    <span class="text-xs font-semibold" style="color: var(--el-text-color-primary);">{{ t('workspace.seriesLoadCount', { count: episodesList.length, total: seriesStore.currentSeries?.total_episodes || 100 }) }}</span>
+                  </div>
+                </div>
+              </div>
+            </aside>
 
-      <!-- ─── 4. RIGHT SIDEBAR: PIPELINE / SCRIPT / AUDIO / CAPTIONS ───────────── -->
-      <aside
-        class="border-l flex flex-col shrink-0 z-20 shadow-soft transition-all duration-300"
-        :class="isTabSidebarCollapsed ? 'w-14' : 'w-80 lg:w-96'"
-        style="border-color: var(--el-border-color); background-color: var(--el-card-bg-color);"
-      >
-        <!-- Collapsed Mini Tab Strip -->
-        <div v-if="isTabSidebarCollapsed" class="p-2 flex-1 flex flex-col items-center justify-between overflow-hidden">
-          <div class="flex flex-col items-center gap-2.5 w-full">
-            <el-button
-              v-for="tab in [
-                { id: 'pipeline', label: t('workspace.tabPipeline', 'Pipeline'), icon: 'Files' },
-                { id: 'script', label: t('workspace.tabScript', 'Script'), icon: 'Document' },
-                { id: 'audio', label: t('workspace.tabAudio', 'Audio'), icon: 'Microphone' },
-                { id: 'captions', label: t('workspace.tabCaptions', 'Captions'), icon: 'ChatSquare' }
-              ]"
-              :key="tab.id"
-              circle
-              size="small"
-              :type="rightTab === tab.id ? 'primary' : 'default'"
-              :plain="rightTab !== tab.id"
-              class="!ml-0"
-              @click="rightTab = tab.id as any; isTabSidebarCollapsed = false"
-              :title="tab.label"
-            >
-              <el-icon><component :is="tab.icon" /></el-icon>
-            </el-button>
-          </div>
+            <!-- ─── 2. MAIN CENTER AREA: 9:16 PREVIEW & TIMELINE ──────────────────── -->
+            <main class="flex-1 flex flex-col min-w-0 bg-[var(--el-bg-color-page)] relative z-0">
+              
+              <!-- Center Preview Area with OpenVideo CanvasPanel -->
+              <div ref="previewContainerRef" class="flex-1 flex items-center justify-center p-3 relative overflow-hidden min-h-0">
+                
+                <!-- Clean Preview Wrapper -->
+                <div class="w-full h-full rounded-2xl overflow-hidden relative border shadow-sm flex items-center justify-center" style="background-color: var(--el-bg-color); border-color: var(--el-border-color-light);">
+                  <CanvasPanel class="w-full h-full" />
+                </div>
+              </div>
 
-          <div class="flex flex-col items-center gap-2">
-            <el-button
-              circle plain size="small"
-              icon="Expand"
-              @click="isTabSidebarCollapsed = false"
-              :title="t('workspace.expandTabs', 'Expand Tabs')"
-            />
-          </div>
-        </div>
-
-        <!-- Expanded Full Tab Panels Content -->
-        <div v-else class="flex-1 flex flex-col h-full overflow-hidden">
-          <!-- Sidebar Navigation Tabs -->
-          <div class="flex items-center justify-between border-b p-2 gap-1" style="border-color: var(--el-border-color);">
-            <div class="flex flex-1 gap-1">
-              <el-button
-                v-for="tab in [
-                  { id: 'pipeline', label: t('workspace.tabPipeline', 'Pipeline'), icon: 'Files' },
-                  { id: 'script', label: t('workspace.tabScript', 'Script'), icon: 'Document' },
-                  { id: 'audio', label: t('workspace.tabAudio', 'Audio'), icon: 'Microphone' },
-                  { id: 'captions', label: t('workspace.tabCaptions', 'Captions'), icon: 'ChatSquare' }
-                ]"
-                :key="tab.id"
-                @click="rightTab = tab.id as any"
-                :type="rightTab === tab.id ? 'primary' : ''"
-                :plain="rightTab !== tab.id"
-                round size="small"
-                class="!ml-0 flex-1 !px-2"
+              <!-- Draggable Resizer Bar between Canvas Preview & Timeline -->
+              <div
+                class="h-2 hover:h-2.5 transition-all cursor-row-resize flex items-center justify-center group select-none z-20 border-y"
+                style="background-color: var(--el-border-color-lighter); border-color: var(--el-border-color);"
+                @mousedown="startTimelineResize"
               >
-                <el-icon class="mr-1"><component :is="tab.icon" /></el-icon>
-                <span class="hidden sm:inline">{{ tab.label }}</span>
-              </el-button>
-            </div>
-            <el-button
-              circle plain size="small"
-              icon="Fold"
-              @click="isTabSidebarCollapsed = true"
-              :title="t('workspace.collapseTabs', 'Collapse Tabs')"
-            />
+                <div class="w-12 h-1 rounded-full transition-colors" style="background-color: var(--el-text-color-placeholder);"></div>
+              </div>
+
+              <!-- Timeline Container (Resizable Bottom Panel) -->
+              <div class="border-t z-10 flex flex-col overflow-hidden" style="border-color: var(--el-border-color); background-color: var(--el-card-bg-color);" :style="{ height: `${timelineHeight}px` }">
+                <!-- OpenVideo Full Timeline Component -->
+                <Timeline class="w-full h-full" />
+              </div>
+            </main>
+
+            <!-- ─── 4. RIGHT SIDEBAR: PIPELINE / SCRIPT / AUDIO / CAPTIONS ───────────── -->
+            <aside
+              class="border-l flex flex-row shrink-0 z-20 shadow-soft transition-all duration-300"
+              :class="isTabSidebarCollapsed ? 'w-14' : 'w-80 lg:w-96'"
+              style="border-color: var(--el-border-color); background-color: var(--el-card-bg-color);"
+            >
+              <!-- Expanded Full Tab Panels Content -->
+              <div v-if="!isTabSidebarCollapsed" class="flex-1 flex flex-col h-full overflow-hidden">
+                <!-- Sidebar Tab Panels Content -->
+                <div class="flex-1 overflow-y-auto p-2 custom-scrollbar text-[var(--el-text-color-primary)]">
+                  <PipelineTab
+                    v-if="rightTab === 'pipeline'"
+                    @open-cast="openManageCast"
+                    @run-pipeline="runPipeline"
+                    @view-character="openCharacterDetail"
+                  />
+                  <ScriptTab
+                    v-else-if="rightTab === 'script'"
+                    @open-master-script="openMasterScript"
+                  />
+                  <AudioTab
+                    v-else-if="rightTab === 'audio'"
+                  />
+                  <CaptionsTab
+                    v-else-if="rightTab === 'captions'"
+                    @apply-captions="applyCaptionsToTimeline"
+                  />
+                </div>
+
+                <!-- Right Sidebar Bottom Actions -->
+                <div class="p-5 border-t" style="border-color: var(--el-border-color);">
+                  <div class="flex items-center justify-between mb-3 text-[10px] font-bold uppercase tracking-wide" style="color: var(--el-text-color-secondary);">
+                    <span>{{ t('workspace.readyToPublish') }}</span>
+                    <span>{{ t('workspace.epsVerticalHd', { count: episodesList.length || 100 }) }}</span>
+                  </div>
+                  <div class="flex gap-2">
+                    <el-button type="primary" round icon="Promotion" size="small" class="flex-1 !font-bold !py-3" @click="triggerBulkPublish">
+                      {{ t('workspace.bulkExportPublish') }}
+                    </el-button>
+                    <el-button circle plain size="small" icon="Calendar" @click="toast.info(t('toast.calendarScheduling'))" />
+                  </div>
+                </div>
+              </div>
+              <!-- Collapsed Mini Tab Strip -->
+              <div class="p-2 w-[60px] flex flex-col items-center justify-between overflow-hidden">
+                <div class="flex flex-col items-center gap-2.5 w-full">
+                  <el-button
+                    v-for="tab in [
+                      { id: 'pipeline', label: t('workspace.tabPipeline', 'Pipeline'), icon: 'Files' },
+                      { id: 'script', label: t('workspace.tabScript', 'Script'), icon: 'Document' },
+                      { id: 'audio', label: t('workspace.tabAudio', 'Audio'), icon: 'Microphone' },
+                      { id: 'captions', label: t('workspace.tabCaptions', 'Captions'), icon: 'ChatSquare' }
+                    ]"
+                    :key="tab.id"
+                    circle
+                    size="large"
+                    :type="rightTab === tab.id ? 'primary' : 'default'"
+                    :plain="rightTab !== tab.id"
+                    class="!ml-0" bg
+                    @click="rightTab = tab.id as any; isTabSidebarCollapsed = false"
+                    :title="tab.label"
+                  >
+                    <el-icon><component :is="tab.icon" /></el-icon>
+                  </el-button>
+                </div>
+
+                <div class="flex flex-col items-center gap-2">
+                  <el-button
+                    circle plain size="large"
+                    icon="Expand"
+                    @click="isTabSidebarCollapsed = !isTabSidebarCollapsed"
+                    :title="t('workspace.expandTabs', 'Expand Tabs')"
+                  />
+                </div>
+              </div>
+            </aside>
+
           </div>
-
-          <!-- Sidebar Tab Panels Content -->
-          <div class="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar text-[var(--el-text-color-primary)]">
-            <PipelineTab
-              v-if="rightTab === 'pipeline'"
-              @open-cast="openManageCast"
-              @run-pipeline="runPipeline"
-              @view-character="openCharacterDetail"
-            />
-            <ScriptTab
-              v-else-if="rightTab === 'script'"
-              @open-master-script="openMasterScript"
-            />
-            <AudioTab
-              v-else-if="rightTab === 'audio'"
-            />
-            <CaptionsTab
-              v-else-if="rightTab === 'captions'"
-              @apply-captions="applyCaptionsToTimeline"
-            />
-          </div>
-
-          <!-- Right Sidebar Bottom Actions -->
-          <div class="p-5 border-t" style="border-color: var(--el-border-color);">
-            <div class="flex items-center justify-between mb-3 text-[10px] font-bold uppercase tracking-wide" style="color: var(--el-text-color-secondary);">
-              <span>{{ t('workspace.readyToPublish') }}</span>
-              <span>{{ t('workspace.epsVerticalHd', { count: episodesList.length || 100 }) }}</span>
-            </div>
-            <div class="flex gap-2">
-              <el-button type="primary" round icon="Promotion" size="small" class="flex-1 !font-bold !py-3" @click="triggerBulkPublish">
-                {{ t('workspace.bulkExportPublish') }}
-              </el-button>
-              <el-button circle plain size="small" icon="Calendar" @click="toast.info(t('toast.calendarScheduling'))" />
-            </div>
-          </div>
-        </div>
-      </aside>
-
-    </div>
-
+        </el-container>
+      </el-splitter-panel>
+      <el-splitter-panel v-if="isAiSidebarOpen" size="25%" :min="250" :max="400">
+        <!-- ─── 3. DEDICATED AI COPILOT RIGHT SIDEBAR ────────────────────────────── -->
+        <el-aside
+          class="!w-full h-[100vh] border-l flex flex-col shrink-0 z-10 shadow-soft p-4"
+          style="border-color: var(--el-border-color); background-color: var(--el-bg-color-overlay);"
+        >
+          <Chatbot @close="isAiSidebarOpen = false" />
+        </el-aside>
+      </el-splitter-panel>
+    </el-splitter>
+    
     <!-- 1. Master Script Modal -->
     <MasterScriptModal
       v-model="isMasterScriptModalOpen"

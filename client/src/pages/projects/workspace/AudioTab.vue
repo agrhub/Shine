@@ -449,7 +449,7 @@ function handleRemoveLanguage(lang: TabPaneName){
           <p class="text-xs font-semibold" style="color: var(--el-text-color-primary);">{{ t('workspace.aiAutoDubbing', 'AI Auto Dubbing') }}</p>
           <p class="text-[10px]" style="color: var(--el-text-color-secondary);">{{ t('workspace.autoGenerateEpisodeDubbing', 'Auto generate episode dubbing') }}</p>
         </div>
-        <el-badge value="Comming soon" class="item">
+        <el-badge value="" class="item">
           <el-switch v-model="isEnableDubbing" :disabled="true" size="small" />
         </el-badge>
       </div>

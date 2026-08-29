@@ -83,7 +83,7 @@ watch(() => props.modelValue, (isOpen) => {
       formData.value.title = topic.topic || topic.title || '';
       formData.value.synopsis = topic.description || topic.synopsis || topic.trope || '';
       if (topic.genre) formData.value.genre = topic.genre;
-      if (topic.targetEpisodes) formData.value.targetEpisodes = topic.targetEpisodes;
+      if (topic.target_episodes) formData.value.targetEpisodes = Number(topic.target_episodes);
       if (topic.country) {
         const c = findCountry(topic.country);
         formData.value.country = c.name;
@@ -128,10 +128,9 @@ async function executeAgenticStream(
   let fullText = '';
   let lastIndex = 0;
 
-  await http.post(
-    '/ai/agentic/stream',
-    {
-      sessionId: wizardSessionId.value,
+  let buffer = '';
+  await http.post('/ai/agentic/stream',{
+      session_id: wizardSessionId.value,
       message: prompt,
       context: {
         title: formData.value.title || formData.value.selectedTrend?.topic || '',
@@ -153,15 +152,18 @@ async function executeAgenticStream(
         const rawText = progressEvent.event?.target?.responseText || progressEvent.event?.target?.response || progressEvent.currentTarget?.response || '';
         const newChunk = rawText.slice(lastIndex);
         lastIndex = rawText.length;
+        buffer += newChunk;
 
-        const lines = newChunk.split('\n\n');
-        for (const line of lines) {
-          if (!line.trim()) continue;
+        const messages = buffer.split('\n\n');
+        buffer = messages.pop() || '';
+
+        for (const block of messages) {
+          if (!block.trim()) continue;
           let eventType = 'message';
-          const eventMatch = line.match(/^event:\s*(.+)$/m);
+          const eventMatch = block.match(/^event:\s*(.+)$/m);
           if (eventMatch) eventType = eventMatch[1].trim();
 
-          const dataMatch = line.match(/^data:\s*([\s\S]+)$/m);
+          const dataMatch = block.match(/^data:\s*([\s\S]+)$/m);
           if (dataMatch) {
             try {
               const parsed = JSON.parse(dataMatch[1].trim());
@@ -171,6 +173,10 @@ async function executeAgenticStream(
                 onChunk?.(chunkStr, fullText);
               } else if (eventType === 'item_updated') {
                 onUpdate?.(parsed?.type, parsed?.data);
+              } else if (eventType === 'tool_call') {
+                if (parsed?.name === 'create_series' && (parsed?.result?.data || parsed?.data)) {
+                  onUpdate?.('series_created', parsed?.result?.data || parsed?.data);
+                }
               } else if (eventType === 'suggestions') {
                 if (Array.isArray(parsed) && parsed.length > 0) {
                   dynamicSuggestions.value = parsed;
@@ -298,7 +304,7 @@ async function sendPlanChat(customMsg?: string) {
           if (data.totalDurationSeconds) formData.value.episodeDurationSeconds = data.totalDurationSeconds;
           assistantMsg.value.thinking = null;
         } else if (type === 'series_created') {
-          createdSeriesId = data.id || data.seriesId;
+          createdSeriesId = data?.id || data?.seriesId || data?.series_id || data?.series?.id || '';
         }
       },
       (_chunk, accumulated) => {
@@ -309,16 +315,14 @@ async function sendPlanChat(customMsg?: string) {
     if (createdSeriesId) {
       try {
         await http.post('/ai/agentic/transfer-session', {
-          oldSessionId: wizardSessionId.value,
-          newSeriesId: createdSeriesId,
+          old_session_id: wizardSessionId.value,
+          new_series_id: createdSeriesId,
         });
       } catch {}
       toast.success(t('wizard.createSeriesSuccess'));
       emit('created', createdSeriesId);
-      setTimeout(() => {
-        emit('update:modelValue', false);
-        router.push(`/project/${createdSeriesId}`);
-      }, 500);
+      emit('update:modelValue', false);
+      router.push(`/project/${createdSeriesId}`);
       return;
     }
 
@@ -485,8 +489,8 @@ async function handleFinish() {
     if (createdSeriesId) {
       try {
         await http.post('/ai/agentic/transfer-session', {
-          oldSessionId: wizardSessionId.value,
-          newSeriesId: createdSeriesId,
+          old_session_id: wizardSessionId.value,
+          new_series_id: createdSeriesId,
         });
       } catch {}
     }

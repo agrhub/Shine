@@ -11,7 +11,7 @@ import { generateCaptionClips } from '@/utils/caption-generator';
 import { normalizeTransitionKey } from '@/constants/transitions';
 import { normalizeEffectKey } from '@/constants/effects';
 import { VoicePreset } from '@/types';
-import { CaptionCue, CaptionsData, Character, CharacterEpisode, LocationAsset, PipelineStep, PropAsset, Scene, SceneRenderStatus, StepStatus } from '@/types/api';
+import { CaptionCue, CaptionsData, Character, LocationAsset, PipelineStep, PropAsset, Scene, SceneRenderStatus, StepStatus } from '@/types/api';
 export { normalizeTransitionKey, normalizeEffectKey };
 
 export const usePipelineStore = defineStore('pipeline', () => {
@@ -352,26 +352,26 @@ export const usePipelineStore = defineStore('pipeline', () => {
       const ep = seriesStore.activeEpisode as any;
       const sc = seriesStore.activeScript as any;
 
-      const characters : CharacterEpisode[] = (sc?.characters && sc.characters.length > 0)
+      const characters: Character[] = (sc?.characters && sc.characters.length > 0)
         ? sc.characters
-        : (ep?.characters && ep.characters.length > 0 ? ep.characters : (seriesStore.currentSeries?.characters || seriesStore.charactersList || []));
+        : (seriesStore.currentSeries?.characters || seriesStore.charactersList || []);
 
-      const locations : LocationAsset[] = (sc?.locations && sc.locations.length > 0)
+      const locations: LocationAsset[] = (sc?.locations && sc.locations.length > 0)
         ? sc.locations
-        : (ep?.locations && ep.locations.length > 0 ? ep.locations : (seriesStore.currentSeries?.locations || []));
+        : (seriesStore.currentSeries?.locations || []);
 
-      const props : PropAsset[] = (sc?.props && sc.props.length > 0)
+      const props: PropAsset[] = (sc?.props && sc.props.length > 0)
         ? sc.props
-        : (ep?.props && ep.props.length > 0 ? ep.props : (seriesStore.currentSeries?.props || []));
+        : (seriesStore.currentSeries?.props || []);
 
       const scenes = sc?.scenes || ep?.scenes || [];
 
       // Calculate total work items for smooth percentage (only unrendered items)
       let totalItems = 0;
-      characters.forEach((c: CharacterEpisode) => {
+      characters.forEach((c: Character) => {
         const hasCharImage = !!seriesStore.getCharacterById(c.id)?.avatar;
         if (c.wardrobe_variants && c.wardrobe_variants.length > 0) {
-          totalItems += c.wardrobe_variants.filter((v: any) => !v.image_url && !(c.wardrobe_variants.length === 1 && hasCharImage)).length;
+          totalItems += c.wardrobe_variants.filter((v: any) => !v.image_url && !(c.wardrobe_variants?.length === 1 && hasCharImage)).length;
         } else if (!hasCharImage) {
           totalItems++;
         }
@@ -589,15 +589,14 @@ export const usePipelineStore = defineStore('pipeline', () => {
 
       const res: any = await http.post('/assets/video-generate', {
         series_id: sId,
-        seriesId: sId,
-        start_frame_url: scene.storyboard_frame_url,
-        end_frame_url: scene.storyboard_end_frame_url || undefined,
         episode_id: epId,
         scene_id: `scene_${String(sceneIndex).padStart(2, '0')}`,
+        start_frame_url: scene.storyboard_frame_url,
+        end_frame_url: scene.storyboard_end_frame_url || undefined,
         duration: calculatedDuration,
         action: targetAction,
         camera_movement: targetCamera,
-        light_mood: lightingMood,
+        lighting_mood: lightingMood,
         prompt: scene.visual_prompt || scene.description || undefined,
         scene_data: scene,
       });
@@ -906,10 +905,14 @@ export const usePipelineStore = defineStore('pipeline', () => {
           scenes: scenesToTranslate,
         });
 
-        const translatedScenes = batchRes?.data?.translatedScenes || batchRes?.translatedScenes || [];
+        const translatedScenes = batchRes?.data?.translated_scenes || batchRes?.data?.translatedScenes || batchRes?.translated_scenes || [];
         const transMap = new Map<number, string>();
         translatedScenes.forEach((ts: any) => {
-          transMap.set(ts.sceneIndex, ts.translatedDialogue);
+          const sIdx = ts.scene_index ?? ts.sceneIndex;
+          const diag = ts.translated_dialogue ?? ts.translatedDialogue;
+          if (sIdx !== undefined) {
+            transMap.set(sIdx, diag);
+          }
         });
 
         for (const scene of scenes) {
@@ -1418,7 +1421,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
     const scenes = seriesStore.activeScript?.scenes || seriesStore.activeEpisode?.scenes || [];
     try {
       await http.post('/voices/dubbing/re-align', {
-        episodeId: epId,
+        episode_id: epId,
         language: langCode,
         scenes: scenes.map((s: any) => ({ index: s.index, duration: s.duration_seconds || s.durationSeconds || 5 })),
       });
@@ -1547,6 +1550,98 @@ export const usePipelineStore = defineStore('pipeline', () => {
     }
   }
 
+  // ─── Background Job Tracking & Engine ─────────────────────────────────────
+  const activeJobs = ref<any[]>([]);
+  const isJobsLoading = ref(false);
+  let jobPollingTimer: any = null;
+
+  const activeJob = computed(() => activeJobs.value.find(j => j.status === 'running' || j.status === 'queued') || null);
+
+  async function fetchActiveJobs(seriesId?: string, episodeId?: string) {
+    const sid = seriesId || seriesStore.currentSeries?.id;
+    const eid = episodeId || seriesStore.activeEpisode?.id || seriesStore.activeEpisodeId;
+    if (!sid) return [];
+    try {
+      const res: any = await http.get('/jobs/active', {
+        params: { series_id: sid, episode_id: eid },
+      });
+      const data = res?.data || res;
+      if (data && Array.isArray(data.jobs)) {
+        activeJobs.value = data.jobs;
+      }
+      return activeJobs.value;
+    } catch (err) {
+      console.warn('[usePipelineStore] Error fetching active jobs:', err);
+      return [];
+    }
+  }
+
+  async function startBackgroundPipeline(params?: { forceRegenerate?: boolean; type?: string }) {
+    const seriesId = seriesStore.currentSeries?.id;
+    const episodeId = seriesStore.activeEpisode?.id || seriesStore.activeEpisodeId;
+    if (!seriesId || !episodeId) {
+      toast.error('Series or Episode not loaded');
+      return null;
+    }
+
+    try {
+      const res: any = await http.post('/jobs/start-pipeline', {
+        series_id: seriesId,
+        episode_id: episodeId,
+        type: params?.type || 'full_pipeline',
+        force_regenerate: params?.forceRegenerate || false,
+      });
+
+      const data = res?.data || res;
+      if (data?.job) {
+        await fetchActiveJobs(seriesId, episodeId);
+        startJobPolling(seriesId, episodeId);
+        toast.success(data.isNew ? 'Pipeline background job started' : 'Attached to running pipeline job');
+        return data.job;
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Failed to start pipeline job');
+      return null;
+    }
+  }
+
+  async function cancelBackgroundJob(jobId: string) {
+    try {
+      await http.post(`/jobs/${jobId}/cancel`);
+      toast.info('Pipeline job cancelled');
+      const sid = seriesStore.currentSeries?.id;
+      const eid = seriesStore.activeEpisode?.id || seriesStore.activeEpisodeId;
+      if (sid && eid) await fetchActiveJobs(sid, eid);
+    } catch (err: any) {
+      toast.error('Failed to cancel job');
+    }
+  }
+
+  function startJobPolling(seriesId?: string, episodeId?: string, intervalMs = 4000) {
+    stopJobPolling();
+    const sid = seriesId || seriesStore.currentSeries?.id;
+    const eid = episodeId || seriesStore.activeEpisode?.id || seriesStore.activeEpisodeId;
+    if (!sid || !eid) return;
+
+    fetchActiveJobs(sid, eid);
+    jobPollingTimer = setInterval(async () => {
+      const jobs = await fetchActiveJobs(sid, eid);
+      const hasRunning = jobs.some(j => j.status === 'running' || j.status === 'queued');
+      if (!hasRunning) {
+        // Refresh episode data when job completes
+        seriesStore.loadWorkspaceData(sid);
+        stopJobPolling();
+      }
+    }, intervalMs);
+  }
+
+  function stopJobPolling() {
+    if (jobPollingTimer) {
+      clearInterval(jobPollingTimer);
+      jobPollingTimer = null;
+    }
+  }
+
   // ─── Reset ────────────────────────────────────────────────────────────────
   function resetAll() {
     pipelineSteps.value.forEach(s => s.status = 'idle');
@@ -1556,6 +1651,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
     currentRenderingMessage.value = '';
     currentRenderingPercent.value = 0;
     currentRenderingScene.value = null;
+    stopJobPolling();
   }
 
   return {
@@ -1595,6 +1691,14 @@ export const usePipelineStore = defineStore('pipeline', () => {
     generateCaptionsForLanguage,
     reAlignDubbing,
     separateSceneAudio,
+    activeJobs,
+    activeJob,
+    isJobsLoading,
+    fetchActiveJobs,
+    startBackgroundPipeline,
+    cancelBackgroundJob,
+    startJobPolling,
+    stopJobPolling,
     resetAll,
   };
 });

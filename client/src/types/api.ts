@@ -25,7 +25,7 @@ export interface CharacterWardrobeVariant {
 }
 
 /**
- * Series-level Master Character Entity (authoritative definition for entire series)
+ * Series-level Master Character Entity (Single Source of Truth)
  */
 export interface Character {
   id: string;
@@ -36,29 +36,20 @@ export interface Character {
   gender: string;
   nationality: string;
   voice_id: string;
-  identity: string;
-  traits: string;
-  visual_traits: string;
-  physical_characteristics: string;
-  appearance: string;
-  clothing_and_accessories: string;
-  speech_style: string;
-  avatar?: string; // 9:16 Portrait (Series Face Anchor)
-  lora_model: string;
-  description: string;
+  identity?: string;
+  traits?: string;
+  visual_traits?: string;
+  physical_characteristics?: string;
+  appearance?: string;
+  clothing_and_accessories?: string;
+  speech_style?: string;
+  avatar?: string | null;//Portrail image of the character 9:16
+  image_url?: string;//A character sheet with a head and shoulders shot showing the characters face on the left and a full body shot of the character on the right wearing the same clothing and accessories against a seamless white background.
+  lora_model?: string;
+  description?: string;
+  frame_description?: string;//A character sheet with a head and shoulders shot showing the characters face on the left and a full body shot of the character on the right wearing the same clothing and accessories against a seamless white background.
+  wardrobe_variants?: CharacterWardrobeVariant[];
   created_at?: string;
-}
-
-/**
- * Episode-level Character Reference (scoped strictly to this episode)
- */
-export interface CharacterEpisode {
-  id: string; // References CharacterEntity.id
-  name: string;
-  clothing_and_accessories: string;
-  physical_characteristics: string;
-  frame_description: string;
-  wardrobe_variants: CharacterWardrobeVariant[];
 }
 
 export interface LocationAsset {
@@ -148,7 +139,7 @@ export interface Scene {
   voiceover_url?: string;
   bgm_url?: string;
   dialogue?: any;
-  characters?: CharacterEpisode[] | string[];
+  characters?: Character[] | string[];
   props?: string[];
   end_frame_prompt?: string;
   scene_context?: string;
@@ -284,9 +275,6 @@ export interface Episode {
   scenes_count: string;
   status: string;
   scenes?: Scene[];
-  characters?: CharacterEpisode[];
-  locations?: LocationAsset[];
-  props?: PropAsset[];
   cover_image?: string;
   dubbing_settings?: any;
   caption_settings?: any;

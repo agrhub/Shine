@@ -5,17 +5,17 @@ import type { ViralTopic } from '@/types/api';
 export const useTrendStore = defineStore('trend', {
   state: () => ({
     trends: [] as ViralTopic[],
-    selectedRegion: 'US',
+    selectedRegion: 'United States',
     selectedTopic: null as ViralTopic | null,
     isLoading: false,
   }),
 
   actions: {
-    async fetchViralTopics(region: string = 'US') {
-      this.selectedRegion = region;
+    async fetchViralTopics(country: string = 'United States', language: string = 'en-US') {
+      this.selectedRegion = country;
       this.isLoading = true;
       try {
-        const res = await http.get(`/ai/trends/viral-topics?region=${region}`) as any;
+        const res = await http.get(`/ai/trends/viral-topics?country=${country}&lang=${language}`) as any;
         if (res.data) {
           this.trends = res.data;
           if (this.trends.length > 0 && !this.selectedTopic) {

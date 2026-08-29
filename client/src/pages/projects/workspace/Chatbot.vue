@@ -68,11 +68,23 @@ const seriesId = computed(() => (route?.params?.id as string) || seriesStore.cur
 const episodeId = computed(() => activeEpisode.value?.id || '1');
 
 async function loadHistory() {
-  if (!seriesId.value) return;
+  const targetId = seriesId.value || seriesStore.currentSeries?.id;
+  if (!targetId) return;
   try {
-    const res: any = await http.get(`/ai/agentic/history/${seriesId.value}`);
-    if (res?.data?.messages && Array.isArray(res.data.messages) && res.data.messages.length > 0) {
-      messages.value = res.data.messages.map((m: any) => ({
+    const res: any = await http.get(`/ai/agentic/history/${targetId}`);
+    let historyList: any[] = [];
+    if (res?.data?.messages && Array.isArray(res.data.messages)) {
+      historyList = res.data.messages;
+    } else if (Array.isArray(res?.data)) {
+      historyList = res.data;
+    } else if (Array.isArray(res?.messages)) {
+      historyList = res.messages;
+    } else if (Array.isArray((seriesStore.currentSeries as any)?.chat_history) && (seriesStore.currentSeries as any).chat_history.length > 0) {
+      historyList = (seriesStore.currentSeries as any).chat_history;
+    }
+
+    if (historyList.length > 0) {
+      messages.value = historyList.map((m: any) => ({
         id: m.id || `msg_${Date.now()}`,
         role: m.role || 'assistant',
         content: m.content || m.text || '',
@@ -108,13 +120,26 @@ async function loadHistory() {
     }
   } catch (err) {
     console.warn('[Chatbot] Could not load agentic history:', err);
+    if (Array.isArray((seriesStore.currentSeries as any)?.chat_history) && (seriesStore.currentSeries as any).chat_history.length > 0) {
+      messages.value = (seriesStore.currentSeries as any).chat_history.map((m: any) => ({
+        id: m.id || `msg_${Date.now()}`,
+        role: m.role || 'assistant',
+        content: m.content || m.text || '',
+        timestamp: m.timestamp || Date.now(),
+        toolCalls: (m.toolCalls || [])
+          .filter((tc: any, idx: number, arr: any[]) => arr.findIndex((t: any) => t.name === tc.name && (t.status === 'success' || JSON.stringify(t.args) === JSON.stringify(tc.args))) === idx)
+          .map((tc: any) => tc.status === 'running' ? { ...tc, status: 'success' } : tc),
+        suggestions: m.suggestions || [],
+      }));
+      scrollToBottom();
+    }
   }
 }
 
 watch(
-  () => seriesId.value,
-  (id) => {
-    if (id) loadHistory();
+  [() => seriesId.value, () => seriesStore.currentSeries?.id],
+  ([id, storeId]) => {
+    if (id || storeId) loadHistory();
   },
   { immediate: true }
 );
@@ -459,9 +484,9 @@ async function sendMessage(customText?: string) {
     await http.post(
       '/ai/agentic/stream',
       {
-        sessionId: seriesId.value ? `${seriesId.value}_${episodeId.value || 'main'}` : undefined,
-        seriesId: seriesId.value,
-        episodeId: episodeId.value,
+        session_id: seriesId.value ? `${seriesId.value}_${episodeId.value || 'main'}` : undefined,
+        series_id: seriesId.value,
+        episode_id: episodeId.value,
         message: text,
       },
       {
@@ -605,7 +630,7 @@ defineExpose({
         </div>
         <div>
           <div class="text-xs font-black uppercase tracking-wider flex items-center gap-1.5" style="color: var(--el-text-color-primary);">
-            <span>{{ t('chatbot.title', 'Shine Copilot Agent') }}</span>
+            <span>{{ t('chatbot.title', 'Shine Agent') }}</span>
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           </div>
           <p class="text-[10px]" style="color: var(--el-text-color-secondary);">
@@ -615,7 +640,7 @@ defineExpose({
       </div>
       <div class="flex items-center gap-1">
         <el-button circle plain size="small" icon="Delete" @click="clearChat" :title="t('chatbot.clearChat', 'Clear chat')" />
-        <el-button circle plain size="small" icon="Close" @click="$emit('close')" :title="t('chatbot.close', 'Close')" />
+        <!-- <el-button circle plain size="small" icon="Close" @click="$emit('close')" :title="t('chatbot.close', 'Close')" /> -->
       </div>
     </div>
 

@@ -236,7 +236,7 @@ const genresList = computed(() => {
             <!-- Selected Badge -->
             <div
               v-if="formData.visualStyle === s.id"
-              class="absolute bottom-2 right-2 w-5 h-5 rounded-full flex items-center justify-center bg-primary text-white shadow-md"
+              class="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center bg-primary text-white shadow-md"
             >
               <el-icon :size="10"><Check /></el-icon>
             </div>

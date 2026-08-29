@@ -495,7 +495,7 @@ function handleRemoveLanguage(lang: TabPaneName) {
           <p class="text-xs font-semibold" style="color: var(--el-text-color-primary);">{{ t('workspace.aiAutoCaption', 'AI Auto Caption') }}</p>
           <p class="text-[10px]" style="color: var(--el-text-color-secondary);">{{ t('workspace.autoGenerateEpisodeCaption', 'Auto generate & synchronize episode captions') }}</p>
         </div>
-        <el-badge value="Comming soon" class="item">
+        <el-badge value="" class="item">
           <el-switch v-model="isEnableCaption" :disabled="true" size="small" />
         </el-badge>
       </div>
@@ -515,7 +515,7 @@ function handleRemoveLanguage(lang: TabPaneName) {
             size="small"
             filterable
             :placeholder="`+ ${t('workspace.languages', 'Languages')}`"
-            class="!w-28"
+            class="!w-28" :disabled="true"
             @change="handleAddLanguage"
           >
             <el-option
@@ -652,13 +652,18 @@ function handleRemoveLanguage(lang: TabPaneName) {
                   {{ t('workspace.captionStylePresets', 'Caption Style Presets') }}
                 </h3>
               </div>
-              <el-segmented
-                v-model="selectedCaptionStyle"
-                :options="styleOptions"
-                block
-                size="small"
-                @change="(val: any) => applyPreset(val)"
-              />
+              <div class="flex flex-wrap gap-2">
+                <template v-for="style in styleOptions" :key="style.value">
+                  <el-button class="!ml-0"
+                    :type="selectedCaptionStyle === style.value ? 'primary' : 'default'" 
+                    size="small" round 
+                    @click="applyPreset(style.value as any)">
+                    {{ style.label }}
+                  </el-button>
+                </template>
+              </div>
+              
+        
             </div>
 
             <!-- Design Customization & Typography -->
@@ -694,7 +699,7 @@ function handleRemoveLanguage(lang: TabPaneName) {
               </div>
 
               <!-- Font Size & Text Case -->
-              <div class="grid grid-cols-2 gap-3 items-center">
+              <div class="grid grid-cols-1 gap-3 items-center">
                 <div class="space-y-1.5">
                   <div class="flex justify-between text-[10px] font-bold uppercase" style="color: var(--el-text-color-secondary);">
                     <span>{{ t('workspace.fontSize', 'Font Size') }}</span>
@@ -703,11 +708,11 @@ function handleRemoveLanguage(lang: TabPaneName) {
                   <el-slider v-model="captionFontSize" :min="20" :max="90" size="small" @input="applyStyleToTimeline" />
                 </div>
 
-                <div class="space-y-1.5">
+                <div class="space-y-1.5 flex justify-between items-center">
                   <label class="text-[10px] font-bold uppercase block" style="color: var(--el-text-color-secondary);">
                     {{ t('workspace.textCase', 'Text Case') }}
                   </label>
-                  <el-radio-group v-model="selectedTextCase" size="small" class="w-full !flex" @change="applyStyleToTimeline">
+                  <el-radio-group v-model="selectedTextCase" size="small" class="" @change="applyStyleToTimeline">
                     <el-radio-button label="none" value="none" class="flex-1 text-center">aA</el-radio-button>
                     <el-radio-button label="uppercase" value="uppercase" class="flex-1 text-center">AA</el-radio-button>
                     <el-radio-button label="lowercase" value="lowercase" class="flex-1 text-center">aa</el-radio-button>
@@ -716,23 +721,23 @@ function handleRemoveLanguage(lang: TabPaneName) {
               </div>
 
               <!-- Alignment & Words Per Line -->
-              <div class="grid grid-cols-2 gap-3 items-center">
-                <div class="space-y-1.5">
+              <div class="grid grid-cols-1 gap-3 items-center">
+                <div class="space-y-1.5 flex justify-between items-center">
                   <label class="text-[10px] font-bold uppercase block" style="color: var(--el-text-color-secondary);">
                     Text Alignment
                   </label>
-                  <el-radio-group v-model="selectedTextAlign" size="small" class="w-full !flex" @change="applyStyleToTimeline">
+                  <el-radio-group v-model="selectedTextAlign" size="small" class="" @change="applyStyleToTimeline">
                     <el-radio-button value="left" class="flex-1 text-center">Left</el-radio-button>
                     <el-radio-button value="center" class="flex-1 text-center">Center</el-radio-button>
                     <el-radio-button value="right" class="flex-1 text-center">Right</el-radio-button>
                   </el-radio-group>
                 </div>
 
-                <div class="space-y-1.5">
+                <div class="space-y-1.5 flex justify-between items-center">
                   <label class="text-[10px] font-bold uppercase block" style="color: var(--el-text-color-secondary);">
                     Words Per Line
                   </label>
-                  <el-radio-group v-model="selectedWordsPerLine" size="small" class="w-full !flex" @change="applyStyleToTimeline">
+                  <el-radio-group v-model="selectedWordsPerLine" size="small" class="" @change="applyStyleToTimeline">
                     <el-radio-button value="multiple" class="flex-1 text-center">Line</el-radio-button>
                     <el-radio-button value="single" class="flex-1 text-center">Pop (1-word)</el-radio-button>
                   </el-radio-group>

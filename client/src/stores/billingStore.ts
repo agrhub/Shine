@@ -57,6 +57,10 @@ export const useBillingStore = defineStore('billing', {
       }
     },
 
+    async fetchCurrentTier(): Promise<SubscriptionTier | null> {
+      return this.fetchTierInfo();
+    },
+
     async startCheckout(tier: 'free' | 'creator' | 'studio' | 'enterprise') {
       if (tier === 'free') return;
       this.checkoutLoading = true;
