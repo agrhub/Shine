@@ -146,8 +146,6 @@ adminRouter.get('/render-cluster', async (req: Request, res: Response) => {
         systemMemoryRssMb: clusterMetrics.systemLoad.freeMemoryMb,
         clusterMetrics,
         activeJobs: [
-          { jobId: 'job-9821', seriesTitle: 'The CEO Awakening (Ep 15)', gpuNode: `${clusterMetrics.region}-worker-01`, progress: 84, status: 'processing' },
-          { jobId: 'job-9822', seriesTitle: 'Neon Dawn (Ep 12)', gpuNode: `${clusterMetrics.region}-worker-02`, progress: 42, status: 'processing' },
         ],
       },
       message: 'Google Cloud Run render cluster status & Pub/Sub queue retrieved',
@@ -249,10 +247,10 @@ adminRouter.get('/studio-config', async (req: Request, res: Response) => {
         ...EnvConfig.pexels,
         apiKey: EnvConfig.pexels.apiKey || '',
       },
-      elevenlabs: {
-        ...EnvConfig.elevenlabs,
-        apiKey: EnvConfig.elevenlabs.apiKey || '',
-      },
+      // elevenlabs: {
+      //   ...EnvConfig.elevenlabs,
+      //   apiKey: EnvConfig.elevenlabs.apiKey || '',
+      // },
       captcha: {
         ...EnvConfig.captcha,
         apiKey: EnvConfig.captcha.apiKey || '',
@@ -279,7 +277,7 @@ adminRouter.get('/studio-config', async (req: Request, res: Response) => {
       pixabay: { ...envFallbackConfig.pixabay, ...(cleanedSavedConfig.pixabay || {}) },
       freesound: { ...envFallbackConfig.freesound, ...(cleanedSavedConfig.freesound || {}) },
       pexels: { ...envFallbackConfig.pexels, ...(cleanedSavedConfig.pexels || {}) },
-      elevenlabs: { ...envFallbackConfig.elevenlabs, ...(cleanedSavedConfig.elevenlabs || {}) },
+      // elevenlabs: { ...envFallbackConfig.elevenlabs, ...(cleanedSavedConfig.elevenlabs || {}) },
       notifications: { ...envFallbackConfig.notifications, ...(cleanedSavedConfig.notifications || {}) },
     } : envFallbackConfig;
 
@@ -407,14 +405,18 @@ adminRouter.patch('/studio-config', async (req: Request, res: Response) => {
         publicDomain: EnvConfig.s3.cdn || '',
         provider: EnvConfig.s3.provider || 'b2',
       },
+      gcs: EnvConfig.gcs,
       parallel: EnvConfig.parallel,
       grafana: EnvConfig.grafana,
       pixabay: EnvConfig.pixabay,
       freesound: EnvConfig.freesound,
       pexels: EnvConfig.pexels,
-      elevenlabs: EnvConfig.elevenlabs,
+      // elevenlabs: EnvConfig.elevenlabs,
       captcha: EnvConfig.captcha,
       email: EnvConfig.smtp,
+      notifications: EnvConfig.notifications,
+      cloudRun: EnvConfig.cloudRun,
+      pubsub: EnvConfig.pubsub,
     };
 
     // Clean any masked placeholder values in updates
@@ -500,38 +502,44 @@ export const defaultPlatformConfig = {
   publishing: {
     youtube: {
       enabled: false,
-      clientId: 'your-google-client-id',
-      clientSecret: 'your-google-client-secret',
+      clientId: EnvConfig.oauth.google.clientId,
+      clientSecret: EnvConfig.oauth.google.clientSecret,
+      redirectUrl: EnvConfig.oauth.google.redirectUri,
       scopes: ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube.readonly'],
     },
     tiktok: {
       enabled: false,
-      clientKey: 'your-tiktok-client-key',
-      clientSecret: 'your-tiktok-client-secret',
+      clientKey: EnvConfig.oauth.tiktok.clientId,
+      clientSecret: EnvConfig.oauth.tiktok.clientSecret,
+      redirectUrl: EnvConfig.oauth.tiktok.redirectUri,
       scopes: ['video.upload', 'user.info.basic'],
     },
     facebook: {
       enabled: false,
-      appId: 'your-facebook-app-id',
-      appSecret: 'your-facebook-app-secret',
+      appId: EnvConfig.oauth.facebook.clientId,
+      appSecret: EnvConfig.oauth.facebook.clientSecret,
+      redirectUrl: EnvConfig.oauth.facebook.redirectUri,
       scopes: ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts'],
     },
   },
   sso: {
     google: {
       enabled: false,
-      clientId: 'your-google-client-id',
-      clientSecret: 'your-google-client-secret',
+      clientId: EnvConfig.oauth.google.clientId,
+      clientSecret: EnvConfig.oauth.google.clientSecret,
+      redirectUrl: EnvConfig.oauth.google.redirectUri,
     },
     facebook: {
       enabled: false,
-      appId: 'your-facebook-app-id',
-      appSecret: 'your-facebook-app-secret',
+      appId: EnvConfig.oauth.facebook.clientId,
+      appSecret: EnvConfig.oauth.facebook.clientSecret,
+      redirectUrl: EnvConfig.oauth.facebook.oauthRedirectUri,
     },
-    github: {
+    tiktok: {
       enabled: false,
-      clientId: 'your-github-client-id',
-      clientSecret: 'your-github-client-secret',
+      clientId: EnvConfig.oauth.tiktok.clientId,
+      clientSecret: EnvConfig.oauth.tiktok.clientSecret,
+      redirectUrl: EnvConfig.oauth.tiktok.oauthRedirectUri,
     },
   },
 };

@@ -397,7 +397,7 @@ try {
 Write-Host "`n[Step 6/6] Configuring Google Cloud Scheduler for Flow Token Sync..." -ForegroundColor Yellow
 
 $JobName = "shine-flow-token-sync"
-$SyncUri = "$ShineAppUrl/api/admin/flow-accounts/sync"
+$SyncUri = "$ShineAppUrl/api/flow-accounts/sync"
 $JobExists = $false
 
 try {

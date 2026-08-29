@@ -33,3 +33,6 @@ openvideo-project-1787393848394.json
 client/scripts
 pnpm-lock.yaml
 scripts/test-render-worker.js
+scripts/test_preview.mjs
+scripts/test_screen.mjs
+scripts/test_slide5.mjs

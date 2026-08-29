@@ -35,25 +35,19 @@ export async function generateDialogueVoiceSynthesis(params: {
   dialogue?: any[];
   text?: string;
   voice_id?: string;
-  voiceId?: string;
   emotion?: string;
   intensity?: number;
   language?: string;
   speed?: number;
   pitch?: number;
   episode_id?: string;
-  episodeId?: string;
   scene_id?: string;
-  sceneId?: string;
   multi_speaker?: any;
-  reqMultiSpeaker?: any;
 }) {
-  const { dialogue, text: rawText, voice_id, voiceId, emotion: reqEmotion, intensity, language, speed, pitch, episode_id, episodeId, multi_speaker, reqMultiSpeaker } = params;
-  const targetEpisodeId = episode_id || episodeId;
-  const reqVoiceId = voice_id || voiceId;
+  const { dialogue, text: rawText, voice_id, emotion: reqEmotion, intensity, language, speed, pitch, episode_id, multi_speaker } = params;
   const emotion = reqEmotion || (Array.isArray(dialogue) && dialogue.length > 0 ? (dialogue[0]?.speech_tone || dialogue[0]?.tone || dialogue[0]?.emotion) : undefined);
 
-  let multiSpeaker = multi_speaker || reqMultiSpeaker;
+  let multiSpeaker = multi_speaker;
   let text = rawText;
   if (!text && Array.isArray(dialogue) && dialogue.length > 0) {
     text = dialogue.map((d: any) => `${d.line || ''}`).join('\n');
@@ -62,28 +56,26 @@ export async function generateDialogueVoiceSynthesis(params: {
     text = '...';
   }
   
-  let targetVoiceId = reqVoiceId;
+  let targetVoiceId = voice_id;
   if (Array.isArray(dialogue) && dialogue.length > 0) {
     try {
       const db = await getDatabaseProvider();
       let seriesChars: any[] = [];
-      if (targetEpisodeId) {
-        const ep = await db.getEpisodeById(targetEpisodeId);
+      if (episode_id) {
+        const ep = await db.getEpisodeById(episode_id);
         if (ep) {
           if (ep.series_id) {
             const srs = await db.getSeriesById(ep.series_id);
-            seriesChars = srs?.characters || srs?.master_plan?.characters || ep.characters || [];
-          } else {
-            seriesChars = ep.characters || [];
+            seriesChars = srs?.characters || [];
           }
         }
       }
 
       const distinctNames = Array.from(new Set(dialogue.map((d: any) => String(d.character || '').trim()).filter(Boolean)));
-      if (distinctNames.length === 0 && (params.scene_id || params.sceneId) && targetEpisodeId) {
-        const ep = await db.getEpisodeById(targetEpisodeId);
+      if (distinctNames.length === 0 && params.scene_id && episode_id) {
+        const ep = await db.getEpisodeById(episode_id);
         const scenes: any[] = ep?.scenes || [];
-        const sc = scenes.find((s: any) => s.id === (params.scene_id || params.sceneId) || s.index === (params as any).sceneIndex);
+        const sc = scenes.find((s: any) => s.id === params.scene_id || s.index === (params as any).scene_index);
         const charCostumeName = sc?.character_costumes?.[0]?.character;
         if (charCostumeName) {
           distinctNames.push(charCostumeName);
@@ -95,7 +87,7 @@ export async function generateDialogueVoiceSynthesis(params: {
           const matched = seriesChars.find(c => (c.name || '').toLowerCase() === name.toLowerCase());
           return {
             name,
-            voice_id: matched?.voice_id || matched?.voiceId || (matched?.gender === 'female' ? 'Aoede' : 'Puck'),
+            voice_id: matched?.voice_id || (matched?.gender === 'female' ? 'Aoede' : 'Puck'),
           };
         });
         multiSpeaker = {
@@ -104,11 +96,11 @@ export async function generateDialogueVoiceSynthesis(params: {
         };
       } else if (distinctNames.length === 1) {
         const matched = seriesChars.find(c => (c.name || '').toLowerCase() === distinctNames[0].toLowerCase());
-        targetVoiceId = matched?.voice_id || matched?.voiceId || (matched?.gender === 'female' ? 'Aoede' : 'Puck');
+        targetVoiceId = matched?.voice_id || (matched?.gender === 'female' ? 'Aoede' : 'Puck');
         multiSpeaker = { enabled: false };
       }
     } catch (err: any) {
-      Logger.warn(`[voicesRouter] Auto multiSpeaker extraction fallback: ${err.message}`);
+      Logger.warn(`[voicesRouter] Auto multiSpeaker extraction: ${err.message}`);
     }
   }
 
@@ -211,14 +203,14 @@ export async function generateDialogueVoiceSynthesis(params: {
 // POST /api/voices/tts — Real Neural Voice synthesis via TTSService / Gemini Audio
 router.post('/tts', async (req: Request, res: Response) => {
   try {
-    const { voice_id, voiceId, text, emotion, intensity, language, speed, pitch, multi_speaker, multiSpeaker: reqMultiSpeaker, episode_id, episodeId, scene_id, sceneId, dialogue } = req.body;
+    const { voice_id, text, emotion, intensity, language, speed, pitch, multi_speaker, episode_id, scene_id, dialogue } = req.body;
 
     if (!text && (!dialogue || dialogue.length === 0)) {
       return res.status(400).json({ code: 400, data: null, message: 'text or dialogue is required', error: 'INVALID_PAYLOAD' });
     }
 
     const userId = getUserId(req);
-    const deduct = await CreditService.deductUserCredits(userId, 'voiceoverTts', 'Voiceover Synthesis', `Scene: ${scene_id || sceneId || 'voice'}`);
+    const deduct = await CreditService.deductUserCredits(userId, 'voiceoverTts', 'Voiceover Synthesis', `Scene: ${scene_id || 'voice'}`);
     if (!deduct.success && deduct.error?.includes('Insufficient')) {
       return res.status(402).json({ code: 402, data: null, message: deduct.error, error: 'INSUFFICIENT_CREDITS' });
     }
@@ -226,23 +218,23 @@ router.post('/tts', async (req: Request, res: Response) => {
     const ttsResult = await generateDialogueVoiceSynthesis({
       dialogue,
       text,
-      voice_id: voice_id || voiceId,
+      voice_id,
       emotion,
       intensity,
       language,
       speed,
       pitch,
-      episode_id: episode_id || episodeId,
-      scene_id: scene_id || sceneId,
-      multi_speaker: multi_speaker || reqMultiSpeaker,
+      episode_id,
+      scene_id,
+      multi_speaker,
     });
 
     // Embed Google SynthID Digital Watermark
     const synthIdResult = await SynthIDService.embedSynthID({
       assetType: 'audio',
       model: ttsResult.voice_id,
-      episodeId: episode_id || episodeId,
-      sceneId: scene_id || sceneId,
+      episodeId: episode_id,
+      sceneId: scene_id,
     });
 
     res.set(synthIdResult.headers);
@@ -266,7 +258,7 @@ router.post('/tts', async (req: Request, res: Response) => {
 // POST /api/voices/dubbing/re-align — Multi-market timeline dubbing realignment
 router.post('/dubbing/re-align', async (req: Request, res: Response) => {
   try {
-    const { episode_id, episodeId, language, scenes } = req.body;
+    const { episode_id, language, scenes } = req.body;
 
     // AI timing adjustment for differences in syllable density
     const languageTimeExpansion: Record<string, number> = {
@@ -293,7 +285,7 @@ router.post('/dubbing/re-align', async (req: Request, res: Response) => {
     return res.json({
       code: 200,
       data: {
-        episode_id: episode_id || episodeId || 'ep-001',
+        episode_id: episode_id || 'ep-001',
         language: language || 'en-US',
         expansion_ratio: multiplier,
         aligned_scenes: alignedScenes,
@@ -309,20 +301,18 @@ router.post('/dubbing/re-align', async (req: Request, res: Response) => {
 // POST /api/voices/separate-audio — Extract Audio, Synthesize Unified TTS Voiceover, and Generate Gemini Word-by-Word Captions
 router.post('/separate-audio', async (req: Request, res: Response) => {
   try {
-    const { video_url, videoUrl, episode_id, episodeId, scene_index, sceneIndex } = req.body;
-    const targetVideoUrl = video_url || videoUrl;
-    const targetEpisodeId = episode_id || episodeId;
-    const targetSceneIndex = Number(scene_index ?? sceneIndex) || 1;
+    const { video_url, episode_id, scene_index = 1 } = req.body;
+    const targetSceneIndex = Number(scene_index) || 1;
 
-    if (!targetVideoUrl) {
+    if (!video_url) {
       return res.status(400).json({ code: 400, data: null, message: 'video_url is required', error: 'INVALID_PAYLOAD' });
     }
 
-    Logger.info(`[voicesRouter.separate-audio] Processing audio separation, TTS generation, and word-level captions for episode ${targetEpisodeId} scene ${targetSceneIndex}...`);
+    Logger.info(`[voicesRouter.separate-audio] Processing audio separation, TTS generation, and word-level captions for episode ${episode_id} scene ${targetSceneIndex}...`);
 
     const result = await CaptionService.processSceneAudioAndCaptions({
-      videoUrl: targetVideoUrl,
-      episodeId: targetEpisodeId,
+      videoUrl: video_url,
+      episodeId: episode_id,
       sceneIndex: targetSceneIndex,
     });
 
@@ -332,7 +322,7 @@ router.post('/separate-audio', async (req: Request, res: Response) => {
     return res.json({
       code: 200,
       data: {
-        episode_id: targetEpisodeId,
+        episode_id,
         scene_index: targetSceneIndex,
         video_url: result.videoUrl,
         bgm_url: result.bgmUrl,
@@ -363,14 +353,14 @@ router.post('/separate-audio', async (req: Request, res: Response) => {
 
 // POST /api/voices/steer-emotion — Fine-grained neural pitch/speed/vibrato control
 router.post('/steer-emotion', (req: Request, res: Response) => {
-  const { voice_id, voiceId, emotion_tag, emotionTag, intensity_level, intensityLevel } = req.body;
-  const level = intensity_level ?? intensityLevel ?? 70;
+  const { voice_id, emotion_tag = 'Dramatic', intensity_level = 70 } = req.body;
+  const level = Number(intensity_level) || 70;
 
   return res.json({
     code: 200,
     data: {
-      voice_id: voice_id || voiceId,
-      emotion_tag: emotion_tag || emotionTag || 'Dramatic',
+      voice_id,
+      emotion_tag,
       intensity_level: level,
       pitch_multiplier: 1.0 + (level - 50) * 0.006,
       rate_multiplier: 1.0 + (level - 50) * 0.004,

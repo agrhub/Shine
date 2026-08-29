@@ -6,8 +6,8 @@ import { StorageFactory } from '../services/storage/StorageFactory.js';
 import { Logger } from '../utils/logger.js';
 import { nanoid } from 'nanoid';
 import { getAuthUser, getUserId } from '~/utils/auth.js';
-import { normalizeSceneEntity, normalizeLocationAsset, normalizePropAsset, normalizeCharacterEpisodeEntity } from '../utils/sceneNormalizer.js';
-import type { LocationAsset, PropAsset, CharacterEpisodeEntity } from '@/types.js';
+import { normalizeSceneEntity, normalizeLocationAsset, normalizePropAsset, normalizeCharacterEntity } from '../utils/sceneNormalizer.js';
+import type { LocationAsset, PropAsset, SceneEntity, CharacterSeriesEntity } from '@/types.js';
 
 const router = Router();
 
@@ -19,55 +19,12 @@ function fail(res: Response, statusCode: number, message: string) {
   res.status(statusCode).json({ code: statusCode, data: null, message: null, error: message });
 }
 
-function buildEpisodeCharacters(seriesCast: any[], chars?: any[]): CharacterEpisodeEntity[] {
-  const list = Array.isArray(chars) && chars.length > 0 ? chars : seriesCast;
-  return list.map((c: any) => {
-    const canonical = seriesCast.find((sc: any) => sc.name?.toLowerCase().trim() === c.name?.toLowerCase().trim() || sc.id === c.id);
-    const charId = canonical?.id || c.id || 'char_1';
-    const defaultClothing = c.clothing_and_accessories || c.clothingAndAccessories || c.costume_style || c.costumeStyle || canonical?.clothing_and_accessories || canonical?.clothingAndAccessories || canonical?.costume_style || '';
-    let variants = c.wardrobe_variants || c.wardrobeVariants || canonical?.wardrobe_variants || canonical?.wardrobeVariants || [];
-    if (!variants || variants.length === 0) {
-      const rawWardrobe = c.wardrobe || canonical?.wardrobe || [];
-      if (Array.isArray(rawWardrobe) && rawWardrobe.length > 0) {
-        variants = rawWardrobe.map((w: any, idx: number) => ({
-          variant_id: typeof w === 'object' && (w?.variant_id || w?.variantId) ? (w?.variant_id || w?.variantId) : `${charId}_variant_${idx + 1}`,
-          name: typeof w === 'string' ? w : (w?.name || `Wardrobe ${idx + 1}`),
-          clothing_and_accessories: typeof w === 'string' ? w : (w?.clothing_and_accessories || w?.clothingAndAccessories || defaultClothing || ''),
-          associated_scenes: [1],
-        }));
-      } else if (defaultClothing) {
-        variants = [{
-          variant_id: `${charId}_default`,
-          name: defaultClothing.slice(0, 40),
-          clothing_and_accessories: defaultClothing,
-          associated_scenes: [1],
-        }];
-      }
-    } else {
-      variants = variants.map((v: any, vi: number) => ({
-        variant_id: v.variant_id || v.variantId || `${charId}_variant_${vi + 1}`,
-        name: v.name || `Outfit ${vi + 1}`,
-        clothing_and_accessories: v.clothing_and_accessories || v.clothingAndAccessories || defaultClothing || '',
-        associated_scenes: Array.isArray(v.associated_scenes || v.associatedScenes) && (v.associated_scenes || v.associatedScenes).length > 0 ? (v.associated_scenes || v.associatedScenes) : [1],
-        image_url: v.image_url || v.imageUrl || undefined,
-      }));
-    }
-    return {
-      id: charId,
-      name: canonical?.name || c.name,
-      clothing_and_accessories: defaultClothing,
-      frame_description: c.frame_description || c.frameDescription || canonical?.frame_description || canonical?.frameDescription || 'A character sheet with a head and shoulders shot showing the characters face on the left and a full body shot of the character on the right wearing the same clothing and accessories against a seamless white background.',
-      wardrobe_variants: variants,
-    };
-  });
-}
-
 // GET /api/series - List all series
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = getUserId(req, '') || (req.query.userId as string);
+    const userId = getUserId(req);
     if (!userId) {
-      fail(res, 401, 'Authentication required: userId is missing');
+      fail(res, 401, 'Authentication required: user_id is missing');
       return;
     }
     const search = (req.query.search as string) || '';
@@ -151,15 +108,15 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
 // POST /api/series - Create a new series
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = getUserId(req, '') || req.body.userId;
+    const userId = getUserId(req);
     if (!userId) {
-      fail(res, 401, 'Authentication required: userId is missing');
+      fail(res, 401, 'Authentication required: user_id is missing');
       return;
     }
 
     const { series, episodes } = await SeriesService.createSeries({
       ...req.body,
-      userId,
+      user_id: userId,
     });
 
     ok(res, { series, episodes }, 'Series created successfully', 201);
@@ -215,7 +172,7 @@ router.put('/:id/characters', async (req: Request, res: Response): Promise<void>
 
     await db.updateSeries(seriesId, {
       characters,
-      master_plan: JSON.stringify(parsedPlan),
+      master_plan: parsedPlan,
     });
 
     ok(res, { characters, message: 'Characters updated successfully' });
@@ -237,6 +194,9 @@ router.put('/:id/episodes/:epId', async (req: Request, res: Response): Promise<v
       fail(res, 404, 'Episode not found');
       return;
     }
+
+    const targetSeries = await db.getSeriesById(seriesId as string);
+    const seriesChars = targetSeries?.characters || [];
 
     const updates: any = {};
     if (scenes !== undefined) {
@@ -324,28 +284,14 @@ router.get('/:id/episodes/:epId/script', async (req: Request, res: Response): Pr
         }).join('\n\n') + '\n\n##### FADE TO BLACK:';
     }
 
-    const seriesCast = Array.isArray(series.characters) && series.characters.length > 0
-      ? series.characters
-      : (series.master_plan?.characters || []);
-
-    const characters = buildEpisodeCharacters(seriesCast, ep.characters);
-
-    const rawLocations = ep.locations && ep.locations.length > 0
-      ? ep.locations
-      : (series.locations || series.master_plan?.locations || []);
-    const locations = (rawLocations || []).map((l: any, i: number) => normalizeLocationAsset(l, i + 1));
-
-    const rawProps = ep.props && ep.props.length > 0
-      ? ep.props
-      : (series.props || series.master_plan?.props || []);
-    const props = (rawProps || []).map((p: any, i: number) => normalizePropAsset(p, i + 1));
+    const characters = series.characters || [];
+    const locations = series.locations || [];
+    const props = series.props || [];
 
     const hasFullScreenplay = Boolean(
       ep.screenplay &&
       Array.isArray(ep.scenes) &&
-      ep.scenes.length >= 4 &&
-      Array.isArray(ep.characters) &&
-      ep.characters.length > 0
+      ep.scenes.length >= 4
     );
 
     if (hasFullScreenplay) {
@@ -369,46 +315,35 @@ router.get('/:id/episodes/:epId/script', async (req: Request, res: Response): Pr
 
     // Auto-generate scene screenplay on demand
     const scriptRes = await scriptAgent.execute({
-      seriesId: seriesId as string,
-      episodeNumber: ep.episode_number,
+      series_id: seriesId as string,
+      episode_number: ep.episode_number,
       title: ep.title,
       genre: series.genre,
-      visualStyle: series.visual_style,
+      visual_style: series.visual_style,
       synopsis: ep.synopsis,
-      sceneCore: ep.scene_core,
-      conflictEscalation: ep.conflict_escalation,
-      cliffhangerHook: ep.cliffhanger_hook,
-      characters: series.characters || series.master_plan?.characters,
-      storyCore: series.master_plan?.storyCore,
+      scene_core: ep.scene_core,
+      conflict_escalation: ep.conflict_escalation,
+      cliffhanger_hook: ep.cliffhanger_hook,
+      characters: characters,
+      locations: locations,
+      props: props,
+      story_core: series.master_plan?.story_core,
       country: series.country,
       ratio: series.ratio,
-      targetDurationSeconds: Number(ep.duration) || Number(series.master_plan?.totalDurationSeconds) || 90,
+      target_duration_seconds: series.episode_duration || series.master_plan?.total_duration_seconds || 90,
     });
 
     if (scriptRes?.scenes) {
-      const seriesCast = Array.isArray(series.characters) && series.characters.length > 0
-        ? series.characters
-        : (series.master_plan?.characters || []);
-      const episodeCharacters = buildEpisodeCharacters(seriesCast, scriptRes.characters && scriptRes.characters.length > 0 ? scriptRes.characters : ep.characters);
-
-      const rawEpLocs = scriptRes.locations && scriptRes.locations.length > 0
-        ? scriptRes.locations
-        : (ep.locations && ep.locations.length > 0 ? ep.locations : (series.locations || series.master_plan?.locations || []));
-      const episodeLocations: LocationAsset[] = (rawEpLocs || []).map((loc: any, idx: number) => normalizeLocationAsset(loc, idx + 1));
-
-      const rawEpProps = scriptRes.props && scriptRes.props.length > 0
-        ? scriptRes.props
-        : (ep.props && ep.props.length > 0 ? ep.props : (series.props || series.master_plan?.props || []));
-      const episodeProps: PropAsset[] = (rawEpProps || []).map((prop: any, idx: number) => normalizePropAsset(prop, idx + 1));
-
-      const normalizedScenes = (scriptRes.scenes || []).map((s: any, idx: number) => normalizeSceneEntity(s, idx + 1));
+      const normalizedScenes: SceneEntity[] = (scriptRes.scenes || []).map((s: any, idx: number) => normalizeSceneEntity(s, idx + 1)).filter((s): s is SceneEntity => s !== null);
 
       await db.updateEpisode(ep.id, {
         scenes: normalizedScenes,
         screenplay: scriptRes.screenplay || '',
-        characters: episodeCharacters,
-        locations: episodeLocations,
-        props: episodeProps,
+        reference_assets: {
+          character_ids: characters.map(c => c.id),
+          location_ids: locations.map(l => l.id),
+          prop_ids: props.map(p => p.id),
+        },
         duration: scriptRes.total_duration_seconds,
         script: JSON.stringify({
           ...scriptRes,
@@ -419,9 +354,9 @@ router.get('/:id/episodes/:epId/script', async (req: Request, res: Response): Pr
       ok(res, {
         ...scriptRes,
         scenes: normalizedScenes,
-        characters: episodeCharacters,
-        locations: episodeLocations,
-        props: episodeProps,
+        characters,
+        locations,
+        props,
       });
       return;
     } else {
@@ -451,48 +386,42 @@ router.post('/:id/episodes/:epId/generate-script', async (req: Request, res: Res
       return;
     }
 
+    const { synopsis, scene_core, conflict_escalation, cliffhanger_hook, target_duration_seconds } = req.body;
+    const characters = series.characters || [];
+    const locations = series.locations || [];
+    const props = series.props || [];
+
     // Call ScriptAgent to analyze and break down into scenes
     const scriptRes = await scriptAgent.execute({
-      seriesId: series.id,
-      episodeNumber: ep.episode_number,
+      series_id: series.id,
+      episode_number: ep.episode_number,
       title: series.title,
       genre: series.genre,
-      visualStyle: series.visual_style,
-      synopsis: req.body.synopsis || ep.synopsis,
-      sceneCore: req.body.sceneCore || ep.scene_core,
-      conflictEscalation: req.body.conflictEscalation || ep.conflict_escalation,
-      cliffhangerHook: req.body.cliffhangerHook || ep.cliffhanger_hook,
-      characters: series.characters || series.master_plan?.characters,
-      storyCore: series.master_plan?.storyCore,
+      visual_style: series.visual_style,
+      synopsis: synopsis || ep.synopsis,
+      scene_core: scene_core || ep.scene_core,
+      conflict_escalation: conflict_escalation || ep.conflict_escalation,
+      cliffhanger_hook: cliffhanger_hook || ep.cliffhanger_hook,
+      characters: characters,
+      locations: locations,
+      props: props,
+      story_core: series.master_plan?.story_core,
       country: series.country,
       ratio: series.ratio,
-      targetDurationSeconds: Number(req.body.targetDurationSeconds) || Number(ep.duration) || Number(series.master_plan?.totalDurationSeconds) || 90,
+      target_duration_seconds: Number(target_duration_seconds) || Number(ep.duration) || Number(series.master_plan?.total_duration_seconds) || 90,
     });
 
     if (scriptRes?.scenes) {
-      const seriesCast = Array.isArray(series.characters) && series.characters.length > 0
-        ? series.characters
-        : (series.master_plan?.characters || []);
-      const episodeCharacters = buildEpisodeCharacters(seriesCast, scriptRes.characters && scriptRes.characters.length > 0 ? scriptRes.characters : ep.characters);
-
-      const rawEpLocs = scriptRes.locations && scriptRes.locations.length > 0
-        ? scriptRes.locations
-        : (ep.locations && ep.locations.length > 0 ? ep.locations : (series.locations || series.master_plan?.locations || []));
-      const episodeLocations: LocationAsset[] = (rawEpLocs || []).map((loc: any, idx: number) => normalizeLocationAsset(loc, idx + 1));
-
-      const rawEpProps = scriptRes.props && scriptRes.props.length > 0
-        ? scriptRes.props
-        : (ep.props && ep.props.length > 0 ? ep.props : (series.props || series.master_plan?.props || []));
-      const episodeProps: PropAsset[] = (rawEpProps || []).map((prop: any, idx: number) => normalizePropAsset(prop, idx + 1));
-
-      const normalizedScenes = (scriptRes.scenes || []).map((s: any, idx: number) => normalizeSceneEntity(s, idx + 1));
+      const normalizedScenes = (scriptRes.scenes || []).map((s: any, idx: number) => normalizeSceneEntity(s, idx + 1)).filter((s): s is SceneEntity => s !== null);
 
       await db.updateEpisode(ep.id, {
         scenes: normalizedScenes,
         screenplay: scriptRes.screenplay || '',
-        characters: episodeCharacters,
-        locations: episodeLocations,
-        props: episodeProps,
+        reference_assets: {
+          character_ids: characters.map(c => c.id),
+          location_ids: locations.map(l => l.id),
+          prop_ids: props.map(p => p.id),
+        },
         duration: scriptRes.total_duration_seconds,
         script: JSON.stringify({
           ...scriptRes,
@@ -503,9 +432,9 @@ router.post('/:id/episodes/:epId/generate-script', async (req: Request, res: Res
       ok(res, {
         ...scriptRes,
         scenes: normalizedScenes,
-        characters: episodeCharacters,
-        locations: episodeLocations,
-        props: episodeProps,
+        characters,
+        locations,
+        props,
       });
       return;
     } else {
@@ -523,6 +452,7 @@ router.post('/:id/episodes', async (req: Request, res: Response): Promise<void> 
     const { title, synopsis } = req.body;
 
     const db = await getDatabaseProvider();
+    const series = await db.getSeriesById(seriesId);
     const existingEps = await db.getEpisodesBySeriesId(seriesId);
     const nextEpNumber = existingEps.length + 1;
     const epId = `ep_${nanoid(10)}`;
@@ -536,9 +466,11 @@ router.post('/:id/episodes', async (req: Request, res: Response): Promise<void> 
       title: title || `Episode ${nextEpNumber}`,
       synopsis: synopsis || '',
       scenes: [],
-      characters: [],
-      locations: [],
-      props: [],
+      reference_assets: {
+        character_ids: (series?.characters || []).map(c => c.id),
+        location_ids: (series?.locations || []).map(l => l.id),
+        prop_ids: (series?.props || []).map(p => p.id),
+      },
       duration: targetDuration,
       status: 'DRAFT',
     });
@@ -718,10 +650,10 @@ episodesRouter.put('/:episodeId/timeline', async (req: Request, res: Response): 
 
     ok(res, {
       success: true,
-      versionId: result.versionId,
-      versionNumber: result.versionNumber,
-      updatedAt: result.updatedAt,
-      changeSummary: effectiveSummary,
+      version_id: result.version_id,
+      version_number: result.version_number,
+      updated_at: result.updated_at,
+      change_summary: effectiveSummary,
       diff: diffDetails,
     }, 'Timeline saved successfully');
   } catch (err: any) {

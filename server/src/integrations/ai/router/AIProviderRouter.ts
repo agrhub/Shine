@@ -269,18 +269,92 @@ export class AIProviderRouter {
       };
     }
 
-    // Default Text Generation via GeminiClient
-    const text = await geminiClient.generateText({
-      prompt: options.prompt,
-      model: options.model,
-      jsonMode: options.jsonMode,
-      systemInstruction: options.systemInstruction,
-    });
+    // Text Generation: GeminiClient with FlowAdapter Fallback on Resource Exhausted (409/429)
+    try {
+      const text = await geminiClient.generateText({
+        prompt: options.prompt,
+        model: options.model,
+        jsonMode: options.jsonMode,
+        systemInstruction: options.systemInstruction,
+      });
 
-    return {
-      provider: 'Gemini',
-      data: text,
-    };
+      return {
+        provider: 'Gemini',
+        data: text,
+      };
+    } catch (geminiErr: any) {
+      const errMsg = String(geminiErr?.message || '');
+      const isResourceExhausted =
+        geminiErr?.status === 429 ||
+        geminiErr?.status === 409 ||
+        geminiErr?.code === 429 ||
+        geminiErr?.code === 409 ||
+        errMsg.includes('429') ||
+        errMsg.includes('409') ||
+        errMsg.includes('RESOURCE_EXHAUSTED') ||
+        errMsg.includes('Resource exhausted') ||
+        errMsg.includes('Quota exceeded') ||
+        errMsg.includes('quota');
+
+      if (isResourceExhausted) {
+        Logger.warn(`[AIProviderRouter] GeminiClient hit Resource Exhausted (${errMsg}). Attempting FlowAdapter fallback...`);
+        const flowText = await this.tryFlowTextFallback(options);
+        if (flowText) {
+          return {
+            provider: 'Google Flow (gemini-3-flash-preview)',
+            data: flowText,
+          };
+        }
+      }
+      throw geminiErr;
+    }
+  }
+
+  private async tryFlowTextFallback(options: RouteGenerationOptions): Promise<string | null> {
+    try {
+      const db = await getDatabaseProvider();
+      const flowAccounts = await db.getFlowAccounts('ACTIVE');
+      if (!flowAccounts || flowAccounts.length === 0) return null;
+
+      const sortedAccounts = [...flowAccounts].sort((a, b) => (b.credits_remaining || 0) - (a.credits_remaining || 0));
+
+      for (const account of sortedAccounts) {
+        if (!account.session_token) continue;
+        try {
+          const flowAccountAdapterParam = {
+            id: account.id,
+            email: account.email,
+            flow_st: account.session_token,
+            flow_at: account.access_token,
+            project_id: account.project_id,
+            status: AIAccountStatus.READY,
+            credits: account.credits_remaining,
+            account_type: AIAccountType.GOOGLE_FLOW,
+            is_active: true,
+          };
+
+          const text = await flowAdapter.generateContent(
+            flowAccountAdapterParam as any,
+            options.prompt,
+            {
+              model: 'gemini-3-flash-preview',
+              systemInstruction: options.systemInstruction,
+              jsonMode: options.jsonMode,
+            }
+          );
+
+          if (text) {
+            Logger.info(`[AIProviderRouter] Successfully generated Text via FlowAdapter fallback (${account.email})`);
+            return text;
+          }
+        } catch (accErr: any) {
+          Logger.warn(`[AIProviderRouter] FlowAdapter account ${account.email} failed: ${accErr.message}`);
+        }
+      }
+    } catch (err: any) {
+      Logger.warn(`[AIProviderRouter] tryFlowTextFallback error: ${err.message}`);
+    }
+    return null;
   }
 
   // ─── High-Level Convenience Methods ───────────────────────────────────────────

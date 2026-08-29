@@ -96,6 +96,7 @@ Respond ONLY with a valid JSON object containing between {{minShots}} and {{maxS
       "visual_prompt": "Close-up of female protagonist Elena Vance sitting alone at a candlelit luxury dining table, moody cinematic anamorphic lighting, 8k...",
       "end_frame_prompt": "Elena Vance gently touches her wedding ring with trembling fingers, lowering her gaze in quiet heartbreak.",
       "transition_effect": "fade",
+	  "effects": [{effect_key: 'vignette', intensity: 0.6}],
       "video_effect": "vignette",
       "reference_assets": { "characters": ["Elena Vance"], "locations": ["Luxury Penthouse Living Room"], "props": ["Cracked Platinum Wedding Band"] }
     }

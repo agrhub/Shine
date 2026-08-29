@@ -418,7 +418,24 @@ Respond with ONLY a JSON object matching this schema:
           if (sIdx !== -1) {
             if (bgmUrl) ep.scenes[sIdx].bgm_url = bgmUrl;
             if (voiceoverUrl) ep.scenes[sIdx].voiceover_url = voiceoverUrl;
-            if (captionsData.length > 0) ep.scenes[sIdx].captions_data = captionsData;
+            if (captionsData.length > 0) {
+              ep.scenes[sIdx].captions_data = captionsData.map((c: any) => ({
+                id: c.id || `cue_${Date.now()}`,
+                text: c.text || '',
+                start_ms: c.start_ms ?? c.startMs ?? (c.from_us ? Math.round(c.from_us / 1000) : 0),
+                end_ms: c.end_ms ?? c.endMs ?? (c.to_us ? Math.round(c.to_us / 1000) : 0),
+                from_us: c.from_us ?? c.fromUs ?? ((c.start_ms ?? c.startMs ?? 0) * 1000),
+                to_us: c.to_us ?? c.toUs ?? ((c.end_ms ?? c.endMs ?? 0) * 1000),
+                duration_ms: (c.end_ms ?? c.endMs ?? 0) - (c.start_ms ?? c.startMs ?? 0),
+                duration_us: (c.to_us ?? c.toUs ?? 0) - (c.from_us ?? c.fromUs ?? 0),
+                words: (c.words || []).map((w: any) => ({
+                  text: w.text || w.word || '',
+                  from: w.from ?? 0,
+                  to: w.to ?? 0,
+                  is_key_word: !!(w.is_key_word || w.isKeyWord),
+                })),
+              }));
+            }
             ep.scenes[sIdx].voice_duration_us = totalVoiceDurationUs;
             ep.scenes[sIdx].voice_start_us = speechStartUs;
             await db.updateEpisode(ep.id, { scenes: ep.scenes });

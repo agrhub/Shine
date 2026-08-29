@@ -1,5 +1,6 @@
 import { geminiClient } from '../integrations/ai/gemini/GeminiClient.js';
-import { storySkeletonAgent, EpisodeSkeleton, MasterPlanOutput } from './StorySkeletonAgent.js';
+import { EpisodeSkeleton, MasterPlanOutput } from '@/types.js';
+import { storySkeletonAgent } from './StorySkeletonAgent.js';
 import { loadSkill } from '../utils/SkillLoader.js';
 import { PromptLoader } from '../utils/PromptLoader.js';
 import { Logger } from '../utils/logger.js';
@@ -58,20 +59,20 @@ export class MasterPlanRefineAgent {
       throw new Error(`Failed to parse Refine Master Plan response as JSON: ${parseErr.message}\nRaw Text: ${rawText.slice(0, 200)}...`);
     }
 
-    const updatedPlan: MasterPlanOutput = parsed.updatedPlan || parsed;
-    const targetEpisodes = Number(updatedPlan.totalEpisodes) || Number(currentPlan.totalEpisodes) || 24;
-    const durationSecs = Number(updatedPlan.totalDurationSeconds) || Number(currentPlan.totalDurationSeconds) || 90;
+    const updatedPlan: MasterPlanOutput = parsed.updatedPlan || parsed.updated_plan || parsed;
+    const targetEpisodes = Number(updatedPlan.total_episodes) || Number(currentPlan.total_episodes || currentPlan.totalEpisodes) || 24;
+    const durationSecs = Number(updatedPlan.total_duration_seconds) || Number(currentPlan.total_duration_seconds || currentPlan.totalDurationSeconds) || 90;
     
-    updatedPlan.totalEpisodes = targetEpisodes;
-    updatedPlan.totalDurationSeconds = durationSecs;
+    updatedPlan.total_episodes = targetEpisodes;
+    updatedPlan.total_duration_seconds = durationSecs;
     updatedPlan.country = country;
     updatedPlan.language = langInfo.name;
-    updatedPlan.visualStyle = currentPlan.visualStyle || updatedPlan.visualStyle || 'realistic';
-    updatedPlan.visualStylePrompt = currentPlan.visualStylePrompt || updatedPlan.visualStylePrompt || '';
+    updatedPlan.visual_style = currentPlan.visual_style || currentPlan.visualStyle || updatedPlan.visual_style || 'realistic';
+    updatedPlan.visual_style_prompt = currentPlan.visual_style_prompt || currentPlan.visualStylePrompt || updatedPlan.visual_style_prompt || '';
     updatedPlan.ratio = currentPlan.ratio || updatedPlan.ratio || '9:16';
 
-    if (!updatedPlan.seriesId) {
-      updatedPlan.seriesId = currentPlan.seriesId || `series_${Date.now()}`;
+    if (!updatedPlan.series_id) {
+      updatedPlan.series_id = currentPlan.series_id || currentPlan.seriesId || `series_${Date.now()}`;
     }
 
     // Step 2: Automatic Chunk Mode Expansion for Large Episode Counts

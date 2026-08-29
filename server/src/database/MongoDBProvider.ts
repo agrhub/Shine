@@ -407,31 +407,31 @@ export class MongoDBProvider implements IDatabaseProvider {
   }
 
   async saveTimeline(
-    episodeId: string,
-    timelineData: any,
+    episode_id: string,
+    timeline_data: any,
     author: { id: string; name: string; avatar?: string },
-    changeSummary = 'Timeline updated'
-  ): Promise<{ versionId: string; versionNumber: number; updatedAt: string }> {
-    const versionId = `ver_${Math.random().toString(36).substring(2, 10)}`;
-    const history = await this.getTimelineHistory(episodeId, 1, 0);
-    const versionNumber = history.total + 1;
-    const label = `v1.${versionNumber} - ${changeSummary}`;
-    const serializedData = typeof timelineData === 'string' ? timelineData : JSON.stringify(timelineData);
+    change_summary = 'Timeline updated'
+  ): Promise<{ version_id: string; version_number: number; updated_at: string }> {
+    const version_id = `ver_${Math.random().toString(36).substring(2, 10)}`;
+    const history = await this.getTimelineHistory(episode_id, 1, 0);
+    const version_number = history.total + 1;
+    const label = `v1.${version_number} - ${change_summary}`;
+    const serializedData = typeof timeline_data === 'string' ? timeline_data : JSON.stringify(timeline_data);
 
     const doc = await TimelineSnapshotModel.create({
-      id: versionId,
-      episode_id: episodeId,
-      version_number: versionNumber,
+      id: version_id,
+      episode_id,
+      version_number,
       label,
       author_id: author.id || 'usr_default',
       author_name: author.name || 'Editor',
       author_avatar: author.avatar || '',
-      change_summary: changeSummary,
+      change_summary,
       timeline_data: serializedData,
       created_at: new Date(),
     });
 
-    return { versionId, versionNumber, updatedAt: doc.created_at.toISOString() };
+    return { version_id, version_number, updated_at: doc.created_at.toISOString() };
   }
 
   async getLatestTimeline(episodeId: string): Promise<any | null> {
@@ -478,34 +478,35 @@ export class MongoDBProvider implements IDatabaseProvider {
       versionNumber: doc.version_number,
       author: { userId: doc.author_id, name: doc.author_name },
       changeSummary: doc.change_summary,
-      createdAt: doc.created_at?.toISOString ? doc.created_at.toISOString() : doc.created_at,
-      timelineData: data,
+      change_summary: doc.change_summary,
+      created_at: doc.created_at?.toISOString ? doc.created_at.toISOString() : doc.created_at,
+      timeline_data: data,
     };
   }
 
   async restoreTimelineVersion(
-    episodeId: string,
-    versionId: string,
+    episode_id: string,
+    version_id: string,
     author: { id: string; name: string; avatar?: string },
     reason = 'Restored version'
   ): Promise<any> {
-    const version = await this.getTimelineVersion(episodeId, versionId);
+    const version = await this.getTimelineVersion(episode_id, version_id);
     if (!version) throw new Error('Version snapshot not found');
 
     const saveRes = await this.saveTimeline(
-      episodeId,
-      version.timelineData,
+      episode_id,
+      version.timeline_data,
       author,
-      `Restored from ${version.versionId}: ${reason}`
+      `Restored from ${version.version_id}: ${reason}`
     );
 
     return {
       success: true,
-      restoredFromVersionId: versionId,
-      newVersionId: saveRes.versionId,
-      newVersionNumber: saveRes.versionNumber,
-      activeTimeline: version.timelineData,
-      createdAt: saveRes.updatedAt,
+      restored_from_version_id: version_id,
+      new_version_id: saveRes.version_id,
+      new_version_number: saveRes.version_number,
+      active_timeline: version.timeline_data,
+      created_at: saveRes.updated_at,
     };
   }
 
@@ -519,16 +520,13 @@ export class MongoDBProvider implements IDatabaseProvider {
     return doc;
   }
 
-  async getAssets(filter?: { user_id?: string; userId?: string; series_id?: string; seriesId?: string; type?: string; character_id?: string; characterId?: string; search?: string }): Promise<any[]> {
+  async getAssets(filter?: { user_id?: string; series_id?: string; type?: string; character_id?: string; search?: string }): Promise<any[]> {
     if (mongoose.connection.readyState < 1) return [];
     const query: any = {};
-    const uid = filter?.user_id || filter?.userId;
-    const sid = filter?.series_id || filter?.seriesId;
-    const cid = filter?.character_id || filter?.characterId;
-    if (uid) query.user_id = uid;
-    if (sid) query.series_id = sid;
+    if (filter?.user_id) query.user_id = filter.user_id;
+    if (filter?.series_id) query.series_id = filter.series_id;
     if (filter?.type && filter.type !== 'all') query.type = filter.type;
-    if (cid) query.character_id = cid;
+    if (filter?.character_id) query.character_id = filter.character_id;
     if (filter?.search) {
       query.$or = [
         { name: { $regex: filter.search, $options: 'i' } },
@@ -564,7 +562,7 @@ export class MongoDBProvider implements IDatabaseProvider {
   // ==================== Worker Telemetry & Monitoring ====================
   async recordWorkerHeartbeat(heartbeat: WorkerHeartbeatEntity): Promise<void> {
     if (mongoose.connection.readyState < 1) return;
-    const id = heartbeat.worker_id || (heartbeat as any).workerId || `worker_${nanoid(8)}`;
+    const id = heartbeat.worker_id || `worker_${nanoid(8)}`;
     await WorkerHeartbeatModel.findOneAndUpdate(
       { workerId: id },
       { $set: { ...heartbeat, worker_id: id, workerId: id, last_heartbeat: new Date(), lastHeartbeat: new Date() } },
@@ -599,7 +597,7 @@ export class MongoDBProvider implements IDatabaseProvider {
 
   async recordWorkerJob(job: WorkerJobEntity): Promise<void> {
     if (mongoose.connection.readyState < 1) return;
-    const id = job.job_id || (job as any).jobId || `job_${nanoid(10)}`;
+    const id = job.job_id || `job_${nanoid(10)}`;
     await WorkerJobModel.findOneAndUpdate(
       { jobId: id },
       { $set: { ...job, job_id: id, jobId: id, updated_at: new Date(), updatedAt: new Date() } },
@@ -629,8 +627,8 @@ export class MongoDBProvider implements IDatabaseProvider {
       error: j.error,
       render_time_ms: j.render_time_ms ?? j.renderTimeMs,
       file_size: j.file_size ?? j.fileSize,
-      submitted_at: j.submitted_at ? new Date(j.submitted_at).toISOString() : (j.submittedAt ? new Date(j.submittedAt).toISOString() : new Date().toISOString()),
-      updated_at: j.updated_at ? new Date(j.updated_at).toISOString() : (j.updatedAt ? new Date(j.updatedAt).toISOString() : new Date().toISOString()),
+      submitted_at: j.submitted_at ? new Date(j.submitted_at).toISOString() : new Date().toISOString(),
+      updated_at: j.updated_at ? new Date(j.updated_at).toISOString() : new Date().toISOString(),
     }));
   }
 
@@ -644,7 +642,7 @@ export class MongoDBProvider implements IDatabaseProvider {
     const failedJobs = jobs.filter(j => j.status === 'FAILED');
 
     const avgCpu = activeWorkers.length > 0
-      ? Math.round(activeWorkers.reduce((acc, w) => acc + (w.cpu_usage_pct || (w as any).cpuUsagePct || 0), 0) / activeWorkers.length)
+      ? Math.round(activeWorkers.reduce((acc, w) => acc + (w.cpu_usage_pct || 0), 0) / activeWorkers.length)
       : 0;
 
     return {
@@ -662,5 +660,50 @@ export class MongoDBProvider implements IDatabaseProvider {
       workers: workers,
       active_jobs: activeJobs.concat(queuedJobs),
     };
+  }
+
+  // ==================== Pipeline Background Jobs ====================
+  private memoryPipelineJobs: Map<string, any> = new Map();
+
+  async savePipelineJob(job: any): Promise<any> {
+    const item = {
+      ...job,
+      created_at: job.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    this.memoryPipelineJobs.set(job.id, item);
+    return item;
+  }
+
+  async getPipelineJobById(job_id: string): Promise<any | null> {
+    return this.memoryPipelineJobs.get(job_id) || null;
+  }
+
+  async getPipelineJobs(filter?: { user_id?: string; series_id?: string; episode_id?: string; status?: string; limit?: number }): Promise<any[]> {
+    let list = Array.from(this.memoryPipelineJobs.values());
+    if (filter?.user_id) list = list.filter(j => j.user_id === filter.user_id);
+    if (filter?.series_id) list = list.filter(j => j.series_id === filter.series_id);
+    if (filter?.episode_id) list = list.filter(j => j.episode_id === filter.episode_id);
+    if (filter?.status) list = list.filter(j => j.status?.toLowerCase() === filter.status?.toLowerCase());
+    list.sort((a, b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime());
+    if (filter?.limit) list = list.slice(0, filter.limit);
+    return list;
+  }
+
+  async updatePipelineJob(job_id: string, patch: Partial<any>): Promise<any | null> {
+    const existing = await this.getPipelineJobById(job_id);
+    if (!existing) return null;
+    const updated = {
+      ...existing,
+      ...patch,
+      updated_at: new Date().toISOString(),
+    };
+    this.memoryPipelineJobs.set(job_id, updated);
+    return updated;
+  }
+
+  async findActivePipelineJob(series_id: string, episode_id: string, type?: string): Promise<any | null> {
+    const jobs = await this.getPipelineJobs({ series_id, episode_id });
+    return jobs.find(j => (j.status === 'running' || j.status === 'queued') && (!type || j.type === type)) || null;
   }
 }

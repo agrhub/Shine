@@ -55,6 +55,10 @@ export const GEMINI_SUPPORTED_VOICES: GeminiVoiceMetadata[] = [
   { id: 'Sulafat', name: 'Sulafat', language: 'auto', gender: 'male', provider: 'gemini', description: 'Warm, Middle Pitch', audioSampleUrl: 'https://gstatic.com/aistudio/voices/samples/Sulafat.wav' },
 ];
 
+export const GEMINI_MALE_VOICES = GEMINI_SUPPORTED_VOICES.filter(v => v.gender === 'male').map(v => v.id);
+export const GEMINI_FEMALE_VOICES = GEMINI_SUPPORTED_VOICES.filter(v => v.gender === 'female').map(v => v.id);
+export const GEMINI_NEUTRAL_VOICES = GEMINI_SUPPORTED_VOICES.filter(v => v.gender === 'neutral').map(v => v.id);
+
 export class GeminiClient {
   private apiKey?: string;
   private serviceAccount?: string | Record<string, any>;

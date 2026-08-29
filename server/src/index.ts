@@ -32,7 +32,10 @@ import socialAuthRouter from './routes/social-auth';
 import engagementRouter from './routes/engagement';
 import { visualStylesRouter } from './routes/visualStyles';
 import { assetsRouter } from './routes/assets';
+import { uploadsRouter } from './routes/uploads';
+import { pexelsRouter } from './routes/pexels';
 import { PatchSyncService } from './realtime/PatchSyncService';
+import flowSyncRouter from './routes/flow-sync';
 import { flowSyncService } from './integrations/ai/flow/FlowSyncService';
 import { aiProviderRouter } from './integrations/ai/router/AIProviderRouter';
 import { telemetryService } from './config/telemetry';
@@ -50,11 +53,15 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 import { requireAuth, requireAdmin } from './middleware/RequireAuth.js';
 
+import { jobsRouter } from './routes/jobs.js';
+
 // ─── Public API Routes ───────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/contact', contactRoutes);
+app.use('/api/pexels', pexelsRouter);
 
 // ─── Authenticated API Routes (Requires Valid JWT Token) ──────────────────────
+app.use('/api/jobs', requireAuth, jobsRouter);
 app.use('/api/series', requireAuth, seriesRoutes);
 app.use('/api/episodes', requireAuth, episodesRouter);
 app.use('/api/visual-styles', requireAuth, visualStylesRouter);
@@ -64,8 +71,16 @@ app.use('/api/export', requireAuth, exportRouter);
 app.use('/api/voices', requireAuth, voicesRoutes);
 app.use('/api/captions', requireAuth, captionsRoutes);
 app.use('/api/audio', requireAuth, audioRoutes);
+app.use('/api/transcribe', requireAuth, (req, res, next) => {
+  req.url = '/transcribe';
+  audioRoutes(req, res, next);
+});
 app.use('/api/ai/cliffhanger', requireAuth, cliffhangerRoutes);
 app.use('/api/ai/assistant', requireAuth, aiAssistantRouter);
+app.use('/api/chat/editor', requireAuth, (req, res, next) => {
+  req.url = '/chat';
+  aiAssistantRouter(req, res, next);
+});
 app.use('/api/ai/agentic', requireAuth, aiAgenticRouter);
 app.use('/api/publish', requireAuth, publishRouter);
 app.use('/api/projects', requireAuth, publishRouter);
@@ -76,6 +91,8 @@ app.use('/api/marketplace', requireAuth, marketplaceRouter);
 app.use('/api/live', requireAuth, liveDramaRouter);
 app.use('/api/analytics', requireAuth, analyticsPaywallRouter);
 app.use('/api/assets', assetsRouter);
+app.use('/api/uploads', uploadsRouter);
+app.use('/api/flow-accounts/sync', flowSyncRouter);
 
 // ─── Admin Protected Routes (Requires Admin/Owner Role) ──────────────────────
 app.use('/api/admin/flow-accounts', requireAuth, requireAdmin, flowAccountsRoutes);

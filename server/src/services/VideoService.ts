@@ -3,13 +3,24 @@ import { StorageFactory } from '@/services/storage/StorageFactory.js';
 import { SynthIDService } from '@/services/SynthIDService.js';
 import { CaptionService } from '@/services/CaptionService.js';
 import { TimelineService } from '@/services/TimelineService.js';
-import { CharacterEntity, getDatabaseProvider } from '@/database/index.js';
+import { getDatabaseProvider } from '@/database/index.js';
 import { loadSkill } from '@/utils/SkillLoader.js';
 import { PromptLoader } from '@/utils/PromptLoader.js';
 import { getVisualStylePrompt } from '~/constants/VisualStyles.js';
 import { Logger } from '@/utils/logger.js';
 import { nanoid } from 'nanoid';
 import { EnvConfig } from '@/config/env.js';
+import type {
+  SceneEntity,
+  EpisodeEntity,
+  SeriesEntity,
+  LocationAsset,
+  PropAsset,
+  CharacterSeriesEntity,
+  CharacterSceneCostumes,
+  CharacterWardrobeVariant,
+  SceneDialogue,
+} from '@/types.js';
 
 export interface VideoRenderJob {
   jobId: string;
@@ -23,35 +34,35 @@ export interface VideoRenderJob {
 }
 
 export interface GenerateSceneImageParams {
-  userId: string;
-  seriesId?: string;
-  episodeId?: string;
-  sceneId?: string;
-  sceneIndex?: number;
+  user_id?: string;
+  series_id?: string;
+  episode_id?: string;
+  scene_id?: string;
+  scene_index?: number;
   prompt?: string;
-  aspectRatio?: string;
+  aspect_ratio?: string;
   style?: string;
   characters?: string[];
-  sceneData?: any;
+  scene_data?: Partial<SceneEntity>;
   type?: string;
-  isEndFrame?: boolean;
+  is_end_frame?: boolean;
 }
 
 export interface GenerateSceneVideoParams {
-  userId: string;
-  seriesId?: string;
-  episodeId?: string;
-  sceneId?: string;
+  user_id?: string;
+  series_id?: string;
+  episode_id?: string;
+  scene_id?: string;
   duration?: number | string;
   motion?: string;
-  cameraMovement?: string;
+  camera_movement?: string;
   prompt?: string;
-  aspectRatio?: string;
-  startFrameUrl?: string;
-  endFrameUrl?: string;
-  characterImageIds?: string | string[];
+  aspect_ratio?: string;
+  start_frame_url?: string;
+  end_frame_url?: string;
+  character_image_ids?: string | string[];
   language?: string;
-  sceneData?: any;
+  scene_data?: Partial<SceneEntity>;
 }
 
 export class VideoService {
@@ -61,39 +72,53 @@ export class VideoService {
    * Dedicated Scene & Background Image Generation (Step B2)
    */
   async generateSceneImage(params: GenerateSceneImageParams) {
-    const {
-      userId,
-      prompt,
-      seriesId,
-      episodeId,
-      sceneId,
-      aspectRatio,
-      style,
-      sceneIndex,
-      characters: reqCharacters,
-      sceneData,
-      type,
-    } = params;
+    const userId = params.user_id || '';
+    const seriesId = params.series_id;
+    const episodeId = params.episode_id;
+    const sceneId = params.scene_id;
+    const sceneIndex = params.scene_index;
+    const prompt = params.prompt;
+    const aspectRatio = params.aspect_ratio;
+    const style = params.style;
+    const reqCharacters = params.characters;
+    const sceneData = params.scene_data;
+    const type = params.type;
+    const isEndFrame = Boolean(params.is_end_frame ?? false);
 
     const db = await getDatabaseProvider();
     const frameSkill = loadSkill('production_frame_prompt') || '';
 
     // Contextual enrichment from Series and Episode in Database
-    let targetSeries: any = null;
+    let targetSeries: SeriesEntity | null = null;
+    let targetEpisode: EpisodeEntity | null = null;
     let seriesTitle = '';
-    let seriesGenre = 'micro-drama';
+    let seriesGenre = '';
     let seriesVisual = 'realistic';
 
     if (seriesId) {
       targetSeries = await db.getSeriesById(seriesId);
+      if (!targetSeries) {
+        throw new Error('Series not found');
+      }
     }
 
     if (episodeId && !targetSeries) {
-      const episode = await db.getEpisodeById(episodeId);
-      if (episode && episode.series_id) {
-        targetSeries = await db.getSeriesById(episode.series_id);
+      targetEpisode = await db.getEpisodeById(episodeId);
+      if (!targetEpisode) {
+        throw new Error('Episode not found');
+      }
+
+      if (targetEpisode.series_id && !targetSeries) {
+        targetSeries = await db.getSeriesById(targetEpisode.series_id);
+      }
+
+      if (!targetSeries) {
+        throw new Error('Series not found');
       }
     }
+
+    Logger.info(`[VideoService.generateSceneImage] targetSeries: ${JSON.stringify(targetSeries, null, 2)}`);
+    Logger.info(`[VideoService.generateSceneImage] targetEpisode: ${JSON.stringify(targetEpisode, null, 2)}`);
 
     if (targetSeries) {
       seriesTitle = targetSeries.title || '';
@@ -104,120 +129,175 @@ export class VideoService {
     const targetAspect = (aspectRatio || targetSeries?.ratio || '9:16').trim();
 
     // Look up scene object & previous scene/shot from DB if not passed in sceneData
-    let sceneObj = sceneData;
+    let sceneObj: Partial<SceneEntity> | undefined = sceneData;
     let previousShotUrl: string | undefined;    // previous shot in the same scene
     let locationAssetUrl: string | undefined;   // approved location reference sheet
     let characterImages: string[] = [];
+    let ep: EpisodeEntity | null = null;
 
     if (episodeId) {
       try {
-        const ep = await db.getEpisodeById(episodeId);
+        ep = await db.getEpisodeById(episodeId);
         const sNum = typeof sceneIndex === 'number' ? sceneIndex : parseInt(String(sceneId).replace(/\D/g, ''), 10) || 1;
 
         // Resolve the current shot object from the episode
         if (!sceneObj && ep?.scenes) {
-          sceneObj = ep.scenes.find((s: any) => s.index === sNum || s.id === sceneId);
+          sceneObj = ep.scenes.find((s: SceneEntity) => s.index === sNum || s.id === sceneId);
         }
 
         // Find the previous shot that belongs to the SAME scene (same sceneNumber) and has a rendered frame
         if (ep?.scenes && sceneObj) {
           const currSceneNum = sceneObj.scene_number;
           const prevShot = ep.scenes
-            .filter((s: any) => s.scene_number === currSceneNum && s.index < sNum && s.storyboard_frame_url)
-            .sort((a: any, b: any) => b.index - a.index)[0]; // most recent rendered shot in same scene
-          if (prevShot?.storyboard_frame_url) {
-            previousShotUrl = prevShot.storyboard_frame_url;
+            .filter((s: SceneEntity) => s.scene_number === currSceneNum && s.index < sNum && (s.storyboard_frame_url || s.image_url))
+            .sort((a: SceneEntity, b: SceneEntity) => b.index - a.index)[0]; // most recent rendered shot in same scene
+          if (prevShot) {
+            previousShotUrl = prevShot.storyboard_frame_url || prevShot.image_url;
           }
         }
 
         // Fallback: if no same-scene previous shot, try the immediately preceding shot regardless of scene
         if (!previousShotUrl && sNum > 1 && ep?.scenes) {
-          const prevAny = ep.scenes.find((s: any) => s.index === sNum - 1);
-          if (prevAny?.storyboard_frame_url) {
-            previousShotUrl = prevAny.storyboard_frame_url;
+          const prevAny = ep.scenes.find((s: SceneEntity) => s.index === sNum - 1);
+          if (prevAny) {
+            previousShotUrl = prevAny.storyboard_frame_url || prevAny.image_url;
           }
         }
-
-        // Resolve the location reference image from extracted episode locations
-        if (ep?.locations && sceneObj) {
-          const currLoc = (sceneObj.location || sceneObj.heading || '').toLowerCase();
-          const locAsset = (ep.locations as any[]).find((l: any) => {
-            const lName = (l.name || '').toLowerCase();
-            return lName && currLoc && (currLoc.includes(lName) || lName.includes(currLoc));
-          });
-          if (locAsset?.image_url) {
-            locationAssetUrl = locAsset.image_url;
-          }
-        }
-      } catch {}
+      } catch (epErr) {
+        Logger.warn(`[VideoService.generateSceneImage] Failed to load episode for scene: ${epErr}`);
+      }
     }
 
-    const isEndFrame = params.isEndFrame || false;
-    const sceneHeading = sceneObj?.heading || sceneObj?.sceneTitle || '';
-    const sceneLocation = sceneObj?.location || sceneObj?.setting || '';
+    // Resolve location reference image (from series locations)
+    const allLocations: LocationAsset[] = [
+      ...(Array.isArray(targetSeries?.locations) ? (targetSeries.locations as LocationAsset[]) : []),
+    ];
+
+    if (allLocations.length > 0 && sceneObj) {
+      const explicitLocs: string[] = (sceneObj.reference_assets?.locations || []).map((l: string) => String(l).toLowerCase().trim());
+
+      const headingLoc = (sceneObj.heading || '').toLowerCase();
+      const sceneLoc = (sceneObj.location || '').toLowerCase();
+
+      const locAsset = allLocations.find((l: LocationAsset) => {
+        const lName = (l.name || '').toLowerCase().trim();
+        const lId = (l.id || '').toLowerCase().trim();
+        if (!lName && !lId) return false;
+        if (explicitLocs.some(el => el && (el === lName || el === lId || el.includes(lName) || lName.includes(el)))) return true;
+        if (headingLoc && lName && (headingLoc.includes(lName) || lName.includes(headingLoc))) return true;
+        if (sceneLoc && sceneLoc !== 'scene location' && lName && (sceneLoc.includes(lName) || lName.includes(sceneLoc))) return true;
+        return false;
+      });
+
+      if (locAsset) {
+        locationAssetUrl = locAsset.image_url;
+      }
+    }
+
+    const sceneHeading = sceneObj?.heading || sceneObj?.title || '';
+    const sceneLocation = sceneObj?.location || '';
     const sceneAction = isEndFrame
-      ? (sceneObj?.endFramePrompt || sceneObj?.endFrameAction || sceneObj?.description || sceneObj?.action || prompt || '')
+      ? (sceneObj?.end_frame_prompt || sceneObj?.description || sceneObj?.action || prompt || '')
       : (sceneObj?.description || sceneObj?.action || prompt || '');
-    const sceneLighting = sceneObj?.lightingMood || style || 'dramatic atmospheric cinematic lighting';
-    const sceneMood = sceneObj?.bgmMood || '';
-    const sceneContext = sceneObj?.sceneContext || '';
-    const propDetails = sceneObj?.propDetails || '';
+    const sceneLighting = sceneObj?.lighting_mood || style || '';
+    const sceneMood = sceneObj?.bgm_mood || '';
+    const sceneContext = sceneObj?.scene_context || '';
+    const propDetails = sceneObj?.prop_details || '';
 
     // ─── Character Continuity & Face Reference Extraction ─────────────────────
-    const allSeriesCharacters: any[] = targetSeries?.characters || targetSeries?.master_plan?.characters || [];
+    const rawCharacters: any[] = [
+      ...(Array.isArray(targetSeries?.characters) ? targetSeries.characters : []),
+    ];
+
+    // Merge & deduplicate characters by name/id
+    const allSeriesCharacters: CharacterSeriesEntity[] = [];
+    const seenChars = new Set<string>();
+    for (const c of rawCharacters) {
+      const key = (c.name || c.id || '').trim().toLowerCase();
+      if (key && !seenChars.has(key)) {
+        seenChars.add(key);
+        allSeriesCharacters.push(c);
+      }
+    }
+
     const characterReferences: string[] = [];
     const characterContinuityDescriptions: string[] = [];
     const promptUpper = `${prompt || ''} ${sceneAction}`.toUpperCase();
 
-    // Check if referenceAssets.characters provides explicit ground truth of who is physically present in frame
-    const explicitPhysicalChars = Array.isArray(sceneObj?.reference_assets?.characters) && sceneObj.reference_assets.characters.length > 0
-      ? sceneObj.reference_assets.characters.map((c: string) => String(c).toUpperCase())
+    // Check if reference_assets.characters provides explicit ground truth of who is physically present in frame
+    const rawExplicitChars = sceneObj?.reference_assets?.characters || [];
+    const explicitPhysicalChars = rawExplicitChars.length > 0
+      ? rawExplicitChars.map((c: string) => String(c).toUpperCase().trim())
       : null;
     const sceneContextLower = (sceneContext || '').toLowerCase();
 
+    const norm = (s: string) => (s || '').normalize('NFC').toLowerCase().trim();
+
     for (const char of allSeriesCharacters) {
-      const charNameUpper = (char.name || '').toUpperCase();
-      const charNameLower = (char.name || '').toLowerCase();
+      const charNameNorm = norm(char.name);
+      const charNameUpper = (char.name || '').toUpperCase().trim();
 
       // If sceneContext indicates character is not physically present (e.g. only on screen/laptop/call), do NOT add as physical person
       const isVirtualOnly =
-        sceneContextLower.includes(`${charNameLower} is not physically present`) ||
-        sceneContextLower.includes(`${charNameLower} is only on`) ||
-        sceneContextLower.includes(`${charNameLower} appears on screen`);
+        sceneContextLower.includes(`${charNameNorm} is not physically present`) ||
+        sceneContextLower.includes(`${charNameNorm} is only on`) ||
+        sceneContextLower.includes(`${charNameNorm} appears on screen`);
 
       const isPresent = explicitPhysicalChars
-        ? explicitPhysicalChars.includes(charNameUpper)
+        ? explicitPhysicalChars.some(ec => ec && (ec === charNameUpper || ec.includes(charNameUpper) || charNameUpper.includes(ec)))
         : ((Array.isArray(reqCharacters) && reqCharacters.some((c: string) => c.toUpperCase() === charNameUpper)) ||
            (charNameUpper && promptUpper.includes(charNameUpper))) && !isVirtualOnly;
 
       if (isPresent) {
         // Resolve scene costume & wardrobe variant
-        const sceneCostume = Array.isArray(sceneObj?.character_costumes)
-          ? sceneObj.character_costumes.find((cc: any) => (cc.character || '').toLowerCase().trim() === charNameLower)
-          : null;
+        const rawCostumes: CharacterSceneCostumes[] = Array.isArray(sceneObj?.character_costumes)
+          ? sceneObj.character_costumes
+          : [];
+        const sceneCostume = rawCostumes.find((cc: CharacterSceneCostumes) => {
+          const cName = norm(cc.character);
+          return cName && (cName === charNameNorm || cName.includes(charNameNorm) || charNameNorm.includes(cName));
+        });
 
-        const wardrobeVariants: any[] = Array.isArray(char.wardrobe_variants) ? char.wardrobe_variants : [];
-        let matchedVariant: any = null;
+        const wardrobeVariants: CharacterWardrobeVariant[] = Array.isArray(char.wardrobe_variants)
+          ? char.wardrobe_variants
+          : [];
+        let matchedVariant: CharacterWardrobeVariant | undefined = undefined;
 
-        // 1. Match by variantId
+        // 1. Match by variant_id exact or substring/name
         if (sceneCostume?.variant_id && wardrobeVariants.length > 0) {
-          matchedVariant = wardrobeVariants.find((v: any) => v.variant_id?.toLowerCase() === String(sceneCostume.variant_id).toLowerCase());
+          const vIdTarget = norm(sceneCostume.variant_id);
+          matchedVariant = wardrobeVariants.find((v: CharacterWardrobeVariant) => {
+            const vId = norm(v.variant_id);
+            const vName = norm(v.name);
+            return vId === vIdTarget || vName === vIdTarget || (vId && (vId.includes(vIdTarget) || vIdTarget.includes(vId)));
+          });
         }
         // 2. Match by sceneNumber in associatedScenes
         if (!matchedVariant && sceneObj?.scene_number && wardrobeVariants.length > 0) {
-          matchedVariant = wardrobeVariants.find((v: any) => Array.isArray(v.associated_scenes) && v.associated_scenes.includes(sceneObj.scene_number));
+          matchedVariant = wardrobeVariants.find((v: CharacterWardrobeVariant) => {
+            const scenes = Array.isArray(v.associated_scenes) ? v.associated_scenes : [];
+            return scenes.includes(sceneObj!.scene_number!);
+          });
         }
         // 3. Match by wardrobe description / name similarity
         if (!matchedVariant && sceneCostume?.wardrobe && wardrobeVariants.length > 0) {
-          const wLower = String(sceneCostume.wardrobe).toLowerCase();
-          matchedVariant = wardrobeVariants.find((v: any) =>
-            (v.name && wLower.includes(v.name.toLowerCase())) ||
-            (v.clothing_and_accessories && wLower.includes(v.clothing_and_accessories.toLowerCase()))
-          );
+          const wLower = norm(sceneCostume.wardrobe);
+          matchedVariant = wardrobeVariants.find((v: CharacterWardrobeVariant) => {
+            const vName = norm(v.name);
+            const vClothing = norm(v.clothing_and_accessories);
+            return (vName && wLower.includes(vName)) || (vClothing && (wLower.includes(vClothing) || vClothing.includes(wLower)));
+          });
+        }
+        // 4. Fallback to first variant with image or first variant
+        if (!matchedVariant && wardrobeVariants.length > 0) {
+          matchedVariant = wardrobeVariants.find((v: CharacterWardrobeVariant) => v.image_url) || wardrobeVariants[0];
         }
 
-        // Determine reference image URL: prioritize matched wardrobe variant image, fallback to character avatar
-        let refUrl = matchedVariant?.image_url || char.avatar;
+        // Determine reference image URL: prioritize matched wardrobe variant image, fallback to any wardrobe variant with image, fallback to character avatar
+        const refUrl = matchedVariant?.image_url ||
+          wardrobeVariants.find((v: CharacterWardrobeVariant) => v.image_url)?.image_url ||
+          char.avatar;
+
         if (refUrl && !characterReferences.includes(refUrl)) {
           characterReferences.push(refUrl);
         }
@@ -225,11 +305,12 @@ export class VideoService {
         const ageTag = char.age ? `${char.age}-year-old ` : '';
         const genderTag = char.gender && char.gender !== 'neutral' ? `${char.gender} ` : '';
         let wardrobeTag = '';
-        const costumeDesc = matchedVariant?.clothing_and_accessories || sceneCostume?.wardrobe || char.clothing_and_accessories;
+        const costumeDesc = matchedVariant?.clothing_and_accessories ||
+          sceneCostume?.wardrobe || char.clothing_and_accessories;
         if (costumeDesc) {
           wardrobeTag = `, wearing ${costumeDesc}`;
         }
-        const traits = char.visual_traits || char.physical_characteristics || char.traits || char.identity || '';
+        const traits = char.visual_traits || char.physical_characteristics || char.traits || '';
         characterContinuityDescriptions.push(
           `Character ${char.name}: ${ageTag}${genderTag}${traits}${wardrobeTag}, exact face matching reference photo.`
         );
@@ -240,43 +321,48 @@ export class VideoService {
     const propReferences: string[] = [];
     const propContextDescriptions: string[] = [];
     let shotPropNames: string[] = [
-      ...(Array.isArray(sceneObj?.props) ? sceneObj.props : []),
       ...(Array.isArray(sceneObj?.reference_assets?.props) ? sceneObj.reference_assets.props : []),
     ];
 
     // Gather props from other shots in the same scene group (same sceneNumber) to ensure visual consistency
-    if (episodeId) {
+    if (episodeId && ep) {
       try {
-        const epForProps = await db.getEpisodeById(episodeId);
         const currSceneNum = sceneObj?.scene_number;
-        if (currSceneNum && Array.isArray(epForProps?.scenes)) {
-          const sameSceneShots = epForProps.scenes.filter((s: any) => s.scene_number === currSceneNum);
+        if (currSceneNum && Array.isArray(ep?.scenes)) {
+          const sameSceneShots = ep.scenes.filter((s: SceneEntity) => s.scene_number === currSceneNum);
           for (const sh of sameSceneShots) {
-            if (Array.isArray(sh.props)) shotPropNames.push(...sh.props);
             if (Array.isArray(sh.reference_assets?.props)) shotPropNames.push(...sh.reference_assets.props);
           }
         }
         shotPropNames = shotPropNames.filter((v, i, a) => v && a.indexOf(v) === i);
 
-        const allEpProps: any[] = epForProps?.props || [];
+        const allEpProps: PropAsset[] = [
+          ...(Array.isArray(targetSeries?.props) ? (targetSeries.props as PropAsset[]) : []),
+        ];
+
         for (const pName of shotPropNames) {
-          const pNameLower = pName.toLowerCase();
-          const propAsset = allEpProps.find((p: any) => {
-            const epPropName = (p.name || '').toLowerCase();
-            return epPropName && (pNameLower.includes(epPropName) || epPropName.includes(pNameLower));
+          const pNameLower = String(pName).toLowerCase().trim();
+          const propAsset = allEpProps.find((p: PropAsset) => {
+            const epPropName = (p.name || '').toLowerCase().trim();
+            const epPropId = (p.id || '').toLowerCase().trim();
+            return (epPropName && (pNameLower.includes(epPropName) || epPropName.includes(pNameLower))) ||
+                   (epPropId && (pNameLower === epPropId || pNameLower.includes(epPropId)));
           });
           if (propAsset) {
-            if (propAsset.imageUrl && !propReferences.includes(propAsset.imageUrl)) {
-              propReferences.push(propAsset.imageUrl);
+            const pUrl = propAsset.image_url;
+            if (pUrl && !propReferences.includes(pUrl)) {
+              propReferences.push(pUrl);
             }
-            const propDesc = propAsset.physicalCharacteristics || propAsset.description || '';
+            const propDesc = propAsset.physical_characteristics || '';
             propContextDescriptions.push(`${propAsset.name}${propDesc ? ': ' + propDesc : ''}`);
           } else {
             // No rendered asset found, still describe from name alone
             propContextDescriptions.push(pName);
           }
         }
-      } catch {}
+      } catch (propErr) {
+        Logger.warn(`[VideoService.generateSceneImage] Failed to extract props: ${propErr}`);
+      }
     }
 
     // Step 1: Translate and enrich scene action, location, and key props into vivid English visual description
@@ -291,11 +377,12 @@ export class VideoService {
         action: sceneAction,
         propDetails: propDetails,
         lighting: lightingText,
+        visualStyle: getVisualStylePrompt(seriesVisual),
       });
 
       const generated = await aiProviderRouter.generateText(translationPrompt, {
         systemInstruction:
-          'You are an expert cinematic storyboard prompt engineer. Describe visual setting, specific character actions, and props in English. Never include text, dialogue, headings, or genre labels in the output.',
+          'You are an expert cinematic visual prompt engineer for film production. Translate and describe the visual scene action, character appearance, setting details, props, and lighting into a single coherent paragraph of descriptive English. Never include meta-labels, shot numbers, or camera technicalities like "9:16 aspect ratio".',
       });
 
       if (typeof generated === 'string') {
@@ -319,22 +406,27 @@ export class VideoService {
 
     // Build location context text for prompt (name + physical description of the approved set)
     let locationContext = '';
-    if (locationAssetUrl) {
-      // We already found the locAsset above — rebuild the name+description from episode locations
-      try {
-        const ep2 = await db.getEpisodeById(episodeId!);
-        const currLocName = (sceneObj?.location || sceneObj?.heading || '').toLowerCase();
-        const matchedLoc = (ep2?.locations as any[] || []).find((l: any) => {
-          const lName = (l.name || '').toLowerCase();
-          return lName && currLocName && (currLocName.includes(lName) || lName.includes(currLocName));
-        });
-        if (matchedLoc) {
-          locationContext = `${matchedLoc.name}${matchedLoc.physicalCharacteristics ? ': ' + matchedLoc.physicalCharacteristics : ''}`;
-        }
-      } catch {}
+    if (allLocations.length > 0) {
+      const explicitLocs: string[] = (sceneObj?.reference_assets?.locations || []).map((l: string) => String(l).toLowerCase().trim());
+      const headingLoc = (sceneObj?.heading || '').toLowerCase();
+      const sceneLoc = (sceneObj?.location || '').toLowerCase();
+
+      const matchedLoc = allLocations.find((l: LocationAsset) => {
+        const lName = (l.name || '').toLowerCase().trim();
+        const lId = (l.id || '').toLowerCase().trim();
+        if (!lName && !lId) return false;
+        if (explicitLocs.some(el => el && (el === lName || el === lId || el.includes(lName) || lName.includes(el)))) return true;
+        if (headingLoc && lName && (headingLoc.includes(lName) || lName.includes(headingLoc))) return true;
+        if (sceneLoc && sceneLoc !== 'scene location' && lName && (sceneLoc.includes(lName) || lName.includes(sceneLoc))) return true;
+        return false;
+      });
+      if (matchedLoc) {
+        const locDesc = matchedLoc.physical_characteristics || '';
+        locationContext = `${matchedLoc.name}${locDesc ? ': ' + locDesc : ''}`;
+      }
     }
     if (!locationContext) {
-      locationContext = sceneLocation || sceneHeading || '';
+      locationContext = (sceneLocation && sceneLocation !== 'Scene Location') ? sceneLocation : (sceneHeading || '');
     }
 
     const propContext = propContextDescriptions.length > 0 ? propContextDescriptions.join(', ') : '';
@@ -367,7 +459,7 @@ export class VideoService {
 
     // Generate image via AIProviderRouter (loads Google Flow or Gemini dynamically with character references)
     const imageResult = await aiProviderRouter.generateImage(enhancedPrompt, {
-      aspectRatio: targetAspect,
+      aspectRatio: targetAspect as '9:16' | '16:9' | '4:3' | '1:1',
       systemPrompt: frameSkill,
       characterReferences,
       imageInputs,
@@ -433,13 +525,15 @@ export class VideoService {
         if (ep && Array.isArray(ep.scenes)) {
           const sIdx =
             typeof sceneIndex === 'number'
-              ? ep.scenes.findIndex((s: any) => s.index === sceneIndex || s.id === sceneId)
+               ? ep.scenes.findIndex((s: any) => s.index === sceneIndex || s.id === sceneId)
               : ep.scenes.findIndex((s: any) => s.id === sceneId);
           if (sIdx !== -1) {
             if (isEndFrame) {
-              (ep.scenes[sIdx] as any).storyboardEndFrameUrl = internalUrl;
+              ep.scenes[sIdx].storyboard_end_frame_url = internalUrl;
             } else {
-              (ep.scenes[sIdx] as any).storyboardFrameUrl = internalUrl;
+              ep.scenes[sIdx].storyboard_frame_url = internalUrl;
+              ep.scenes[sIdx].image_url = internalUrl;
+              ep.scenes[sIdx].status = 'image_ready';
             }
             await db.updateEpisode(ep.id, { scenes: ep.scenes });
           }
@@ -468,20 +562,20 @@ export class VideoService {
    * Real Scene Image-to-Video Generation with Native Audio & Dialogue (Step B3)
    */
   async generateSceneVideo(params: GenerateSceneVideoParams) {
-    const {
-      userId,
-      characterImageIds,
-      seriesId,
-      episodeId,
-      sceneId,
-      duration,
-      motion,
-      cameraMovement,
-      prompt,
-      aspectRatio,
-      language,
-      sceneData,
-    } = params;
+    const userId = params.user_id || '';
+    const seriesId = params.series_id;
+    const episodeId = params.episode_id;
+    const sceneId = params.scene_id;
+    const duration = params.duration;
+    const motion = params.motion;
+    const cameraMovement = params.camera_movement;
+    const prompt = params.prompt;
+    const aspectRatio = params.aspect_ratio;
+    const initialStartFrameUrl = params.start_frame_url;
+    const initialEndFrameUrl = params.end_frame_url;
+    const characterImageIds = params.character_image_ids;
+    const language = params.language;
+    const sceneData = params.scene_data;
 
     const db = await getDatabaseProvider();
 
@@ -489,9 +583,9 @@ export class VideoService {
     let seriesGenre = 'micro-drama';
     let seriesRatio = (aspectRatio || '9:16').trim();
     let seriesVisual = 'realistic';
-    let seriesLanguage = language || sceneData?.language || 'en-US';
+    let seriesLanguage = language || 'en-US';
 
-    let seriesChars: any[] = [];
+    let seriesChars: CharacterSeriesEntity[] = [];
     if (seriesId) {
       const s = await db.getSeriesById(seriesId);
       if (s) {
@@ -499,34 +593,37 @@ export class VideoService {
         seriesRatio = (aspectRatio || s.ratio || seriesRatio).trim();
         seriesVisual = s.visual_style || seriesVisual;
         seriesLanguage = s.language || seriesLanguage;
-        seriesChars = s.characters || s.master_plan?.characters || [];
+        seriesChars = [...(s.characters || [])];
       }
-    } else if (episodeId) {
+    }
+    if (episodeId) {
       const ep = await db.getEpisodeById(episodeId);
-      if (ep?.series_id) {
-        const s = await db.getSeriesById(ep.series_id);
-        if (s) {
-          seriesGenre = s.genre || seriesGenre;
-          seriesRatio = (aspectRatio || s.ratio || seriesRatio).trim();
-          seriesVisual = s.visual_style || seriesVisual;
-          seriesLanguage = s.language || seriesLanguage;
-          seriesChars = s.characters || s.master_plan?.characters || [];
+      if (ep) {
+        if (!seriesId && ep.series_id) {
+          const s = await db.getSeriesById(ep.series_id);
+          if (s) {
+            seriesGenre = s.genre || seriesGenre;
+            seriesRatio = (aspectRatio || s.ratio || seriesRatio).trim();
+            seriesVisual = s.visual_style || seriesVisual;
+            seriesLanguage = s.language || seriesLanguage;
+            seriesChars = s.characters || [];
+          }
         }
       }
     }
 
     // Build Character Profiles Summary for Veo
-    const charProfiles = (Array.isArray(seriesChars) ? seriesChars : []).map((c: any) => {
+    const charProfiles = seriesChars.map((c) => {
       const name = c.name || 'Character';
-      const gender = c.gender || 'Unknown';
-      const age = c.age ? `${c.age}yo` : '';
-      const visual = c.visualTraits || c.appearance || c.traits || '';
-      const voiceInfo = c.voiceDescription || c.personality || c.voiceId || '';
+      const gender = (c as Partial<CharacterSeriesEntity>).gender || 'Unknown';
+      const age = (c as Partial<CharacterSeriesEntity>).age ? `${(c as Partial<CharacterSeriesEntity>).age}yo` : '';
+      const visual = (c as Partial<CharacterSeriesEntity>).visual_traits || (c as Partial<CharacterSeriesEntity>).physical_characteristics || (c as Partial<CharacterSeriesEntity>).traits || '';
+      const voiceInfo = (c as Partial<CharacterSeriesEntity>).voice_id || '';
       return `- ${name} (${gender}, ${age}): ${visual ? visual + '. ' : ''}${voiceInfo ? 'Voice/Tone: ' + voiceInfo : ''}`;
     }).join('\n');
 
     // Dynamically resolve full language name using standard Intl.DisplayNames API
-    let targetLanguageName = seriesLanguage || 'Vietnamese';
+    let targetLanguageName = seriesLanguage || 'en-US';
     try {
       const displayNames = new Intl.DisplayNames(['en'], { type: 'language' });
       targetLanguageName = displayNames.of(seriesLanguage.split('-')[0]) || displayNames.of(seriesLanguage) || seriesLanguage;
@@ -538,12 +635,12 @@ export class VideoService {
     const motionIntensity = motion || 'subtle cinematic movement';
 
     // Robust extraction of all dialogue turns from sceneData or DB episode scenes
-    let rawDialogues = sceneData?.dialogue;
+    let rawDialogues: SceneDialogue[] | undefined = sceneData?.dialogue;
     if ((!rawDialogues || rawDialogues.length === 0) && episodeId) {
       try {
         const ep = await db.getEpisodeById(episodeId);
         const sceneNum = parseInt(String(sceneId).replace(/\D/g, ''), 10) || 1;
-        const foundScene = ep?.scenes?.find((s: any) => s.index === sceneNum || s.id === sceneId);
+        const foundScene = ep?.scenes?.find((s: SceneEntity) => s.index === sceneNum || s.id === sceneId);
         if (foundScene?.dialogue) {
           rawDialogues = foundScene.dialogue;
         }
@@ -559,44 +656,28 @@ export class VideoService {
       speechEndSec?: number;
       charInfo?: string;
     }> = [];
-    if (rawDialogues) {
-      const dList = Array.isArray(rawDialogues) ? rawDialogues : [rawDialogues];
-      for (const d of dList) {
-        if (typeof d === 'string' && d.trim()) {
-          const match = d.match(/^([^:]+):\s*(.*)$/);
-          if (match) {
-            dialogues.push({
-              character: match[1].trim(),
-              line: match[2].trim().replace(/^["']|["']$/g, ''),
-              tone: 'expressive tone',
-            });
-          } else {
-            dialogues.push({
-              character: 'Character',
-              line: d.trim().replace(/^["']|["']$/g, ''),
-              tone: 'expressive tone',
-            });
-          }
-        } else if (d && typeof d === 'object') {
-          const line = (d.line || d.text || d.dialogue || d.speech || '').trim();
+    if (Array.isArray(rawDialogues)) {
+      for (const d of rawDialogues) {
+        if (d && typeof d === 'object') {
+          const line = (d.line || '').trim();
           if (line) {
-            const charName = (d.character || d.speaker || 'Character').trim();
-            const matchedChar = (Array.isArray(seriesChars) ? seriesChars : []).find(
-              (c: any) => c.name && c.name.toLowerCase() === charName.toLowerCase()
+            const charName = (d.character || 'Character').trim();
+            const matchedChar = seriesChars.find(
+              (c) => c.name && c.name.toLowerCase() === charName.toLowerCase()
             );
             const charInfo = matchedChar
-              ? `${matchedChar.gender || ''} ${matchedChar.age ? matchedChar.age + 'yo' : ''}, ${matchedChar.visualTraits || matchedChar.traits || ''}`.trim()
+              ? `${(matchedChar as Partial<CharacterSeriesEntity>).gender || ''} ${(matchedChar as Partial<CharacterSeriesEntity>).age ? (matchedChar as Partial<CharacterSeriesEntity>).age + 'yo' : ''}, ${(matchedChar as Partial<CharacterSeriesEntity>).visual_traits || (matchedChar as Partial<CharacterSeriesEntity>).physical_characteristics || (matchedChar as Partial<CharacterSeriesEntity>).traits || ''}`.trim()
               : '';
 
-            const charObj = seriesChars.find((c: any) => c.name?.toLowerCase() === charName.toLowerCase());
-            const voiceId = charObj?.voiceId || (charObj?.gender == 'male' ? 'Fenrir' : 'Kore');
-            const speechStartSec = d.speechStartSec !== undefined ? Number(d.speechStartSec) : (sceneData?.voiceStartUs ? sceneData.voiceStartUs / 1_000_000 : 0.5);
-            const speechEndSec = d.speechEndSec !== undefined ? Number(d.speechEndSec) : (sceneData?.voiceDurationUs ? speechStartSec + (sceneData.voiceDurationUs / 1_000_000) : speechStartSec + (line.length / 14));
+            const charObj = seriesChars.find((c) => c.name?.toLowerCase() === charName.toLowerCase());
+            const voiceId = (charObj as Partial<CharacterSeriesEntity>)?.voice_id || ((charObj as Partial<CharacterSeriesEntity>)?.gender == 'male' ? 'Fenrir' : 'Kore');
+            const speechStartSec = sceneData?.voice_start_us ? sceneData.voice_start_us / 1_000_000 : 0.5;
+            const speechEndSec = sceneData?.voice_duration_us ? speechStartSec + (sceneData.voice_duration_us / 1_000_000) : speechStartSec + (line.length / 14);
 
             dialogues.push({
               character: charName,
               line: line.replace(/^["']|["']$/g, ''),
-              tone: d.speechTone || d.emotion || 'natural tone',
+              tone: d.speech_tone || d.emotion || 'natural tone',
               voiceId,
               speechStartSec,
               speechEndSec,
@@ -607,80 +688,101 @@ export class VideoService {
       }
     }
 
-    const sfxCues = Array.isArray(sceneData?.sfxCues) ? sceneData.sfxCues.join(', ') : (sceneData?.sfxCues || '');
+    const sfxCues = Array.isArray(sceneData?.sfx_cues)
+      ? sceneData.sfx_cues.join(', ')
+      : (sceneData?.sfx_cues || '');
 
-    const sceneHeading = sceneData?.heading || sceneData?.sceneTitle || '';
-    const sceneLocation = sceneData?.location || sceneData?.setting || '';
+    const sceneHeading = sceneData?.heading || sceneData?.title || '';
+    const sceneLocation = sceneData?.location || '';
     const sceneAction = sceneData?.action || sceneData?.description || prompt || '';
-    const sceneLighting = sceneData?.lightingMood || 'dramatic atmospheric cinematic lighting';
-    const sceneMood = sceneData?.bgmMood || '';
-    const sceneCamera = cameraMovement || sceneData?.cameraMovement || sceneData?.cameraAngle || 'slow dolly push-in';
-    const sceneContext = sceneData?.sceneContext || '';
-    const propDetails = sceneData?.propDetails || '';
+    const sceneLighting = sceneData?.lighting_mood || '';
+    const sceneMood = sceneData?.bgm_mood || '';
+    const sceneCamera = cameraMovement || sceneData?.camera_movement || '';
+    const sceneContext = sceneData?.scene_context || '';
+    const propDetails = sceneData?.prop_details || '';
 
     // ─── Character Continuity & Face Reference Extraction for Video ───────────
-    const allSeriesCharacters: any[] = seriesChars;
+    const allSeriesCharacters: CharacterSeriesEntity[] = seriesChars;
     const characterReferences: string[] = Array.isArray(characterImageIds)
       ? [...characterImageIds]
       : characterImageIds
       ? [characterImageIds]
       : [];
     const characterContinuityDescriptions: string[] = [];
-    const sceneCharsInvolved: string[] = Array.isArray(sceneData?.characters) && sceneData.characters.length > 0
-      ? sceneData.characters
+    const sceneCharsInvolved: string[] = Array.isArray(sceneData?.reference_assets?.characters) && sceneData.reference_assets.characters.length > 0
+      ? sceneData.reference_assets.characters
       : dialogues.map(d => d.character);
 
-    const explicitPhysicalChars = Array.isArray(sceneData?.referenceAssets?.characters) && sceneData.referenceAssets.characters.length > 0
-      ? sceneData.referenceAssets.characters.map((c: string) => String(c).toUpperCase())
-      : null;
+    const explicitPhysicalChars = (sceneData?.reference_assets?.characters || []).map((c: string) => String(c).toUpperCase());
+
     const sceneContextLower = (sceneContext || '').toLowerCase();
 
+    const norm = (s: string) => (s || '').normalize('NFC').toLowerCase().trim();
+
     for (const char of allSeriesCharacters) {
-      const charNameUpper = (char.name || '').toUpperCase();
-      const charNameLower = (char.name || '').toLowerCase();
+      const charNameNorm = norm(char.name);
+      const charNameUpper = (char.name || '').toUpperCase().trim();
 
       const isVirtualOnly =
-        sceneContextLower.includes(`${charNameLower} is not physically present`) ||
-        sceneContextLower.includes(`${charNameLower} is only on`) ||
-        sceneContextLower.includes(`${charNameLower} appears on screen`);
+        sceneContextLower.includes(`${charNameNorm} is not physically present`) ||
+        sceneContextLower.includes(`${charNameNorm} is only on`) ||
+        sceneContextLower.includes(`${charNameNorm} appears on screen`);
 
-      const isPresent = explicitPhysicalChars
-        ? explicitPhysicalChars.includes(charNameUpper)
+      const isPresent = explicitPhysicalChars.length > 0
+        ? explicitPhysicalChars.some(ec => ec === charNameUpper || ec.includes(charNameUpper) || charNameUpper.includes(ec))
         : (sceneCharsInvolved.some((c: string) => String(c).toUpperCase() === charNameUpper) ||
            (charNameUpper && `${sceneAction} ${prompt || ''}`.toUpperCase().includes(charNameUpper))) && !isVirtualOnly;
 
       if (isPresent) {
         // Resolve scene costume & wardrobe variant
-        const sceneCostume = Array.isArray(sceneData?.character_costumes || sceneData?.characterCostumes)
-          ? (sceneData?.character_costumes || sceneData?.characterCostumes).find((cc: any) => (cc.character || '').toLowerCase().trim() === charNameLower)
-          : null;
+        const rawCostumes: CharacterSceneCostumes[] = Array.isArray(sceneData?.character_costumes)
+          ? sceneData.character_costumes
+          : [];
+        const sceneCostume = rawCostumes.find((cc: CharacterSceneCostumes) => {
+          const cName = norm(cc.character);
+          return cName && (cName === charNameNorm || cName.includes(charNameNorm) || charNameNorm.includes(cName));
+        });
 
-        const wardrobeVariants: any[] = Array.isArray(char.wardrobe_variants || char.wardrobeVariants) ? (char.wardrobe_variants || char.wardrobeVariants) : [];
-        let matchedVariant: any = null;
+        const wardrobeVariants: CharacterWardrobeVariant[] = Array.isArray(char.wardrobe_variants)
+          ? char.wardrobe_variants
+          : [];
+        let matchedVariant: CharacterWardrobeVariant | undefined = undefined;
 
-        // 1. Match by variant_id
-        const sceneVariantId = sceneCostume?.variant_id || sceneCostume?.variantId;
-        if (sceneVariantId && wardrobeVariants.length > 0) {
-          matchedVariant = wardrobeVariants.find((v: any) => (v.variant_id || v.variantId)?.toLowerCase() === String(sceneVariantId).toLowerCase());
+        // 1. Match by variant_id exact or substring/name
+        if (sceneCostume?.variant_id && wardrobeVariants.length > 0) {
+          const vIdTarget = norm(sceneCostume.variant_id);
+          matchedVariant = wardrobeVariants.find((v: CharacterWardrobeVariant) => {
+            const vId = norm(v.variant_id);
+            const vName = norm(v.name);
+            return vId === vIdTarget || vName === vIdTarget || (vId && (vId.includes(vIdTarget) || vIdTarget.includes(vId)));
+          });
         }
         // 2. Match by scene_number in associated_scenes
-        const currScNum = sceneData?.scene_number || sceneData?.sceneNumber;
+        const currScNum = sceneData?.scene_number;
         if (!matchedVariant && currScNum && wardrobeVariants.length > 0) {
-          matchedVariant = wardrobeVariants.find((v: any) => {
-            const scenes = v.associated_scenes || v.associatedScenes;
+          matchedVariant = wardrobeVariants.find((v: CharacterWardrobeVariant) => {
+            const scenes = v.associated_scenes || [];
             return Array.isArray(scenes) && scenes.includes(currScNum);
           });
         }
         // 3. Match by wardrobe description / name similarity
         if (!matchedVariant && sceneCostume?.wardrobe && wardrobeVariants.length > 0) {
-          const wLower = String(sceneCostume.wardrobe).toLowerCase();
-          matchedVariant = wardrobeVariants.find((v: any) =>
-            (v.name && wLower.includes(v.name.toLowerCase())) ||
-            ((v.clothing_and_accessories || v.clothingAndAccessories) && wLower.includes((v.clothing_and_accessories || v.clothingAndAccessories).toLowerCase()))
-          );
+          const wLower = norm(sceneCostume.wardrobe);
+          matchedVariant = wardrobeVariants.find((v: CharacterWardrobeVariant) => {
+            const vName = norm(v.name);
+            const vClothing = norm(v.clothing_and_accessories);
+            return (vName && wLower.includes(vName)) || (vClothing && (wLower.includes(vClothing) || vClothing.includes(wLower)));
+          });
+        }
+        // 4. Fallback to first variant with image or first variant
+        if (!matchedVariant && wardrobeVariants.length > 0) {
+          matchedVariant = wardrobeVariants.find((v: CharacterWardrobeVariant) => v.image_url) || wardrobeVariants[0];
         }
 
-        const refUrl = matchedVariant?.image_url || matchedVariant?.imageUrl || char.avatar || char.image_url || char.imageUrl;
+        const refUrl = matchedVariant?.image_url ||
+          wardrobeVariants.find((v: CharacterWardrobeVariant) => v.image_url)?.image_url ||
+          char.avatar;
+
         if (refUrl && !characterReferences.includes(refUrl)) {
           characterReferences.push(refUrl);
         }
@@ -688,11 +790,12 @@ export class VideoService {
         const ageTag = char.age ? `${char.age}-year-old ` : '';
         const genderTag = char.gender && char.gender !== 'neutral' ? `${char.gender} ` : '';
         let wardrobeTag = '';
-        const costumeDesc = matchedVariant?.clothing_and_accessories || matchedVariant?.clothingAndAccessories || sceneCostume?.wardrobe || char.clothing_and_accessories || char.clothingAndAccessories;
+        const costumeDesc = matchedVariant?.clothing_and_accessories ||
+          sceneCostume?.wardrobe || char.clothing_and_accessories;
         if (costumeDesc) {
           wardrobeTag = `, wearing ${costumeDesc}`;
         }
-        const traits = char.visual_traits || char.visualTraits || char.physical_characteristics || char.physicalCharacteristics || char.traits || char.identity || '';
+        const traits = char.visual_traits || char.physical_characteristics || char.traits || '';
         characterContinuityDescriptions.push(
           `Character ${char.name}: ${ageTag}${genderTag}${traits}${wardrobeTag}, exact face matching reference photo.`
         );
@@ -700,10 +803,12 @@ export class VideoService {
     }
 
     // ─── Resolve Start Frame & End Frame (Current Shot Only) ────────
-    const startFrameUrl = params.startFrameUrl || sceneData?.storyboardFrameUrl || sceneData?.imageUrl;
+    const startFrameUrl = initialStartFrameUrl || sceneData?.storyboard_frame_url || sceneData?.image_url;
     // Strictly do not look up nextScene.storyboardFrameUrl — only use current shot end-frame if present
-    let endFrameUrl = params.endFrameUrl || sceneData?.storyboardEndFrameUrl;
-    const endFrameAction = !endFrameUrl && sceneData?.endFramePrompt ? sceneData.endFramePrompt : '';
+    let endFrameUrl = initialEndFrameUrl || sceneData?.storyboard_end_frame_url;
+    const endFrameAction = !endFrameUrl && sceneData?.end_frame_prompt
+      ? sceneData.end_frame_prompt
+      : '';
 
     const isSilent = dialogues.length === 0;
 
@@ -743,7 +848,7 @@ export class VideoService {
     }
 
     if (!visualPart) {
-      const cleanVisual = (prompt || sceneData?.visualPrompt || '').replace(/^(16:9|9:16|4:3|1:1)\s*aspect ratio,?\s*/i, '');
+      const cleanVisual = (prompt || sceneData?.visual_prompt || '').replace(/^(16:9|9:16|4:3|1:1)\s*aspect ratio,?\s*/i, '');
       const silencePart = isSilent ? ' Lips closed, no talking, silent action.' : '';
       visualPart = `Cinematic ${seriesGenre} scene. ${sceneAction || cleanVisual}.${silencePart} Camera movement: ${sceneCamera}. Motion: ${motionIntensity}. Lighting: ${sceneLighting}.`;
     }

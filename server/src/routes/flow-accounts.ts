@@ -85,8 +85,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       id: existing?.id || `flow_${cleanEmail.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
       email: cleanEmail,
       session_token: token,
-      status: 'ACTIVE',
-      credits_remaining: existing?.credits_remaining || 100,
+      status: AIAccountStatus.ACTIVE,
+      credits_remaining: existing?.credits_remaining || 0,
       last_synced_at: new Date().toISOString(),
     });
 
@@ -94,7 +94,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     flowSyncService.refreshAccountTokens({
       email,
       flow_st: token,
-      status: AIAccountStatus.READY,
+      status: AIAccountStatus.ACTIVE,
       account_type: AIAccountType.GOOGLE_FLOW,
       is_active: true,
     } as any).catch(() => {});
@@ -139,8 +139,8 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
       id: existing?.id || id,
       email: targetEmail,
       session_token: token,
-      status: AIAccountStatus.UNAUTHORIZED,
-      credits_remaining: existing?.credits_remaining || 100,
+      status: AIAccountStatus.ACTIVE,
+      credits_remaining: existing?.credits_remaining || 0,
       last_synced_at: new Date().toISOString(),
     });
 
@@ -149,7 +149,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
       id: updatedAccount.id,
       email: targetEmail,
       flowST: token,
-      status: AIAccountStatus.UNAUTHORIZED,
+      status: AIAccountStatus.ACTIVE,
       accountType: AIAccountType.GOOGLE_FLOW,
       isActive: true,
     } as any).catch(() => {});

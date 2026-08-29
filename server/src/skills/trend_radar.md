@@ -53,13 +53,13 @@ Before launching any pipeline phase, you **MUST** confirm the following project 
 All instructions dispatched to execution and supervision layers **MUST include the full Project Configuration header**:
 ```
 [Project Configuration]
-- Episode Count: {totalEpisodes} episodes
-- Episode Duration: {episodeDuration} mins (~{wordsPerEpisode} dialogue words)
-- Source Scope: Chapters {startChapter}-{endChapter}
-- Chapter Range: {chapterIndexs}
-- Platform Specs: {platform}
-- Genre & Style: {style}
-- Paywall Strategy: {paywall}
+- Episode Count: [totalEpisodes] episodes
+- Episode Duration: [episodeDuration] mins (~[wordsPerEpisode] dialogue words)
+- Source Scope: Chapters [startChapter]-[endChapter]
+- Chapter Range: [chapterIndexs]
+- Platform Specs: [platform]
+- Genre & Style: [style]
+- Paywall Strategy: [paywall]
 ```
 
 > Dialogue words calculated automatically at 150 words/minute: `wordsPerEpisode = episodeDuration × 150`

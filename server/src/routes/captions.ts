@@ -332,12 +332,12 @@ captionsRouter.post('/batch-dubbing', async (req: Request, res: Response) => {
     let seriesChars: any[] = [];
     if (targetSeriesId) {
       const srs = await db.getSeriesById(targetSeriesId);
-      seriesChars = srs?.characters || srs?.master_plan?.characters || [];
+      seriesChars = srs?.characters || [];
     } else if (targetEpisodeId) {
       const ep = await db.getEpisodeById(targetEpisodeId);
       if (ep?.series_id) {
         const srs = await db.getSeriesById(ep.series_id);
-        seriesChars = srs?.characters || srs?.master_plan?.characters || [];
+        seriesChars = srs?.characters || [];
       }
     }
 

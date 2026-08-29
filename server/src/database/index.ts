@@ -52,10 +52,10 @@ export async function getDatabaseProvider(): Promise<IDatabaseProvider> {
       }
     }
 
-    return activeProvider;
+    return activeProvider!;
   })();
 
-  return initPromise;
+  return initPromise!;
 }
 
 export * from './IDatabaseProvider.js';

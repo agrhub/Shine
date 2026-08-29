@@ -1,103 +1,47 @@
 import { nanoid } from 'nanoid';
-import type { SceneEntity, LocationAsset, PropAsset, CharacterEpisodeEntity } from '../types.js';
+import type { SceneEntity, LocationAsset, PropAsset, CharacterSeriesEntity, SceneCaption, SceneCaptionWordLevel, SceneReferenceAssets, CharacterSceneCostumes, CharacterWardrobeVariant } from '../types.js';
 
-export function normalizeSceneEntity(s: any, idx?: number): SceneEntity {
+export function normalizeSceneEntity(s: any, idx?: number): SceneEntity | null {
   if (!s || typeof s !== 'object') {
-    return {
-      id: `scene_${nanoid(8)}`,
-      index: idx || 1,
-      scene_number: idx || 1,
-      shot_number: idx || 1,
-      title: `Shot ${idx || 1}`,
-      heading: `INT. SCENE ${idx || 1} - NIGHT`,
-      location: 'Scene Location',
-      time_of_day: 'NIGHT',
-      action: '',
-      character_costumes: [],
-      props: [],
-      dialogue: [],
-      duration_seconds: 6,
-      reference_assets: { characters: [], locations: [], props: [] },
-      status: 'draft',
-    };
+    return null;
   }
 
-  const sceneIdx = s.index ?? idx ?? 1;
-  const sceneNum = s.scene_number || s.sceneNumber || sceneIdx;
-  const shotNum = s.shot_number || s.shotNumber || sceneIdx;
-  const heading = s.heading || `INT. SCENE ${sceneNum} - NIGHT`;
-  const location = s.location || s.location_name || s.locationName || 'Scene Location';
-  const timeOfDay = s.time_of_day || s.timeOfDay || 'NIGHT';
-  const lightingMood = s.lighting_mood || s.lightingMood || 'Atmospheric cinematic';
-  const frameDescription = s.frame_description || s.frameDescription || s.action || '';
-  const cameraMovement = s.camera_movement || s.cameraMovement || 'Slow push-in';
+  const sceneIdx = Number(s.index ?? s.scene_number ?? idx ?? 1);
+  const sceneNum = Number(s.scene_number ?? sceneIdx);
+  const shotNum = Number(s.shot_number ?? sceneIdx);
+  const heading = s.heading || `INT. SCENE ${sceneNum}`;
+  const location = s.location || '';
+  const timeOfDay = s.time_of_day || '';
+  const lightingMood = s.lighting_mood || '';
+  const frameDescription = s.frame_description || s.action || '';
+  const cameraMovement = s.camera_movement || '';
   const action = s.action || '';
-  const durationSeconds = Number(s.duration_seconds || s.durationSeconds) || 6;
-  const bgmMood = s.bgm_mood || s.bgmMood || 'Atmospheric suspense';
-  const sfxCues = Array.isArray(s.sfx_cues || s.sfxCues) ? (s.sfx_cues || s.sfxCues) : [];
-  const visualPrompt = s.visual_prompt || s.visualPrompt || '';
-  const endFramePrompt = s.end_frame_prompt || s.endFramePrompt || '';
-  const sceneContext = s.scene_context || s.sceneContext || '';
-  const propDetails = s.prop_details || s.propDetails || '';
-  const transitionEffect = s.transition_effect || s.transitionEffect || 'cut';
-  const videoEffect = s.video_effect || s.videoEffect || '';
-  const storyboardFrameUrl = s.storyboard_frame_url || s.storyboardFrameUrl || s.image_url || s.imageUrl;
-  const storyboardEndFrameUrl = s.storyboard_end_frame_url || s.storyboardEndFrameUrl;
-  const videoUrl = s.video_url || s.videoUrl;
-  const voiceoverUrl = s.voiceover_url || s.voiceoverUrl;
-  const bgmUrl = s.bgm_url || s.bgmUrl;
-  const voiceStartUs = s.voice_start_us ?? s.voiceStartUs ?? 0;
-  const voiceDurationUs = s.voice_duration_us ?? s.voiceDurationUs ?? 0;
+  const durationSeconds = Number(s.duration_seconds) || 6;
+  const bgmMood = s.bgm_mood || '';
+  const sfxCues = Array.isArray(s.sfx_cues) ? s.sfx_cues : [];
+  const visualPrompt = s.visual_prompt || '';
+  const endFramePrompt = s.end_frame_prompt || '';
+  const sceneContext = s.scene_context || '';
+  const propDetails = s.prop_details || '';
+  const transitionEffect = s.transition_effect || 'cut';
+  const videoEffect = s.video_effect || '';
+  const storyboardFrameUrl = s.storyboard_frame_url || s.image_url || null;
+  const storyboardEndFrameUrl = s.storyboard_end_frame_url || null;
+  const videoUrl = s.video_url || null;
+  const voiceoverUrl = s.voiceover_url || null;
+  const bgmUrl = s.bgm_url || null;
+  const voiceStartUs = Number(s.voice_start_us) || 0;
+  const voiceDurationUs = Number(s.voice_duration_us) || 0;
 
-  const rawCaptions = Array.isArray(s.captions_data || s.captionsData) ? (s.captions_data || s.captionsData) : [];
-  const captionsData = rawCaptions.map((cue: any, cIdx: number) => {
-    const rawWords = Array.isArray(cue.words) ? cue.words : [];
-    const cueStartMs = cue.start_ms ?? cue.startMs ?? (cue.from_us ? Math.round(cue.from_us / 1000) : (cue.fromUs ? Math.round(cue.fromUs / 1000) : 0));
-    const cueEndMs = cue.end_ms ?? cue.endMs ?? (cue.to_us ? Math.round(cue.to_us / 1000) : (cue.toUs ? Math.round(cue.toUs / 1000) : cueStartMs + 2000));
-    const fromUs = cue.from_us ?? cue.fromUs ?? (cueStartMs * 1000);
-    const toUs = cue.to_us ?? cue.toUs ?? (cueEndMs * 1000);
-    const durUs = cue.duration_us ?? cue.durationUs ?? (toUs - fromUs);
-    const durMs = cue.duration_ms ?? cue.durationMs ?? (cueEndMs - cueStartMs);
+  const captionsData: SceneCaption[] = Array.isArray(s.captions_data) ? s.captions_data : [];
+  const words: SceneCaptionWordLevel[] = Array.isArray(s.words) ? s.words : [];
+  const characterCostumes: CharacterSceneCostumes[] = Array.isArray(s.character_costumes) ? s.character_costumes : [];
 
-    return {
-      id: cue.id || `cue_${cIdx + 1}`,
-      text: cue.text || '',
-      start_ms: cueStartMs,
-      end_ms: cueEndMs,
-      from_us: fromUs,
-      to_us: toUs,
-      duration_us: durUs,
-      duration_ms: durMs,
-      words: rawWords.map((w: any) => ({
-        text: w.text || w.word || '',
-        from: w.from ?? 0,
-        to: w.to ?? 0,
-        is_key_word: w.is_key_word ?? w.isKeyWord ?? false,
-      })),
-    };
-  });
-
-  const rawWords = Array.isArray(s.words) ? s.words : [];
-  const words = rawWords.map((w: any) => ({
-    word: w.word || '',
-    punctuated_word: w.punctuated_word || w.punctuatedWord || w.word || '',
-    start: w.start ?? 0,
-    end: w.end ?? 0,
-    confidence: w.confidence ?? 0.99,
-  }));
-
-  const rawCostumes = Array.isArray(s.character_costumes || s.characterCostumes) ? (s.character_costumes || s.characterCostumes) : [];
-  const characterCostumes = rawCostumes.map((c: any) => ({
-    character: c.character || '',
-    wardrobe: c.wardrobe || '',
-    variant_id: c.variant_id || c.variantId || '',
-  }));
-
-  const rawRef = s.reference_assets || s.referenceAssets || {};
-  const referenceAssets = {
+  const rawRef = s.reference_assets || {};
+  const referenceAssets: SceneReferenceAssets = {
     characters: Array.isArray(rawRef.characters) ? rawRef.characters : [],
-    locations: Array.isArray(rawRef.locations) ? rawRef.locations : (location ? [location] : []),
-    props: Array.isArray(rawRef.props) ? rawRef.props : (Array.isArray(s.props) ? s.props : []),
+    locations: Array.isArray(rawRef.locations) ? rawRef.locations : [location],
+    props: Array.isArray(rawRef.props) ? rawRef.props : [],
   };
 
   return {
@@ -110,12 +54,13 @@ export function normalizeSceneEntity(s: any, idx?: number): SceneEntity {
     location,
     time_of_day: timeOfDay,
     lighting_mood: lightingMood,
+    description: s.description || frameDescription,
     frame_description: frameDescription,
+    prop_details: propDetails,
     camera_movement: cameraMovement,
     action,
     character_costumes: characterCostumes,
-    props: Array.isArray(s.props) ? s.props : referenceAssets.props,
-    dialogue: s.dialogue || [],
+    dialogue: Array.isArray(s.dialogue) ? s.dialogue : [],
     duration_seconds: durationSeconds,
     bgm_mood: bgmMood,
     sfx_cues: sfxCues,
@@ -123,8 +68,8 @@ export function normalizeSceneEntity(s: any, idx?: number): SceneEntity {
     visual_prompt: visualPrompt,
     end_frame_prompt: endFramePrompt,
     scene_context: sceneContext,
-    prop_details: propDetails,
     transition_effect: transitionEffect,
+    effects: Array.isArray(s.effects) ? s.effects : [],
     video_effect: videoEffect,
     image_url: storyboardFrameUrl,
     storyboard_frame_url: storyboardFrameUrl,
@@ -140,62 +85,62 @@ export function normalizeSceneEntity(s: any, idx?: number): SceneEntity {
   };
 }
 
-export function normalizeLocationAsset(l: any, idx?: number): LocationAsset {
-  if (!l || typeof l !== 'object') {
-    return {
-      id: `loc_${nanoid(6)}`,
-      name: `Location ${idx || 1}`,
-      physical_characteristics: '',
-      time_of_day: 'DAY',
-      status: 'draft',
-    };
-  }
+export function normalizeLocationAsset(l: any, idx?: number): LocationAsset | null {
+  if (!l || typeof l !== 'object') return null;
   return {
     id: l.id || `loc_${nanoid(6)}`,
+    series_id: l.series_id,
     name: l.name || `Location ${idx || 1}`,
-    physical_characteristics: l.physical_characteristics || l.physicalCharacteristics || l.description || '',
-    time_of_day: l.time_of_day || l.timeOfDay || 'DAY',
-    image_url: l.image_url || l.imageUrl || '',
-    frame_description: l.frame_description || l.frameDescription || '',
-    status: l.status || 'draft',
+    physical_characteristics: l.physical_characteristics || '',
+    time_of_day: l.time_of_day || '',
+    image_url: l.image_url,
+    frame_description: l.frame_description || '',
   };
 }
 
-export function normalizePropAsset(p: any, idx?: number): PropAsset {
-  if (!p || typeof p !== 'object') {
-    return {
-      id: `prop_${nanoid(6)}`,
-      name: `Prop ${idx || 1}`,
-      physical_characteristics: '',
-      status: 'draft',
-    };
-  }
+export function normalizePropAsset(p: any, idx?: number): PropAsset | null {
+  if (!p || typeof p !== 'object') return null;
   return {
     id: p.id || `prop_${nanoid(6)}`,
+    series_id: p.series_id,
     name: p.name || `Prop ${idx || 1}`,
-    physical_characteristics: p.physical_characteristics || p.physicalCharacteristics || p.description || '',
-    image_url: p.image_url || p.imageUrl || '',
-    frame_description: p.frame_description || p.frameDescription || '',
+    physical_characteristics: p.physical_characteristics || '',
+    image_url: p.image_url,
+    frame_description: p.frame_description || '',
     owner: p.owner || '',
-    status: p.status || 'draft',
   };
 }
 
-export function normalizeCharacterEpisodeEntity(c: any, idx?: number): CharacterEpisodeEntity {
-  const rawVariants = Array.isArray(c?.wardrobe_variants || c?.wardrobeVariants) ? (c?.wardrobe_variants || c?.wardrobeVariants) : [];
-  const wardrobeVariants = rawVariants.map((v: any, vi: number) => ({
-    variant_id: v.variant_id || v.variantId || `wv_${vi + 1}`,
-    name: v.name || `Wardrobe ${vi + 1}`,
-    clothing_and_accessories: v.clothing_and_accessories || v.clothingAndAccessories || '',
-    image_url: v.image_url || v.imageUrl,
-    associated_scenes: Array.isArray(v.associated_scenes || v.associatedScenes) ? (v.associated_scenes || v.associatedScenes) : [],
-  }));
+export function normalizeCharacterEntity(c: any, idx?: number): CharacterSeriesEntity | null {
+  if (!c || typeof c !== 'object') return null;
+  const wardrobeVariants: CharacterWardrobeVariant[] = Array.isArray(c.wardrobe_variants)
+    ? c.wardrobe_variants.map((v: any, vi: number) => ({
+        variant_id: v.variant_id || `wv_${vi + 1}`,
+        name: v.name || `Wardrobe ${vi + 1}`,
+        clothing_and_accessories: v.clothing_and_accessories || '',
+        image_url: v.image_url,
+        associated_scenes: Array.isArray(v.associated_scenes) ? v.associated_scenes : [],
+      }))
+    : [];
 
   return {
-    id: c?.id || `char_${nanoid(6)}`,
-    name: c?.name || `Character ${idx || 1}`,
-    clothing_and_accessories: c?.clothing_and_accessories || c?.clothingAndAccessories || '',
-    frame_description: c?.frame_description || c?.frameDescription || '',
+    id: c.id || `char_${nanoid(6)}`,
+    series_id: c.series_id || '',
+    name: c.name || `Character ${idx || 1}`,
+    role: c.role || '',
+    age: Number(c.age) || 0,
+    gender: c.gender || '',
+    nationality: c.nationality || '',
+    voice_id: c.voice_id || '',
+    identity: c.identity || '',
+    traits: c.traits || '',
+    visual_traits: c.visual_traits || '',
+    physical_characteristics: c.physical_characteristics || '',
+    appearance: c.appearance || '',
+    clothing_and_accessories: c.clothing_and_accessories || '',
+    frame_description: c.frame_description || '',
     wardrobe_variants: wardrobeVariants,
+    speech_style: c.speech_style || '',
+    description: c.description || '',
   };
 }

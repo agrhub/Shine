@@ -44,7 +44,7 @@ export class SupervisionAgent {
   async execute(scriptItem: ScriptItem): Promise<SupervisionResult> {
     const totalScenes = scriptItem.scenes ? scriptItem.scenes.length : 0;
     const totalDuration = scriptItem.scenes
-      ? scriptItem.scenes.reduce((sum, s) => sum + (s.durationSeconds || 5), 0)
+      ? scriptItem.scenes.reduce((sum, s) => sum + (s.duration_seconds || (s as any).durationSeconds || 5), 0)
       : 0;
 
     const issues: string[] = [];

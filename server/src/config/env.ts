@@ -230,24 +230,30 @@ export const EnvConfig = {
   get oauth() {
     return {
       google: {
+        enable: false,
         clientId: process.env.GOOGLE_CLIENT_ID || '',
         clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
         redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3001/api/auth/sso/callback/google',
       },
       youtube: {
+        enable: false,
         clientId: process.env.YOUTUBE_CLIENT_ID || '',
         clientSecret: process.env.YOUTUBE_CLIENT_SECRET || '',
         redirectUri: process.env.YOUTUBE_REDIRECT_URI || 'http://localhost:3001/api/auth/oauth/callback/youtube',
       },
       facebook: {
+        enable: false,
         clientId: process.env.FACEBOOK_CLIENT_ID || '',
         clientSecret: process.env.FACEBOOK_CLIENT_SECRET || '',
         redirectUri: process.env.FACEBOOK_REDIRECT_URI || 'http://localhost:3001/api/auth/oauth/callback/facebook',
+        oauthRedirectUri: process.env.FACEBOOK_OAUTH_REDIRECT_URI || 'http://localhost:3001/api/auth/sso/callback/facebook',
       },
       tiktok: {
+        enable: false,
         clientId: process.env.TIKTOK_CLIENT_ID || '',
         clientSecret: process.env.TIKTOK_CLIENT_SECRET || '',
         redirectUri: process.env.TIKTOK_REDIRECT_URI || 'http://localhost:3001/api/auth/oauth/callback/tiktok',
+        oauthRedirectUri: process.env.TIKTOK_OAUTH_REDIRECT_URI || 'http://localhost:3001/api/auth/sso/callback/tiktok',
       },
     };
   },
@@ -270,13 +276,13 @@ export const EnvConfig = {
       apiKey: process.env.GRAFANA_API_KEY || '',
     };
   },
-  get elevenlabs() {
-    return {
-      url: process.env.ELEVENLABS_URL || 'https://api.elevenlabs.io',
-      apiKey: process.env.ELEVENLABS_API_KEY || '',
-      model: process.env.ELEVENLABS_MODEL || 'eleven_multilingual_v2',
-    };
-  },
+  // get elevenlabs() {
+  //   return {
+  //     url: process.env.ELEVENLABS_URL || 'https://api.elevenlabs.io',
+  //     apiKey: process.env.ELEVENLABS_API_KEY || '',
+  //     model: process.env.ELEVENLABS_MODEL || 'eleven_multilingual_v2',
+  //   };
+  // },
   get pexels() {
     return {
       url: process.env.PEXELS_URL || 'https://api.pexels.com',

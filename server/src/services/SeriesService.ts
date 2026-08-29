@@ -4,25 +4,28 @@ import { GEMINI_SUPPORTED_VOICES } from '@/integrations/ai/gemini/GeminiClient.j
 import { Logger } from '@/utils/logger.js';
 import { nanoid } from 'nanoid';
 import { normalizeSceneEntity } from '@/utils/sceneNormalizer.js';
-import type { CharacterEntity, CharacterEpisodeEntity } from '@/types.js';
+import type { CharacterSeriesEntity, CharacterWardrobeVariant } from '@/types.js';
 
 export interface CreateSeriesParams {
   id?: string;
-  userId?: string;
+  user_id?: string;
   title: string;
   genre: string;
   synopsis?: string;
-  visualStyle?: string;
-  visualStylePrompt?: string;
-  targetAudience?: string;
+  visual_style?: string;
+  visual_style_prompt?: string;
+  target_audience?: string;
   country?: string;
   language?: string;
   ratio?: string;
-  episodeCount?: number;
-  masterPlan?: any;
+  episode_count?: number;
+  master_plan?: any;
   characters?: any[];
   locations?: any[];
   props?: any[];
+  /** If true, pre-generates the full scene screenplay for Episode 1 synchronously during series creation.
+   * Defaults to false — let screenplay_writer_agent handle it via streaming chat. */
+  pre_generate_ep1?: boolean;
 }
 
 export class SeriesService {
@@ -34,12 +37,12 @@ export class SeriesService {
     const {
       title,
       genre,
-      visualStyle,
-      visualStylePrompt,
-      targetAudience,
-      episodeCount,
-      userId,
-      masterPlan,
+      visual_style,
+      visual_style_prompt,
+      target_audience,
+      episode_count,
+      user_id,
+      master_plan,
       synopsis,
       country,
       language,
@@ -47,51 +50,57 @@ export class SeriesService {
       characters,
       locations,
       props,
+      pre_generate_ep1,
     } = params;
 
-    if (!userId) {
-      throw new Error('userId is required to create a series');
+    if (!user_id) {
+      throw new Error('user_id is required to create a series');
     }
 
     if (!title || !genre) {
       throw new Error('Title and genre are required to create a series');
     }
 
-    if (!masterPlan) {
-      throw new Error('Master plan object is required to create a series');
+    if(!master_plan){
+      throw new Error('master_plan is required to create a series');
     }
 
-    if (!masterPlan.title) {
-      throw new Error('Master plan title is required');
-    }
+    const resolvedMasterPlan = master_plan;
+    if (!resolvedMasterPlan.title) resolvedMasterPlan.title = title;
+    if (!resolvedMasterPlan.genre) resolvedMasterPlan.genre = genre;
+    if (!resolvedMasterPlan.synopsis) resolvedMasterPlan.synopsis = synopsis || 'Serialized micro-drama series';
 
-    if (!masterPlan.genre) {
-      throw new Error('Master plan genre is required');
-    }
+    const rawEpCount = Number(episode_count) || Number(resolvedMasterPlan?.total_episodes) || (Array.isArray(resolvedMasterPlan?.episodes) && resolvedMasterPlan.episodes.length > 0 ? resolvedMasterPlan.episodes.length : 24);
+    const planEpisodes: any[] = Array.isArray(resolvedMasterPlan?.episodes) ? [...resolvedMasterPlan.episodes] : [];
 
-    if (!masterPlan.synopsis && !masterPlan.storyCore?.coreAttraction && !masterPlan.story_core?.core_attraction && !synopsis) {
-      throw new Error('Master plan synopsis is required');
+    // Auto-fill missing episodes up to rawEpCount
+    while (planEpisodes.length < rawEpCount) {
+      // const epNum = planEpisodes.length + 1;
+      // planEpisodes.push({
+      //   episode_number: epNum,
+      //   title: `Episode ${epNum}`,
+      //   synopsis: `Plot progression and dramatic tension build-up for Episode ${epNum}.`,
+      //   scene_core: `Core conflict and pacing for Episode ${epNum}.`,
+      //   conflict_escalation: `Rising stakes and narrative tension.`,
+      //   cliffhanger_hook: `Dramatic cliffhanger leading into Episode ${epNum + 1}.`,
+      //   phase: epNum <= 3 ? 'Act 1' : epNum <= Math.floor(rawEpCount * 0.7) ? 'Act 2' : 'Act 3',
+      //   scene_count: 4,
+      //   duration_seconds: 90,
+      // });
+      throw new Error('Episodes are not defined or not enought in the master_plan, please check and try again');
     }
-
-    const rawEpCount = Number(episodeCount) || Number(masterPlan?.total_episodes) || Number(masterPlan?.totalEpisodes) || Number(masterPlan?.episodeCount) || 24;
-    const planEpisodes: any[] = Array.isArray(masterPlan?.episodes) ? masterPlan.episodes : [];
-
-    if (planEpisodes.length < rawEpCount) {
-      throw new Error(`Master plan is incomplete: target episode count is ${rawEpCount}, but only ${planEpisodes.length} episodes are present in masterPlan.episodes. All ${rawEpCount} episodes must be generated before creating the series.`);
-    }
+    resolvedMasterPlan.episodes = planEpisodes;
 
     const seriesId = params.id || `srs_${nanoid(10)}`;
-    if (masterPlan) {
-      masterPlan.series_id = seriesId;
-      masterPlan.seriesId = seriesId;
-    }
+    resolvedMasterPlan.series_id = seriesId;
 
-    const rawCharacters = characters || masterPlan?.characters || [];
-    const normalizedCharacters: CharacterEntity[] = (Array.isArray(rawCharacters) ? rawCharacters : []).map((c: any, idx: number) => {
+    const rawCharacters = characters || master_plan?.characters || [];
+    let normalizedCharacters: CharacterSeriesEntity[] = (Array.isArray(rawCharacters) ? rawCharacters : []).map((c: any, idx: number) => {
+      const charId = c.id || `char_${seriesId}_${idx + 1}`;
       const charGender = (c.gender || '').toLowerCase().trim();
       const validVoices = GEMINI_SUPPORTED_VOICES.map(v => v.id);
-      const isVoiceValid = (c.voice_id || c.voiceId) && validVoices.includes(c.voice_id || c.voiceId);
-      let resolvedVoice = c.voice_id || c.voiceId;
+      const isVoiceValid = c.voice_id && validVoices.includes(c.voice_id);
+      let resolvedVoice = c.voice_id;
       if (!isVoiceValid) {
         if (charGender === 'female') {
           resolvedVoice = 'Kore';
@@ -101,24 +110,35 @@ export class SeriesService {
           resolvedVoice = 'Puck';
         }
       }
+      const defaultClothing = c.clothing_and_accessories || c.costume_style || c.wardrobe || 'Signature look';
+      const wardrobe_variants: CharacterWardrobeVariant[] = Array.isArray(c.wardrobe_variants) && c.wardrobe_variants.length > 0
+        ? c.wardrobe_variants
+        : [{
+            variant_id: `${charId}_default`,
+            name: defaultClothing.slice(0, 40) || 'Default Outfit',
+            clothing_and_accessories: defaultClothing,
+          }];
+
       return {
-        id: c.id || `char_${seriesId}_${idx + 1}`,
+        id: charId,
         series_id: seriesId,
         name: c.name,
         role: c.role || 'protagonist',
-        age: c.age || 25,
+        age: Number(c.age) || 25,
         gender: c.gender || (idx === 0 ? 'male' : idx === 1 ? 'female' : 'neutral'),
         nationality: c.nationality || country || 'United States',
         voice_id: resolvedVoice,
         identity: c.identity || c.traits || '',
         traits: c.traits || '',
-        visual_traits: c.visual_traits || c.visualTraits || '',
-        physical_characteristics: c.physical_characteristics || c.physicalCharacteristics || c.appearance || c.visual_traits || '',
+        visual_traits: c.visual_traits || '',
+        physical_characteristics: c.physical_characteristics || c.appearance || c.visual_traits || '',
         appearance: c.appearance || c.physical_characteristics || '',
-        clothing_and_accessories: c.clothing_and_accessories || c.clothingAndAccessories || c.costume_style || c.costumeStyle || c.wardrobe || '',
-        speech_style: c.speech_style || c.speechStyle || 'Sharp and concise',
-        avatar: c.avatar || c.avatarUrl || null,
-        lora_model: c.lora_model || c.loraModel || `lora-${(c.name || 'char').toLowerCase().replace(/\s+/g, '-')}-sdxl`,
+        clothing_and_accessories: defaultClothing,
+        frame_description: c.frame_description || 'A character sheet with a head and shoulders shot showing the characters face on the left and a full body shot of the character on the right wearing the same clothing and accessories against a seamless white background.',
+        wardrobe_variants,
+        speech_style: c.speech_style || 'Sharp and concise',
+        avatar: c.avatar || null,
+        lora_model: c.lora_model || `lora-${(c.name || 'char').toLowerCase().replace(/\s+/g, '-')}-sdxl`,
         description: c.description || '',
       };
     });
@@ -126,61 +146,64 @@ export class SeriesService {
     const db = await getDatabaseProvider();
     const newSeries = await db.createSeries({
       id: seriesId,
-      user_id: userId,
+      user_id,
       title,
       genre,
-      synopsis: synopsis || masterPlan?.story_core?.core_attraction || masterPlan?.storyCore?.coreAttraction || masterPlan?.synopsis || '',
-      visual_style: visualStyle || masterPlan?.visual_style || masterPlan?.visualStyle || 'realistic',
-      visual_style_prompt: visualStylePrompt || masterPlan?.visual_style_prompt || masterPlan?.visualStylePrompt || '',
-      target_audience: targetAudience || masterPlan?.target_audience || masterPlan?.targetAudience || 'General',
-      country: country || masterPlan?.country || 'United States',
-      language: language || masterPlan?.language || 'en-US',
-      ratio: ratio || masterPlan?.ratio || '9:16',
-      viral_hook: masterPlan?.viral_hook || masterPlan?.viralHook || '',
-      master_plan: masterPlan || null,
+      synopsis: synopsis || master_plan?.story_core?.core_attraction || master_plan?.synopsis || '',
+      visual_style: visual_style || master_plan?.visual_style || 'realistic',
+      visual_style_prompt: visual_style_prompt || master_plan?.visual_style_prompt || '',
+      target_audience: target_audience || master_plan?.target_audience || 'General',
+      country: country || master_plan?.country || 'United States',
+      language: language || master_plan?.language || 'en-US',
+      ratio: ratio || master_plan?.ratio || '9:16',
+      viral_hook: master_plan?.viral_hook || '',
+      master_plan: master_plan || null,
       characters: normalizedCharacters,
-      locations: locations || masterPlan?.locations || [],
-      props: props || masterPlan?.props || [],
+      locations: locations || master_plan?.locations || [],
+      props: props || master_plan?.props || [],
       episode_count: rawEpCount,
+      episode_duration: master_plan?.total_duration_seconds || master_plan?.episode_duration || 90,
       status: 'DRAFT',
     });
 
-    Logger.info(`[SeriesService] Created Series "${title}" (ID: ${seriesId}) with all ${rawEpCount} episodes for user ${userId}`);
+    Logger.info(`[SeriesService] Created Series "${title}" (ID: ${seriesId}) with all ${rawEpCount} episodes for user ${user_id}`);
 
-    // Pre-generate full scene screenplay for Episode 1 so it is ready immediately
+    // Optional: Pre-generate full scene screenplay for Episode 1 synchronously.
+    // When false (default), screenplay_writer_agent handles it via streaming chat.
     let ep1Scenes: any[] = [];
     let ep1Screenplay: string = '';
-    let ep1Characters: any[] = [];
-    let ep1Locations: any[] = [];
-    let ep1Props: any[] = [];
-    let ep1Duration: number = 90;
+    let ep1Duration: number = newSeries.episode_duration || 60;
 
-    if (planEpisodes.length > 0) {
+    if (pre_generate_ep1) {
       try {
         const ep1 = planEpisodes[0];
         const scriptRes = await scriptAgent.execute({
-          seriesId,
-          episodeNumber: Number(ep1.episode_number || ep1.episodeNumber) || 1,
+          series_id: seriesId,
+          episode_number: Number(ep1.episode_number) || 1,
           title: ep1.title,
           genre: newSeries.genre,
-          visualStyle: newSeries.visual_style,
+          visual_style: newSeries.visual_style,
           synopsis: ep1.synopsis,
-          sceneCore: ep1.scene_core || ep1.sceneCore,
-          conflictEscalation: ep1.conflict_escalation || ep1.conflictEscalation,
-          cliffhangerHook: ep1.cliffhanger_hook || ep1.cliffhangerHook,
-          characters: newSeries.characters || masterPlan?.characters,
-          storyCore: masterPlan?.story_core || masterPlan?.storyCore,
+          scene_core: ep1.scene_core,
+          conflict_escalation: ep1.conflict_escalation,
+          cliffhanger_hook: ep1.cliffhanger_hook,
+          characters: newSeries.characters,
+          locations: newSeries.locations,
+          props: newSeries.props,
+          story_core: master_plan?.story_core,
           country: newSeries.country,
           ratio: newSeries.ratio,
+          target_duration_seconds: newSeries.episode_duration || 60,
         });
 
         if (scriptRes?.scenes) {
           ep1Scenes = (scriptRes.scenes || []).map((s: any, idx: number) => normalizeSceneEntity(s, idx + 1));
           ep1Screenplay = scriptRes.screenplay || '';
-          ep1Characters = scriptRes.characters || [];
-          ep1Locations = scriptRes.locations || [];
-          ep1Props = scriptRes.props || [];
-          ep1Duration = scriptRes.total_duration_seconds || 90;
+          ep1Duration = scriptRes.total_duration_seconds || ep1Duration;
+          if (Array.isArray(scriptRes.characters) && scriptRes.characters.length > 0) {
+            normalizedCharacters = scriptRes.characters;
+            await db.updateSeries(seriesId, { characters: normalizedCharacters });
+          }
         }
       } catch (e: any) {
         Logger.warn(`[SeriesService] Ep 1 script pre-generation error: ${e.message}`);
@@ -188,103 +211,56 @@ export class SeriesService {
     }
 
     const createdEpisodes: any[] = [];
+    const defaultReferenceAssets = {
+      character_ids: normalizedCharacters.map(c => c.id),
+      location_ids: (newSeries.locations || []).map(l => l.id),
+      prop_ids: (newSeries.props || []).map(p => p.id),
+    };
 
-    if (planEpisodes.length > 0) {
-      for (let i = 0; i < planEpisodes.length; i++) {
-        const ep = planEpisodes[i];
-        const epId = ep.id || `ep_${nanoid(10)}`;
-        const isEp1 = i === 0 && ep1Scenes.length > 0;
-        const rawEpisodeChars = isEp1 && ep1Characters.length > 0 ? ep1Characters : (ep.characters || normalizedCharacters);
-        const resolvedEpCharacters = (Array.isArray(rawEpisodeChars) && rawEpisodeChars.length > 0 ? rawEpisodeChars : normalizedCharacters).map((c: any) => {
-          const canonical = normalizedCharacters.find((nc: any) => nc.name?.toLowerCase().trim() === c.name?.toLowerCase().trim() || nc.id === c.id);
-          const charId = canonical?.id || c.id || 'char_1';
-          const defaultOutfit = c.clothing_and_accessories || c.clothingAndAccessories || c.costume_style || c.costumeStyle || canonical?.clothing_and_accessories || '';
-          
-          let variants: any[] = c.wardrobe_variants || c.wardrobeVariants || (canonical as any)?.wardrobe_variants || [];
-          if (!variants.length) {
-            const rawWardrobe = c.wardrobe || (canonical as any)?.wardrobe || [];
-            if (Array.isArray(rawWardrobe) && rawWardrobe.length > 0) {
-              variants = rawWardrobe.map((w: any, wIdx: number) => ({
-                variant_id: typeof w === 'object' && (w?.variant_id || w?.variantId) ? (w?.variant_id || w?.variantId) : `${charId}_variant_${wIdx + 1}`,
-                name: typeof w === 'string' ? w : (w?.name || `Wardrobe ${wIdx + 1}`),
-                clothing_and_accessories: typeof w === 'string' ? w : (w?.clothing_and_accessories || w?.clothingAndAccessories || defaultOutfit || ''),
-                associated_scenes: [1],
-              }));
-            } else if (defaultOutfit) {
-              variants = [{
-                variant_id: `${charId}_default`,
-                name: defaultOutfit.slice(0, 40),
-                clothing_and_accessories: defaultOutfit,
-                associated_scenes: [1],
-              }];
-            }
-          } else {
-            variants = variants.map((v: any, vi: number) => ({
-              variant_id: v.variant_id || v.variantId || `${charId}_variant_${vi + 1}`,
-              name: v.name || `Outfit ${vi + 1}`,
-              clothing_and_accessories: v.clothing_and_accessories || v.clothingAndAccessories || defaultOutfit || '',
-              associated_scenes: Array.isArray(v.associated_scenes || v.associatedScenes) && (v.associated_scenes || v.associatedScenes).length > 0 ? (v.associated_scenes || v.associatedScenes) : [1],
-              image_url: v.image_url || v.imageUrl || undefined,
-            }));
-          }
+    for (let i = 0; i < planEpisodes.length; i++) {
+      const ep = planEpisodes[i];
+      const epId = ep.id || `ep_${nanoid(10)}`;
+      const isEp1 = i === 0 && ep1Scenes.length > 0;
 
-          return {
-            id: charId,
-            name: canonical?.name || c.name,
-            clothing_and_accessories: defaultOutfit,
-            frame_description: c.frame_description || c.frameDescription || 'A character sheet with a head and shoulders shot showing the characters face on the left and a full body shot of the character on the right wearing the same clothing and accessories against a seamless white background.',
-            wardrobe_variants: variants,
-          };
+      let epRefAssets = defaultReferenceAssets;
+      if (isEp1) {
+        const ep1CharNames = new Set<string>();
+        const ep1LocNames = new Set<string>();
+        const ep1PropNames = new Set<string>();
+        ep1Scenes.forEach(sc => {
+          (sc.reference_assets?.characters || []).forEach((c: string) => ep1CharNames.add(c.toLowerCase().trim()));
+          (sc.reference_assets?.locations || []).forEach((l: string) => ep1LocNames.add(l.toLowerCase().trim()));
+          (sc.reference_assets?.props || []).forEach((p: string) => ep1PropNames.add(p.toLowerCase().trim()));
         });
-
-        const episodeEntity = await db.createEpisode({
-          id: epId,
-          series_id: seriesId,
-          episode_number: Number(ep.episode_number || ep.episodeNumber) || (i + 1),
-          title: ep.title || `Episode ${i + 1}`,
-          synopsis: ep.synopsis || ep.scene_core || ep.sceneCore || 'Plot beat and conflict escalation.',
-          screenplay: isEp1 ? ep1Screenplay : (ep.screenplay || ''),
-          scene_core: ep.scene_core || ep.sceneCore || '',
-          conflict_escalation: ep.conflict_escalation || ep.conflictEscalation || '',
-          cliffhanger_hook: ep.cliffhanger_hook || ep.cliffhangerHook || '',
-          phase: ep.phase || '',
-          scenes: isEp1 ? ep1Scenes : (Array.isArray(ep.scenes) ? ep.scenes.map((s: any, idx: number) => normalizeSceneEntity(s, idx + 1)) : []),
-          characters: resolvedEpCharacters,
-          locations: isEp1 ? ep1Locations : (ep.locations || newSeries.locations || []),
-          props: isEp1 ? ep1Props : (ep.props || newSeries.props || []),
-          duration: isEp1 ? ep1Duration : (Number(ep.duration) || 90),
-          status: 'DRAFT',
-        });
-        createdEpisodes.push(episodeEntity);
+        const charIds = normalizedCharacters.filter(c => ep1CharNames.has(c.name.toLowerCase().trim()) || ep1CharNames.has(c.id.toLowerCase().trim())).map(c => c.id);
+        const locIds = (newSeries.locations || []).filter(l => ep1LocNames.has(l.name.toLowerCase().trim()) || ep1LocNames.has(l.id.toLowerCase().trim())).map(l => l.id);
+        const propIds = (newSeries.props || []).filter(p => ep1PropNames.has(p.name.toLowerCase().trim()) || ep1PropNames.has(p.id.toLowerCase().trim())).map(p => p.id);
+        epRefAssets = {
+          character_ids: charIds.length > 0 ? charIds : defaultReferenceAssets.character_ids,
+          location_ids: locIds.length > 0 ? locIds : defaultReferenceAssets.location_ids,
+          prop_ids: propIds,
+        };
       }
-      Logger.info(`[SeriesService] Created ${createdEpisodes.length} serialized episodes for series ${seriesId}`);
-    } else {
-      // Fallback: create at least Episode 1 shell
-      const epId = `ep_${nanoid(10)}`;
-      const fallbackEpChars: CharacterEpisodeEntity[] = (newSeries.characters || []).map(c => ({
-        id: c.id,
-        name: c.name,
-        clothing_and_accessories: c.clothing_and_accessories || '',
-        frame_description: '',
-        wardrobe_variants: [],
-      }));
+
       const episodeEntity = await db.createEpisode({
         id: epId,
         series_id: seriesId,
-        episode_number: 1,
-        title: 'Episode 1: The Beginning',
-        synopsis: synopsis || 'Initial hook and character introduction.',
-        screenplay: ep1Screenplay || '',
-        scenes: [],
-        characters: fallbackEpChars,
-        locations: newSeries.locations || [],
-        props: newSeries.props || [],
-        duration: 90,
+        episode_number: Number(ep.episode_number) || (i + 1),
+        title: ep.title || `Episode ${i + 1}`,
+        synopsis: ep.synopsis || ep.scene_core || 'Plot beat and conflict escalation.',
+        screenplay: isEp1 ? ep1Screenplay : (ep.screenplay || ''),
+        scene_core: ep.scene_core || '',
+        conflict_escalation: ep.conflict_escalation || '',
+        cliffhanger_hook: ep.cliffhanger_hook || '',
+        phase: ep.phase || '',
+        reference_assets: epRefAssets,
+        scenes: isEp1 ? ep1Scenes : (Array.isArray(ep.scenes) ? ep.scenes.map((s: any, idx: number) => normalizeSceneEntity(s, idx + 1)) : []),
+        duration: isEp1 ? ep1Duration : (Number(ep.duration) || 60),
         status: 'DRAFT',
       });
       createdEpisodes.push(episodeEntity);
-      Logger.info(`[SeriesService] Created fallback Episode 1 shell for series ${seriesId}`);
     }
+    Logger.info(`[SeriesService] Created ${createdEpisodes.length} serialized episodes for series ${seriesId}`);
 
     return { series: newSeries, episodes: createdEpisodes };
   }

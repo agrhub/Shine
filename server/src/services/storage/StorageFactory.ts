@@ -105,7 +105,7 @@ export class StorageFactory {
    * Returns only key and size metadata.
    */
   public static async uploadMedia(
-    sourceUrlOrData: string,
+    sourceUrlOrData: string | Buffer,
     folder: 'images' | 'videos' | 'audio' | 'music' = 'images',
     defaultExt: string = 'png',
     mimeType?: string
@@ -114,7 +114,9 @@ export class StorageFactory {
     let resolvedContentType: string = mimeType || 'application/octet-stream';
     let ext = defaultExt;
 
-    if (sourceUrlOrData.startsWith('data:')) {
+    if (Buffer.isBuffer(sourceUrlOrData)) {
+      buffer = sourceUrlOrData;
+    } else if (sourceUrlOrData.startsWith('data:')) {
       const matches = sourceUrlOrData.match(/^data:([^;]+);base64,(.+)$/);
       if (!matches || matches.length < 3) {
         throw new Error('Invalid Base64 Data URI string');

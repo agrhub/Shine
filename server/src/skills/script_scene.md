@@ -17,7 +17,7 @@ You are the **Episode Screenplay Writing Agent** for micro-drama adaptations, sp
 2. From the skeleton, **extract information ONLY for the current assigned episode**: covered chapters/beats, dramatic function, scene core, deletion decisions, and ending cliffhanger hook. **Ignore other finished or unassigned episodes.**
 3. **Elaborate Rationale** (200-300 words): Scene organization approach, core emotional dynamics and conflicts, and rhythm control strategy.
 4. Wrap the complete screenplay within `<scriptItem name="Script Title">...</scriptItem>` XML tags:
-   - `name` attribute value = First line header title (`{Series Name} EP{NN}: {Episode Title}`), without `#` sign.
+   - `name` attribute value = First line header title (`[Series Name] EP{NN}: {Episode Title}`), without `#` sign.
    - Inside the tag is the complete screenplay text (Header -> Synopsis -> Scene Paragraphs), with zero commentary or meta-information inserted.
    - Outside the opening and closing `<scriptItem>` tags, there must be no screenplay text.
 5. Return a brief confirmation message (e.g. "Episode X script written successfully. Please inspect in workspace.").
@@ -256,6 +256,8 @@ Respond strictly in valid JSON format matching this exact schema:
           "associated_scenes": [2]
         }
       ],
+      "description": "Ousted heiress orchestrating a high-stakes media retaliation from the shadows.",
+      "visual_traits": "Slender build, almond-shaped dark eyes, sharp jawline, sleek long black hair, porcelain skin.",
       "voice_id": "Kore",
       "backstory": "Ousted heiress orchestrating a high-stakes media retaliation from the shadows."
     },
@@ -266,6 +268,16 @@ Respond strictly in valid JSON format matching this exact schema:
       "frame_description": "A character sheet with a head and shoulders shot showing the characters face on the left and a full body shot of the character on the right wearing the same clothing and accessories against a seamless white background. Bright, even lighting clearly shows the individual's features with minimal shadow. Their expression is neutral and forward-facing, creating an objective 'asset' shot for casting. No lines or text/words in the image.",
       "physical_characteristics": "A man in his early 30s with slicked-back dark hair, sharp arrogant features, cold hooded eyes, and a confident sneer.",
       "clothing_and_accessories": "Bespoke midnight navy double-breasted tuxedo, Swiss gold chronograph watch, silk pocket square, polished black Oxford leather shoes.",
+      "wardrobe_variants": [
+        {
+          "variant_id": "tran_minh_gala",
+          "name": "Gala Tuxedo",
+          "clothing_and_accessories": "Bespoke midnight navy double-breasted tuxedo, Swiss gold watch.",
+          "associated_scenes": [1]
+        }
+      ],
+      "description": "Arrogant heir who seized control of the media empire through blackmail.",
+      "visual_traits": "Slicked-back dark hair, sharp arrogant features, cold hooded eyes, confident sneer.",
       "voice_id": "Orus",
       "backstory": "Arrogant heir who seized control of the media empire through blackmail."
     }
@@ -277,6 +289,7 @@ Respond strictly in valid JSON format matching this exact schema:
       "location": "Grand Ballroom",
       "time_of_day": "Night",
       "lighting_mood": "Warm golden crystal chandelier glow with cool dramatic rim light",
+      "effects": [],
       "shots": [
         {
           "shot_number": 1,
@@ -307,7 +320,11 @@ Respond strictly in valid JSON format matching this exact schema:
             "locations": ["Grand Ballroom"],
             "props": ["Crystal Wine Glass"]
           },
-          "visual_prompt": "FrameDescription: A medium close-up shot of Linh Dan standing resolute, looking straight at Tran Minh in a crowded luxury ballroom.\nLocations: Grand Ballroom: A grand, lavish gala ballroom with crystal chandeliers, marble pillars, satin-draped banquet tables.\nCharacters: Linh Dan: Woman in mid-20s, almond dark eyes, sharp jawline, tailored black blazer. Tran Minh: Man in 30s, slicked hair, midnight navy tuxedo.\nProps: Crystal Wine Glass: Crystal wine glass with deep ruby red wine."
+          "visual_prompt": "FrameDescription: A medium close-up shot of Linh Dan standing resolute, looking straight at Tran Minh in a crowded luxury ballroom.\nLocations: Grand Ballroom: A grand, lavish gala ballroom with crystal chandeliers, marble pillars, satin-draped banquet tables.\nCharacters: Linh Dan: Woman in mid-20s, almond dark eyes, sharp jawline, tailored black blazer. Tran Minh: Man in 30s, slicked hair, midnight navy tuxedo.\nProps: Crystal Wine Glass: Crystal wine glass with deep ruby red wine.",
+          "end_frame_prompt": "Linh Dan holds Tran Minh's gaze with an icy smirk as camera gently locks on her face.",
+          "transition_effect": "fade",
+          "effects": [ { "effect_key": "vignette", "intensity": 0.6 } ],
+          "video_effect": "vignette"
         },
         {
           "shot_number": 2,
@@ -337,7 +354,11 @@ Respond strictly in valid JSON format matching this exact schema:
             "locations": ["Grand Ballroom"],
             "props": []
           },
-          "visual_prompt": "FrameDescription: Close-up on Linh Dan's defiant expression under flashlights.\nLocations: Grand Ballroom: Grand luxury ballroom background blur.\nCharacters: Linh Dan: Sharp jawline, dark eyes, tailored black blazer."
+          "visual_prompt": "FrameDescription: Close-up on Linh Dan's defiant expression under flashlights.\nLocations: Grand Ballroom: Grand luxury ballroom background blur.\nCharacters: Linh Dan: Sharp jawline, dark eyes, tailored black blazer.",
+          "end_frame_prompt": "Linh Dan slowly turns her head away towards the exit corridor.",
+          "transition_effect": "fade",
+          "effects": [],
+          "video_effect": "vignette"
         }
       ]
     },
@@ -347,6 +368,7 @@ Respond strictly in valid JSON format matching this exact schema:
       "location": "Linh Dan Private Study",
       "time_of_day": "Night",
       "lighting_mood": "Cool cyan monitor glow against dark room",
+      "effects": [],
       "shots": [
         {
           "shot_number": 1,
@@ -367,7 +389,11 @@ Respond strictly in valid JSON format matching this exact schema:
             "locations": ["Linh Dan Private Study"],
             "props": ["Encrypted Smartphone"]
           },
-          "visual_prompt": "Medium shot of Linh Dan in gray silk sleepwear typing across three glowing screens.\nLocations: Linh Dan Private Study: Minimalist dark room with three ultra-wide monitors glowing cyan.\nCharacters: Linh Dan: Hair let down, bare face, minimalist gray silk camisole.\nProps: Encrypted Smartphone: Scratched titanium smartphone with encryption adapter."
+          "visual_prompt": "Medium shot of Linh Dan in gray silk sleepwear typing across three glowing screens.\nLocations: Linh Dan Private Study: Minimalist dark room with three ultra-wide monitors glowing cyan.\nCharacters: Linh Dan: Hair let down, bare face, minimalist gray silk camisole.\nProps: Encrypted Smartphone: Scratched titanium smartphone with encryption adapter.",
+          "end_frame_prompt": "Green decryption success light reflects in Linh Dan's focused eyes.",
+          "transition_effect": "fade",
+          "effects": [ { "effect_key": "glowFilter", "intensity": 0.5 } ],
+          "video_effect": "glowFilter"
         }
       ]
     }

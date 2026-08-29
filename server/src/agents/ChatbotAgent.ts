@@ -6,20 +6,22 @@ import {
   createMasterPlanTools,
   createProductionPipelineTools,
   createTimelineEditorTools,
+  createScreenplayTools,
+  runWithChatContext,
 } from './chatbot/tools.js';
 import {
   getRootAgentInstruction,
   getMasterPlanAgentInstruction,
   getProductionPipelineAgentInstruction,
   getTimelineEditorAgentInstruction,
+  getScreenplayAgentInstruction,
+  buildLiveContextSnapshot,
 } from './chatbot/prompts.js';
 import { createUserContent } from '@google/genai';
 import { InMemoryRunner, LlmAgent, StreamingMode, isFinalResponse } from '@google/adk';
-import { PromptLoader } from '~/utils/PromptLoader.js';
-import { loadSkill } from '~/utils/SkillLoader.js';
-import { getLanguageForCountry } from '~/utils/LanguageMapping.js';
-import { GeminiClient, GEMINI_SUPPORTED_VOICES, geminiClient } from '~/integrations/ai/gemini/GeminiClient.js';
 import { afterTool, beforeTool, rateLimitCallback } from './chatbot/callback.js';
+import { geminiClient } from '~/integrations/ai/gemini/GeminiClient.js';
+import { aiProviderRouter } from '~/integrations/ai/router/AIProviderRouter.js';
 
 export interface ChatMessage {
   id: string;
@@ -58,6 +60,98 @@ setInterval(() => {
   }
 }, 10 * 60 * 1000);
 
+// ─── Singleton Agent & Runner Instances (Persistent across app lifecycle) ────
+let copilotRunnerInstance: InMemoryRunner | null = null;
+let wizardRunnerInstance: InMemoryRunner | null = null;
+
+function getOrInitCopilotRunner(): InMemoryRunner {
+  if (!copilotRunnerInstance) {
+    const modelName = EnvConfig.geminiModelAgent || EnvConfig.geminiModelText || 'gemini-2.5-pro';
+
+    // Sub-Agent 1: Master Plan & Story Architect
+    const masterPlanAgent = new LlmAgent({
+      name: 'master_plan_agent',
+      description: 'Shine AI Master Screenplay & Series Architect: Designs character profiles, 3-act story hooks, episodic breakdowns, and verifies compliance.',
+      model: modelName,
+      instruction: getMasterPlanAgentInstruction({}),
+      tools: createMasterPlanTools(),
+    });
+
+    // Sub-Agent 2: Production Pipeline & Asset Specialist
+    const productionPipelineAgent = new LlmAgent({
+      name: 'production_pipeline_agent',
+      description: 'Shine AI Production Pipeline Specialist: Generates character art, location shots, storyboards, voiceovers, video clips, and final video rendering.',
+      model: modelName,
+      instruction: getProductionPipelineAgentInstruction({}),
+      tools: createProductionPipelineTools(),
+    });
+
+    // Sub-Agent 3: Timeline & Studio Editor
+    const timelineEditorAgent = new LlmAgent({
+      name: 'timeline_editor_agent',
+      description: 'Shine AI Studio Video Editor: Modifies video timeline, trims clips, overlays text, applies transitions/effects, and syncs subtitles.',
+      model: modelName,
+      instruction: getTimelineEditorAgentInstruction({}),
+      tools: createTimelineEditorTools(),
+    });
+
+    // Sub-Agent 4: Screenplay Writer & Shot Breakdown Specialist
+    const screenplayAgent = new LlmAgent({
+      name: 'screenplay_writer_agent',
+      description: 'Shine AI Screenplay Writer & Episode Shot Breakdown Specialist: Writes detailed shot-by-shot episode screenplays with character costumes, dialogue, camera movements, and visual prompts. Streams word-by-word over SSE.',
+      model: modelName,
+      instruction: getScreenplayAgentInstruction({}),
+      tools: createScreenplayTools(),
+    });
+
+    // Root Agent: Main Orchestrator
+    const rootAgent = new LlmAgent({
+      name: 'shine_copilot_agent',
+      description: 'Shine AI Production Director Copilot Agent',
+      model: modelName,
+      instruction: getRootAgentInstruction({}),
+      tools: createChatbotTools(),
+      subAgents: [masterPlanAgent, productionPipelineAgent, timelineEditorAgent, screenplayAgent],
+      beforeToolCallback: beforeTool,
+      afterToolCallback: afterTool,
+      beforeModelCallback: rateLimitCallback,
+    });
+
+    copilotRunnerInstance = new InMemoryRunner({
+      agent: rootAgent,
+      appName: 'shine_copilot',
+    });
+
+    Logger.info(`[ChatbotAgent] Initialized singleton Copilot Runner (${modelName})`);
+  }
+  return copilotRunnerInstance;
+}
+
+function getOrInitWizardRunner(): InMemoryRunner {
+  if (!wizardRunnerInstance) {
+    const modelName = EnvConfig.geminiModelAgent || EnvConfig.geminiModelText || 'gemini-2.5-pro';
+
+    const wizardAgent = new LlmAgent({
+      name: 'shine_master_plan_architect',
+      description: 'Shine AI Master Screenplay & Series Architect',
+      model: modelName,
+      instruction: getMasterPlanAgentInstruction({}),
+      tools: createMasterPlanTools(),
+      beforeToolCallback: beforeTool,
+      afterToolCallback: afterTool,
+      beforeModelCallback: rateLimitCallback,
+    });
+
+    wizardRunnerInstance = new InMemoryRunner({
+      agent: wizardAgent,
+      appName: 'shine_wizard',
+    });
+
+    Logger.info(`[ChatbotAgent] Initialized singleton Series Wizard Runner (${modelName})`);
+  }
+  return wizardRunnerInstance;
+}
+
 export class ChatbotAgent {
   /**
    * Get or create a session for an episode or wizard flow
@@ -91,6 +185,37 @@ export class ChatbotAgent {
 
     session.lastActive = Date.now();
     return session;
+  }
+
+  /**
+   * Clear session history and reset ADK runner session state
+   */
+  public static async clearSession(userId: string, seriesId: string, episodeId: string = '1'): Promise<void> {
+    const sessionId = `${userId}_${seriesId}_${episodeId}`;
+    const sessionKey = `${userId}_${seriesId}_${episodeId}`;
+    sessions.delete(sessionKey);
+
+    for (const [k, s] of sessions.entries()) {
+      if (s.userId === userId && (s.seriesId === seriesId || s.sessionId === seriesId)) {
+        sessions.delete(k);
+      }
+    }
+
+    try {
+      const runners = [getOrInitCopilotRunner(), getOrInitWizardRunner()];
+      for (const runner of runners) {
+        try {
+          await (runner as any).sessionService.deleteSession({
+            appName: (runner as any).appName,
+            userId,
+            sessionId,
+          });
+        } catch {}
+      }
+      Logger.info(`[ChatbotAgent] Successfully cleared session: ${sessionId}`);
+    } catch (err: any) {
+      Logger.error(`[ChatbotAgent] Failed to clear session ${sessionId}: ${err.message}`);
+    }
   }
 
   /**
@@ -185,141 +310,7 @@ export class ChatbotAgent {
   }
 
   /**
-   * Build comprehensive System Instruction with full episode context
-   */
-  private static async buildSystemInstruction(seriesId?: string, episodeId?: string, context?: any): Promise<string> {
-    try {
-      const db = await getDatabaseProvider();
-      const series = seriesId ? await db.getSeriesById(seriesId) : null;
-      const episode = episodeId ? await db.getEpisodeById(episodeId) : null;
-
-      const skeletonSkill = loadSkill('script_skeleton');
-      const refineSkill = loadSkill('script_refine_master_plan');
-
-      if (!series && !episode) {
-        const totalEpisodes = Number(context?.target_episodes || context?.targetEpisodes || context?.total_episodes || context?.totalEpisodes || 24);
-        const totalDurationSeconds = Math.min(Math.max(Number(context?.episode_duration_seconds || context?.episodeDurationSeconds || 60), 30), 600);
-        const durationDisplay = `${Math.floor(totalDurationSeconds / 60)}m ${totalDurationSeconds % 60 ? `${totalDurationSeconds % 60}s` : ''}`.trim();
-        // Country = Cultural & Geographical Setting (Bối cảnh câu chuyện)
-        const country = context?.country || 'United States';
-        // Language = Script & Dialogue Output Language (Ngôn ngữ kịch bản đầu ra, độc lập với bối cảnh)
-        const scriptLanguage = context?.language || 'en-US';
-        const langInfo = getLanguageForCountry(scriptLanguage);
-        const visualStyle = context?.visual_style || context?.visualStyle || 'Cinematic';
-        const visualStylePrompt = context?.visual_style_prompt || context?.visualStylePrompt || '';
-        const title = context?.title || 'Original Micro-Drama';
-        const genre = context?.genre || 'Drama';
-        const synopsis = context?.synopsis || 'High-stakes dramatic series';
-        const ratio = context?.ratio || '9:16';
-        const viralTopic = context?.viral_topic || context?.viralTopic || '';
-
-        const maleVoicesCatalog = GEMINI_SUPPORTED_VOICES
-          .filter((v: any) => v.gender === 'male')
-          .map((v: any) => `  * "${v.id}": ${v.description}`)
-          .join('\n');
-        const femaleVoicesCatalog = GEMINI_SUPPORTED_VOICES
-          .filter((v: any) => v.gender === 'female')
-          .map((v: any) => `  * "${v.id}": ${v.description}`)
-          .join('\n');
-        const neutralVoicesCatalog = GEMINI_SUPPORTED_VOICES
-          .filter((v: any) => v.gender === 'neutral')
-          .map((v: any) => `  * "${v.id}": ${v.description}`)
-          .join('\n');
-
-        const voiceCatalog = [
-          '  [Male Voices]',
-          maleVoicesCatalog,
-          '  [Female Voices]',
-          femaleVoicesCatalog,
-          '  [Neutral Voices]',
-          neutralVoicesCatalog,
-        ].join('\n');
-
-        const corePrompt = PromptLoader.render('skeleton/story_skeleton_core', {
-          totalEpisodes,
-          totalDurationSeconds,
-          durationDisplay,
-          country,
-          languageName: langInfo.name,
-          languageNativeName: langInfo.nativeName,
-          languageCode: context?.language || langInfo.code,
-          languageInstruction: langInfo.promptInstruction,
-          title,
-          genre,
-          visualStyle,
-          visualStylePrompt,
-          synopsis,
-          ratio,
-          viralTopic,
-          voiceCatalog,
-          episodeScopeInstruction: `CRITICAL MANDATE: You MUST generate all ${totalEpisodes} serialized episodes in the episodes array (numbered 1 through ${totalEpisodes}) without omitting, truncating, summarizing, or stopping early.`,
-        });
-
-        const creativeDirectorPrompt = PromptLoader.render('chatbot/creative_director', {
-          seriesId: context?.series_id || context?.seriesId || 'series_preview',
-          seriesTitle: title,
-          seriesGenre: genre,
-          seriesVisualStyle: visualStyle,
-          seriesVisualStylePrompt: visualStylePrompt,
-          country,
-          language: langInfo.name,
-          ratio,
-          totalEpisodes,
-          totalDurationSeconds,
-          synopsis,
-        });
-
-        return `${creativeDirectorPrompt}\n\n=== STORY PROJECT PARAMETERS & CORE DIRECTIVES ===\n${corePrompt}\n\n=== CANONICAL STORY SKELETON SKILL (SCRIPT ARCHITECT) ===\n${skeletonSkill}\n\n=== SCRIPT REFINEMENT SKILL ===\n${refineSkill}`;
-      }
-
-      const script = episode?.script ? (typeof episode.script === 'string' ? JSON.parse(episode.script) : episode.script) : {};
-      const characters = episode?.characters || script.characters || series?.characters || [];
-      const locations = episode?.locations || script.locations || series?.locations || [];
-      const props = episode?.props || script.props || series?.props || [];
-      const scenes = episode?.scenes || script.scenes || [];
-
-      const charactersSummary = characters.map((c: any) => `${c.name} [Image: ${c.imageUrl ? 'YES' : 'NO'}, Wardrobes: ${c.wardrobeVariants?.length || 0}]`).join(', ') || 'None';
-      const locationsSummary = locations.map((l: any) => `${l.name} [Image: ${l.imageUrl ? 'YES' : 'NO'}]`).join(', ') || 'None';
-      const propsSummary = props.map((p: any) => p.name || p).join(', ') || 'None';
-      const scenesSummary = scenes.map((s: any) => `  Scene #${s.index}: ${s.setting || ''} | Dialogue: "${(s.dialogue || '').slice(0, 30)}..." | Storyboard: ${s.storyboardFrameUrl ? 'YES' : 'NO'} | Video: ${s.videoUrl ? 'YES' : 'NO'} | Audio: ${s.audioUrl ? 'YES' : 'NO'}`).join('\n') || '  No scenes loaded yet.';
-
-      const baseInstruction = getRootAgentInstruction({
-        seriesId,
-        episodeId,
-        seriesTitle: series?.title || context?.title || 'Untitled Series',
-        genre: series?.genre || context?.genre || 'Drama',
-        visualStyle: series?.visual_style || context?.visualStyle || 'Cinematic',
-        language: context?.language || (series as any)?.language || 'en-US',
-        country: context?.country || (series as any)?.country || 'United States',
-        context,
-      });
-
-      const copilotMain = PromptLoader.render('chatbot/copilot_agent', {
-        seriesTitle: series?.title || context?.title || 'Untitled',
-        seriesGenre: series?.genre || context?.genre || 'Drama',
-        seriesVisualStyle: series?.visual_style || context?.visualStyle || 'Cinematic',
-        seriesVisualStylePrompt: series?.visual_style_prompt || context?.visualStylePrompt || '',
-        seriesTargetDuration: series?.master_plan?.totalDurationSeconds || context?.episodeDurationSeconds || (series as any)?.episode_duration || 90,
-        episodeNumber: episode?.episode_number || 1,
-        episodeTitle: episode?.title || 'Untitled',
-        charactersCount: characters.length,
-        charactersSummary,
-        locationsCount: locations.length,
-        locationsSummary,
-        propsCount: props.length,
-        propsSummary,
-        scenesCount: scenes.length,
-        scenesSummary,
-      });
-
-      return `${baseInstruction}\n\n=== LIVE EPISODE & ASSET CONTEXT ===\n${copilotMain}\n\n=== SCRIPT REFINEMENT SKILL ===\n${refineSkill}`;
-    } catch {
-      return getRootAgentInstruction({ seriesId, episodeId, context });
-    }
-  }
-
-  /**
-   * Stream a chat response using Google ADK Runner with tool calls and live events
+   * Stream a chat response using Google ADK Runner with tool calls, multi-turn session persistence, and SSE events
    */
   public static async chatStream(params: {
     userId: string;
@@ -333,8 +324,31 @@ export class ChatbotAgent {
     onProgress?: (progress: any) => void;
     onSuggestions?: (suggestions: Array<{ label: string; prompt: string }>) => void;
   }): Promise<{ fullText: string; toolCalls: any[] }> {
+    const isWizard = !params.seriesId || params.seriesId.startsWith('wiz_') || params.seriesId.startsWith('temp_');
+    const runner = isWizard ? getOrInitWizardRunner() : getOrInitCopilotRunner();
+    const appName = (runner as any).appName;
+    const sessionId = `${params.userId}_${params.seriesId}_${params.episodeId}`;
+
     const session = await this.getOrCreateSession(params.userId, params.seriesId, params.episodeId);
-    const systemInstruction = await this.buildSystemInstruction(params.seriesId, params.episodeId, params.context);
+
+    // ─── 1. Ensure ADK Runner Session exists for persistent multi-turn conversation memory ──
+    try {
+      const existingAdkSession = await (runner as any).sessionService.getSession({
+        appName,
+        userId: params.userId,
+        sessionId,
+      });
+      if (!existingAdkSession) {
+        await (runner as any).sessionService.createSession({
+          appName,
+          userId: params.userId,
+          sessionId,
+        });
+        Logger.info(`[ChatbotAgent] Initialized persistent ADK session for ${sessionId} in ${appName}`);
+      }
+    } catch (sErr: any) {
+      Logger.warn(`[ChatbotAgent] Session check notice: ${sErr.message}`);
+    }
 
     const userMsgId = `msg_${Date.now()}_user`;
     session.messages.push({
@@ -371,75 +385,17 @@ export class ChatbotAgent {
       params.onToolCall?.(toolCall);
     };
 
-    const isWizard = !params.seriesId || params.seriesId.startsWith('wiz_') || params.seriesId.startsWith('temp_');
-    const toolContext = {
-      userId: params.userId,
-      seriesId: params.seriesId,
-      episodeId: params.episodeId,
-      context: params.context,
-      onChunk: params.onChunk,
-      onProgress: params.onProgress,
-      onItemUpdated: params.onItemUpdated,
-      onToolCall: handleToolCallEvent,
-    };
-
-    const agentContext = {
-      userId: params.userId,
-      seriesId: params.seriesId,
-      episodeId: params.episodeId,
-      context: params.context,
-    };
-
-    // Sub-Agent 1: Master Plan & Story Architect
-    const masterPlanAgent = new LlmAgent({
-      name: 'master_plan_agent',
-      description: 'Shine AI Master Screenplay & Series Architect: Designs character profiles, 3-act story hooks, episodic breakdowns, and verifies compliance.',
-      model: EnvConfig.geminiModelAgent || EnvConfig.geminiModelText || 'gemini-2.5-pro',
-      instruction: getMasterPlanAgentInstruction(agentContext),
-      tools: createMasterPlanTools(toolContext),
-    });
-
-    // Sub-Agent 2: Production Pipeline & Asset Specialist
-    const productionPipelineAgent = new LlmAgent({
-      name: 'production_pipeline_agent',
-      description: 'Shine AI Production Pipeline Specialist: Generates character art, location shots, storyboards, voiceovers, video clips, and final video rendering.',
-      model: EnvConfig.geminiModelAgent || EnvConfig.geminiModelText || 'gemini-2.5-pro',
-      instruction: getProductionPipelineAgentInstruction(agentContext),
-      tools: isWizard ? [] : createProductionPipelineTools(toolContext),
-    });
-
-    // Sub-Agent 3: Timeline & Studio Editor
-    const timelineEditorAgent = new LlmAgent({
-      name: 'timeline_editor_agent',
-      description: 'Shine AI Studio Video Editor: Modifies video timeline, trims clips, overlays text, applies transitions/effects, and syncs subtitles.',
-      model: EnvConfig.geminiModelAgent || EnvConfig.geminiModelText || 'gemini-2.5-pro',
-      instruction: getTimelineEditorAgentInstruction(agentContext),
-      tools: isWizard ? [] : createTimelineEditorTools(toolContext),
-    });
-
-    // Root Agent: Main Orchestrator
-    const rootAgent = new LlmAgent({
-      name: isWizard ? 'shine_master_plan_architect' : 'shine_copilot_agent',
-      description: isWizard ? 'Shine AI Master Screenplay & Series Architect' : 'Shine AI Production Director Copilot Agent',
-      model: EnvConfig.geminiModelAgent || EnvConfig.geminiModelText || 'gemini-2.5-pro',
-      instruction: systemInstruction,
-      tools: isWizard ? createMasterPlanTools(toolContext) : createChatbotTools(toolContext),
-      subAgents: [masterPlanAgent, productionPipelineAgent, timelineEditorAgent],
-      beforeToolCallback: beforeTool,
-      afterToolCallback: afterTool,
-      beforeModelCallback: rateLimitCallback,
-    });
-
-    const runner = new InMemoryRunner({
-      agent: rootAgent,
-      appName: 'shine_studio',
-    });
-
     const wizardSyncInstruction = isWizard
-      ? `\n\n(CRITICAL REQUIREMENT: If the user approves or confirms to proceed, call create_series. Otherwise, if refining the plan, output the revised Master Plan JSON inside a \`\`\`master_plan \`\`\` code block.)`
+      ? `\n\n[WIZARD MODE DIRECTIVE: You are in Step 3 of the Series Creation Wizard.
+- If the creator asks to create the series, launch the project, start episode 1, or enter workspace (e.g. "create series", "launch project", "start project"): Call the \`create_series\` tool with the finalized plan parameters so the series is saved into the database and the workspace opens automatically.
+- Otherwise, if discussing or refining the story, characters, or episode arcs: Output the updated Master Plan JSON inside a \`\`\`master_plan \`\`\` code block so the Wizard UI previews it live.]`
       : '';
     const cleanUserMsg = (params.userMessage || '').trim();
-    const localizedMessage = `${cleanUserMsg}\n\n[MANDATORY CONVERSATION DIRECTIVE: You MUST write your entire response, explanations, reasoning thoughts, and suggestions in the EXACT SAME LANGUAGE as the user's message above. If the user is writing in English, respond in English. If the user is writing in Vietnamese, respond in Vietnamese. DO NOT switch conversation language to Spanish, Chinese, or any other language unless the user directly speaks in that language.]${wizardSyncInstruction}`;
+    
+    // Build live project & episode data context snapshot from database
+    const liveContext = await buildLiveContextSnapshot(params.seriesId, params.episodeId, params.context);
+
+    const localizedMessage = `=== LIVE PROJECT & EPISODE CONTEXT ===\n${liveContext}\n=======================================\n\n${cleanUserMsg}\n\n[MANDATORY CONVERSATION DIRECTIVE: You MUST write your entire response, explanations, reasoning thoughts, and suggestions in the EXACT SAME LANGUAGE as the user's message above. If the user is writing in English, respond in English. If the user is writing in Vietnamese, respond in Vietnamese. DO NOT switch conversation language to Spanish, Chinese, or any other language unless the user directly speaks in that language.]${wizardSyncInstruction}`;
 
     const sanitizeMediaUrl = (text: string) => {
       if (!text || typeof text !== 'string') return text;
@@ -447,66 +403,106 @@ export class ChatbotAgent {
     };
 
     try {
-        Logger.info(`[ChatbotAgent] Running Google ADK agent for user ${params.userId}...`);
+      Logger.info(`[ChatbotAgent] Running ADK session (${sessionId}) for user ${params.userId}...`);
 
-        const generator = runner.runEphemeral({
+      await runWithChatContext(
+        {
           userId: params.userId,
-          newMessage: createUserContent(localizedMessage),
-          runConfig: {
-            streamingMode: StreamingMode.SSE
-          }
-        });
+          seriesId: params.seriesId,
+          episodeId: params.episodeId,
+          contextData: params.context,
+          onItemUpdated: params.onItemUpdated,
+          onProgress: params.onProgress,
+          onToolCall: handleToolCallEvent,
+          onChunk: params.onChunk,
+        },
+        async () => {
+          const generator = runner.runAsync({
+            userId: params.userId,
+            sessionId,
+            newMessage: createUserContent(localizedMessage),
+            runConfig: {
+              streamingMode: StreamingMode.SSE
+            }
+          });
 
-        for await (const event of generator) {
-          const isPartial = Boolean((event as any).partial);
-          if (event.content?.parts) {
-            for (const part of event.content.parts) {
+          for await (const event of generator) {
+            const isPartial = Boolean((event as any).partial);
+            if (event.content?.parts) {
+              for (const part of event.content.parts) {
                 if (part.text) {
-                const cleanedText = sanitizeMediaUrl(part.text);
-                if (isPartial) {
-                  receivedPartialChunks = true;
-                  fullText += cleanedText;
-                  params.onChunk(cleanedText);
-                } else if (!receivedPartialChunks) {
-                  // Only emit non-partial text if no streaming partial chunks were received
-                  fullText += cleanedText;
-                  params.onChunk(cleanedText);
+                  const cleanedText = sanitizeMediaUrl(part.text);
+                  if (isPartial) {
+                    receivedPartialChunks = true;
+                    fullText += cleanedText;
+                    params.onChunk(cleanedText);
+                  } else if (!receivedPartialChunks) {
+                    // Only emit non-partial text if no streaming partial chunks were received
+                    fullText += cleanedText;
+                    params.onChunk(cleanedText);
+                  }
                 }
-              }
 
                 const p = part as any;
                 if (p.functionCall) {
-                const toolName = p.functionCall.name;
-                const toolArgs = p.functionCall.args || {};
-                Logger.info(`[ChatbotAgent-ADK] Tool Call: ${toolName}`, toolArgs);
+                  const toolName = p.functionCall.name;
+                  const toolArgs = p.functionCall.args || {};
+                  Logger.info(`[ChatbotAgent-ADK] Tool Call: ${toolName}`, toolArgs);
 
-                handleToolCallEvent({
-                  name: toolName,
-                  args: toolArgs,
-                  status: 'running' as const,
-                });
+                  handleToolCallEvent({
+                    name: toolName,
+                    args: toolArgs,
+                    status: 'running' as const,
+                  });
                 }
 
                 if (p.functionResponse) {
-                const respName = p.functionResponse.name;
-                const respResult = p.functionResponse.response;
-                Logger.info(`[ChatbotAgent-ADK] Tool Response: ${respName}`, respResult);
+                  const respName = p.functionResponse.name;
+                  const respResult = p.functionResponse.response;
+                  Logger.info(`[ChatbotAgent-ADK] Tool Response: ${respName}`, respResult);
 
-                handleToolCallEvent({
-                  name: respName,
-                  status: respResult?.success !== false ? 'success' : 'error',
-                  result: respResult,
-                });
+                  handleToolCallEvent({
+                    name: respName,
+                    status: respResult?.success !== false ? 'success' : 'error',
+                    result: respResult,
+                  });
+                }
               }
+            }
+
+            if (event.errorMessage) {
+              Logger.warn(`[ChatbotAgent-ADK] Event error notice (code=${event.errorCode}): ${event.errorMessage}`);
+              let userFriendlyErr = event.errorMessage;
+              if (userFriendlyErr.includes('RESOURCE_EXHAUSTED') || userFriendlyErr.includes('429') || userFriendlyErr.includes('rate limit')) {
+                userFriendlyErr = '⚠️ AI quota or rate limit exceeded (RESOURCE_EXHAUSTED). Please wait a few seconds and retry.';
+              } else if (userFriendlyErr.includes('Context variable not found')) {
+                userFriendlyErr = `⚠️ Internal prompt error: ${userFriendlyErr}`;
+              } else {
+                userFriendlyErr = `⚠️ AI execution notice: ${userFriendlyErr}`;
+              }
+              const formattedErr = `\n\n${userFriendlyErr}`;
+              fullText += formattedErr;
+              params.onChunk(formattedErr);
             }
           }
         }
-      } catch (err: any) {
-        Logger.error(`[ChatbotAgent-ADK] Error running ADK runner: ${err.message}`, err);
-        const errMsg = `\n\n❌ **Error:** ${err.message || 'Execution error'}`;
-        fullText += errMsg;
-        params.onChunk(errMsg);
+      );
+    } catch (err: any) {
+      Logger.error(`[ChatbotAgent-ADK] Error running ADK runner: ${err.message}`, err);
+      let errMsgText = err.message || 'Execution error';
+      if (errMsgText.includes('RESOURCE_EXHAUSTED') || errMsgText.includes('429') || errMsgText.includes('rate limit')) {
+        errMsgText = '⚠️ AI quota or rate limit exceeded (RESOURCE_EXHAUSTED). Please wait a few seconds and retry.';
       }
+      const errMsg = `\n\n❌ ${errMsgText}`;
+      fullText += errMsg;
+      params.onChunk(errMsg);
+    }
+
+    if (!fullText.trim() && executedToolCalls.length === 0) {
+      const fallbackNotice = '⚠️ The AI agent did not return a response. Please try rephrasing or clicking retry.';
+      fullText = fallbackNotice;
+      params.onChunk(fallbackNotice);
+    }
 
     // Extract and emit direct Master Plan JSON data if generated/refined directly in response
     const masterPlanCodeMatch = fullText.match(/```(?:master_plan|json)?\s*(\{[\s\S]*?\})\s*```/i);
@@ -588,6 +584,34 @@ export class ChatbotAgent {
       }
 
       Logger.info(`[ChatbotAgent] Extracted direct Master Plan for "${extractedPlan.title}" (${(extractedPlan.characters || []).length} characters, ${(extractedPlan.episodes || []).length} episodes)`);
+      
+      // Update memory context snapshot so subsequent turns retain the updated plan
+      if (params.context) {
+        params.context.currentPlan = extractedPlan;
+        if (extractedPlan.title) params.context.title = extractedPlan.title;
+        if (extractedPlan.genre) params.context.genre = extractedPlan.genre;
+        if (extractedPlan.synopsis) params.context.synopsis = extractedPlan.synopsis;
+        if (extractedPlan.country) params.context.country = extractedPlan.country;
+        if (extractedPlan.language) params.context.language = extractedPlan.language;
+      }
+
+      // Persist to database if series already exists
+      if (params.seriesId && !params.seriesId.startsWith('wiz_') && !params.seriesId.startsWith('temp_')) {
+        try {
+          const db = await getDatabaseProvider();
+          await db.updateSeries(params.seriesId, {
+            master_plan: extractedPlan,
+            title: extractedPlan.title,
+            synopsis: extractedPlan.synopsis || extractedPlan.storyCore?.coreAttraction || extractedPlan.story_core?.core_attraction,
+            genre: extractedPlan.genre,
+            characters: extractedPlan.characters,
+          });
+          Logger.info(`[ChatbotAgent] Persisted updated master_plan to DB for series ${params.seriesId}`);
+        } catch (e: any) {
+          Logger.warn(`[ChatbotAgent] Failed to update series master_plan in DB: ${e.message}`);
+        }
+      }
+
       params.onItemUpdated?.({ type: 'master_plan_updated', data: extractedPlan });
       params.onItemUpdated?.({ type: 'master_plan_generated', data: extractedPlan });
     }
@@ -625,16 +649,21 @@ User Message: "${params.userMessage}"
 Executed Tools: ${executedToolCalls.map(tc => tc.name).join(', ') || 'None'}
 AI Response Summary: "${fullText.slice(0, 500)}"`;
 
-        const rawJson = await geminiClient.generateText({
-          prompt,
+        const rawJson = await aiProviderRouter.generateJSON(prompt, {}, {
           systemInstruction: 'You are an AI production assistant that generates 3-4 next-step action suggestion chips in JSON format in the exact language of the conversation.',
-          jsonMode: true,
         });
 
         if (rawJson) {
-          const parsed = JSON.parse(rawJson);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            extractedSuggestions = parsed.filter((p: any) => p.label && p.prompt);
+          let items: any[] = [];
+          if (Array.isArray(rawJson)) {
+            items = rawJson;
+          } else if (typeof rawJson === 'object' && Array.isArray((rawJson as any).suggestions)) {
+            items = (rawJson as any).suggestions;
+          } else if (typeof rawJson === 'object' && Array.isArray((rawJson as any).data)) {
+            items = (rawJson as any).data;
+          }
+          if (items.length > 0) {
+            extractedSuggestions = items.filter((p: any) => p && p.label && p.prompt);
           }
         }
       } catch (err: any) {

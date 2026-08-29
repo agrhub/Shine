@@ -29,7 +29,7 @@ export function getUserId(req: Request | any, defaultUserId = ''): string {
     } catch {}
   }
 
-  return req?.body?.userId || req?.query?.userId || defaultUserId;
+  return defaultUserId;
 }
 
 /**

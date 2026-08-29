@@ -10,11 +10,11 @@ export const aiAgenticRouter = Router();
  * Universal Google ADK Streaming SSE Endpoint
  */
 const handleAgenticStream = async (req: Request, res: Response): Promise<void> => {
-  const { sessionId, seriesId, episodeId, message, context } = req.body;
-  const userId = getUserId(req, '') || req.body.userId;
+  const { session_id, series_id, episode_id, message, context } = req.body;
+  const userId = getUserId(req);
 
   if (!userId) {
-    res.status(401).json({ code: 401, data: null, message: 'Authentication required: userId is missing' });
+    res.status(401).json({ code: 401, data: null, message: 'Authentication required: user_id is missing' });
     return;
   }
 
@@ -23,7 +23,7 @@ const handleAgenticStream = async (req: Request, res: Response): Promise<void> =
     return;
   }
 
-  const activeSessionId = sessionId || (seriesId ? `${seriesId}_${episodeId || 'main'}` : `wiz_${Date.now()}`);
+  const activeSessionId = session_id || (series_id ? `${series_id}_${episode_id || 'main'}` : `wiz_${Date.now()}`);
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -35,12 +35,12 @@ const handleAgenticStream = async (req: Request, res: Response): Promise<void> =
   };
 
   try {
-    Logger.info(`[AgenticStream] Starting stream for user=${userId}, session=${activeSessionId}, series=${seriesId || 'none'}`);
+    Logger.info(`[AgenticStream] Starting stream for user=${userId}, session=${activeSessionId}, series=${series_id || 'none'}`);
 
     await ChatbotAgent.chatStream({
       userId,
-      seriesId: seriesId || activeSessionId,
-      episodeId: episodeId || 'main',
+      seriesId: series_id || activeSessionId,
+      episodeId: episode_id || 'main',
       userMessage: message,
       context,
       onChunk: (chunk: string) => {
@@ -60,11 +60,11 @@ const handleAgenticStream = async (req: Request, res: Response): Promise<void> =
       },
     });
 
-    sendEvent('done', { status: 'completed', sessionId: activeSessionId });
-    res.end();
+    sendEvent('done', { status: 'completed', session_id: activeSessionId });
   } catch (err: any) {
-    Logger.error(`[AgenticStream] Stream error: ${err.message}`);
+    Logger.error(`[AgenticStream] Error: ${err.message}`);
     sendEvent('error', { message: err.message });
+  } finally {
     res.end();
   }
 };
@@ -73,28 +73,27 @@ aiAgenticRouter.post('/stream', handleAgenticStream);
 aiAgenticRouter.post('/', handleAgenticStream);
 
 /**
- * GET /api/ai/agentic/history/:seriesId
- * Fetch full continuous conversation history for a series or session
+ * GET /api/ai/agentic/history/:sessionId
+ * Retrieve stored conversation history for a series or wizard session
  */
-aiAgenticRouter.get('/history/:seriesId', async (req: Request, res: Response): Promise<void> => {
+aiAgenticRouter.get('/history/:sessionId', async (req: Request, res: Response): Promise<void> => {
   try {
-    const seriesId = req.params.seriesId;
-    const userId = getUserId(req, '') || (req.query.userId as string);
+    const { sessionId } = req.params;
+    const userId = getUserId(req);
 
     if (!userId) {
-      res.status(401).json({ code: 401, data: null, message: 'Authentication required: userId is missing' });
+      res.status(401).json({ code: 401, data: null, message: 'Authentication required: user_id is missing' });
       return;
     }
 
-    const messages = await ChatbotAgent.getSeriesHistory(userId, seriesId);
+    const messages = await ChatbotAgent.getSeriesHistory(userId, sessionId);
 
     res.json({
       code: 200,
       data: {
-        seriesId,
         messages,
       },
-      message: 'Agentic session history fetched successfully',
+      message: 'Conversation history loaded',
     });
   } catch (err: any) {
     res.status(500).json({
@@ -111,27 +110,27 @@ aiAgenticRouter.get('/history/:seriesId', async (req: Request, res: Response): P
  */
 aiAgenticRouter.post('/transfer-session', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { oldSessionId, newSeriesId } = req.body;
-    const userId = getUserId(req, '') || req.body.userId;
+    const { old_session_id, new_series_id } = req.body;
+    const userId = getUserId(req);
 
     if (!userId) {
-      res.status(401).json({ code: 401, data: null, message: 'Authentication required: userId is missing' });
+      res.status(401).json({ code: 401, data: null, message: 'Authentication required: user_id is missing' });
       return;
     }
 
-    if (!oldSessionId || !newSeriesId) {
-      res.status(400).json({ code: 400, data: null, message: 'oldSessionId and newSeriesId are required' });
+    if (!old_session_id || !new_series_id) {
+      res.status(400).json({ code: 400, data: null, message: 'old_session_id and new_series_id are required' });
       return;
     }
 
-    const transferredCount = await ChatbotAgent.transferSession(userId, oldSessionId, newSeriesId);
+    const transferredCount = await ChatbotAgent.transferSession(userId, old_session_id, new_series_id);
 
     res.json({
       code: 200,
       data: {
-        transferredCount,
-        oldSessionId,
-        newSeriesId,
+        transferred_count: transferredCount,
+        old_session_id,
+        new_series_id,
       },
       message: `Transferred ${transferredCount} messages from session to series`,
     });

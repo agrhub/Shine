@@ -340,7 +340,7 @@ echo ""
 echo "[Step 6/6] Configuring Google Cloud Scheduler for Flow Token Sync..."
 
 JOB_NAME="shine-flow-token-sync"
-SYNC_URI="$SHINE_APP_URL/api/admin/flow-accounts/sync"
+SYNC_URI="$SHINE_APP_URL/api/flow-accounts/sync"
 
 if gcloud scheduler jobs describe "$JOB_NAME" --location "$REGION" >/dev/null 2>&1; then
   echo "Updating Cloud Scheduler job: $JobName (Schedule: */5 * * * *)..."

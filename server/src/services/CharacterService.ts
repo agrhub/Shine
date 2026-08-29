@@ -3,30 +3,190 @@ import { StorageFactory } from '@/services/storage/StorageFactory.js';
 import { Logger } from '@/utils/logger.js';
 import { getVisualStylePrompt } from '../constants/VisualStyles.js';
 import { PromptLoader } from '@/utils/PromptLoader.js';
+import { getDatabaseProvider } from '@/database/index.js';
+import { EntityNormalizer } from '@/utils/EntityNormalizer.js';
+import { CreditService } from '@/services/CreditService.js';
+import type { CharacterSeriesEntity } from '@/types.js';
 
-export interface CharacterPersona {
-  id: string;
-  name: string;
-  role: 'protagonist' | 'antagonist' | 'supporter';
-  description: string;
-  facialAnchors?: {
-    frontAnchorUrl: string;
-    sideAnchorUrl: string;
-    expressionSheetUrl: string;
-    allAnchors?: Array<{
-      id: string;
-      name: string;
-      landmarkType: string;
-      matchScore: number;
-      status: 'locked';
-      imageUrl: string;
-    }>;
-    loraModelId: string;
-  };
-  wardrobe: Array<{ id: string; name: string; category: string; imageUrl?: string }>;
-}
+// export interface CharacterPersona {
+//   id: string;
+//   name: string;
+//   role: 'protagonist' | 'antagonist' | 'supporter';
+//   description: string;
+//   facialAnchors?: {
+//     frontAnchorUrl: string;
+//     sideAnchorUrl: string;
+//     expressionSheetUrl: string;
+//     allAnchors?: Array<{
+//       id: string;
+//       name: string;
+//       landmarkType: string;
+//       matchScore: number;
+//       status: 'locked';
+//       imageUrl: string;
+//     }>;
+//     loraModelId: string;
+//   };
+//   wardrobe: Array<{ id: string; name: string; category: string; imageUrl?: string }>;
+// }
 
 export class CharacterService {
+  /**
+   * List characters for a series or aggregated across all series
+   */
+  async listCharacters(seriesId?: string): Promise<CharacterSeriesEntity[]> {
+    const db = await getDatabaseProvider();
+    if (seriesId) {
+      const series = await db.getSeriesById(seriesId);
+      const rawChars = series?.characters || [];
+      return (Array.isArray(rawChars) ? rawChars : [])
+        .map((c: any) => EntityNormalizer.normalizeCharacter(c))
+        .filter((c): c is CharacterSeriesEntity => c !== null);
+    }
+
+    const allSeries = await db.getSeriesList();
+    const aggregated: CharacterSeriesEntity[] = [];
+    for (const s of allSeries) {
+      const chars = s.characters || [];
+      if (Array.isArray(chars)) {
+        for (let i = 0; i < chars.length; i++) {
+          const norm = EntityNormalizer.normalizeCharacter(chars[i]);
+          if (norm) {
+            aggregated.push({ ...norm, series_id: s.id });
+          }
+        }
+      }
+    }
+    return aggregated;
+  }
+
+  /**
+   * Create and register a character into a series
+   */
+  async createCharacter(seriesId: string, data: any, userId?: string): Promise<CharacterSeriesEntity> {
+    const db = await getDatabaseProvider();
+    const charId = data.id || `char_${Date.now()}`;
+    const normalized = EntityNormalizer.normalizeCharacter({ ...data, id: charId, series_id: seriesId });
+    if (!normalized) {
+      throw new Error('Invalid character data: name is required');
+    }
+
+    if (seriesId) {
+      const series = await db.getSeriesById(seriesId);
+      if (series) {
+        const characters = Array.isArray(series.characters) ? [...series.characters] : [];
+        const existingIdx = characters.findIndex((c: any) => c.id === charId || c.name === normalized.name);
+        if (existingIdx >= 0) {
+          characters[existingIdx] = { ...characters[existingIdx], ...normalized };
+        } else {
+          characters.push(normalized);
+        }
+        await db.updateSeries(seriesId, { characters });
+      }
+    }
+
+    return normalized;
+  }
+
+  /**
+   * Generate portrait avatar for a character
+   */
+  async generatePortrait(params: {
+    series_id?: string;
+    character_id?: string;
+    name?: string;
+    age?: number;
+    gender?: string;
+    nationality?: string;
+    visual_traits?: string;
+    prompt?: string;
+    style?: string;
+    visual_style?: string;
+    visual_style_prompt?: string;
+    aspect_ratio?: string;
+    user_id?: string;
+  }): Promise<{ avatar_url: string; character: CharacterSeriesEntity }> {
+    const db = await getDatabaseProvider();
+    let { series_id, character_id, name, age, gender, nationality, visual_traits, prompt, style, visual_style, visual_style_prompt, aspect_ratio, user_id } = params;
+
+    let targetSeries: any = null;
+    let dbChar: any = null;
+
+    if (series_id) {
+      targetSeries = await db.getSeriesById(series_id);
+      const chars = targetSeries?.characters || [];
+      dbChar = chars.find((c: any) => c.id === character_id || c.name === name);
+      if (dbChar) {
+        name = dbChar.name || name;
+        visual_traits = dbChar.visual_traits || dbChar.traits || visual_traits;
+        age = dbChar.age || age;
+        gender = dbChar.gender || gender;
+        nationality = dbChar.nationality || nationality;
+      }
+    }
+
+    const resolvedStyle = visual_style || targetSeries?.visual_style || 'realistic';
+    const resolvedStylePrompt = visual_style_prompt || targetSeries?.visual_style_prompt || getVisualStylePrompt(resolvedStyle);
+    const targetAspect: '9:16' | '1:1' | '16:9' | '4:3' = (aspect_ratio === '1:1' || aspect_ratio === '16:9' || aspect_ratio === '4:3') ? aspect_ratio : '9:16';
+
+    const charName = name || dbChar?.name || 'Character';
+    const charTraits = visual_traits || dbChar?.visual_traits || dbChar?.traits || 'Cinematic character portrait';
+    const ageTag = age ? `age: ${age}-year-old` : '';
+    const genderTag = gender && gender !== 'neutral' ? `gender: ${gender}` : '';
+    const nationalityTag = nationality ? `nationality: ${nationality}` : '';
+    const fullPrompt =
+      prompt ||
+      `${resolvedStylePrompt}, portrait of ${charName}, ${ageTag}, ${genderTag}, ${nationalityTag}, ${charTraits}, ${style || 'cinematic lighting'}, age-accurate facial features, character continuity reference.`;
+
+    if (user_id) {
+      try {
+        await CreditService.deductUserCredits(user_id, 'characterAnchors', 'Character Portrait Generation', `Generated portrait for character ${charName}`);
+      } catch (cErr: any) {
+        Logger.warn(`[CharacterService] Credit deduction notice: ${cErr.message}`);
+      }
+    }
+
+    const imgResult = await aiProviderRouter.generateImage(fullPrompt, {
+      aspectRatio: targetAspect,
+    });
+
+    if (!imgResult || !imgResult.url) {
+      throw new Error('Failed to generate character portrait');
+    }
+
+    const s3 = await StorageFactory.uploadMedia(imgResult.url, 'images', 'png', imgResult.mimeType || 'image/png');
+    const avatarUrl = `/api/assets/file/${s3.key}`;
+
+    const normalizedChar = EntityNormalizer.normalizeCharacter({
+      ...(dbChar || {}),
+      id: character_id || dbChar?.id || `char_${Date.now()}`,
+      name: charName,
+      age,
+      gender,
+      nationality,
+      visual_traits: charTraits,
+      avatar: avatarUrl,
+      image_url: avatarUrl,
+    });
+
+    if (!normalizedChar) {
+      throw new Error(`Failed to normalize character ${charName}`);
+    }
+
+    if (series_id && targetSeries) {
+      const chars = Array.isArray(targetSeries.characters) ? [...targetSeries.characters] : [];
+      const matchIdx = chars.findIndex((c: any) => c.id === normalizedChar.id || c.name === normalizedChar.name);
+      if (matchIdx >= 0) {
+        chars[matchIdx] = { ...chars[matchIdx], ...normalizedChar, avatar: avatarUrl, image_url: avatarUrl };
+      } else {
+        chars.push(normalizedChar);
+      }
+      await db.updateSeries(series_id, { characters: chars });
+    }
+
+    return { avatar_url: avatarUrl, character: normalizedChar };
+  }
+
   private getAnchorDefinitions(charName: string, desc: string = '', age?: number, gender?: string, wardrobeDesc?: string, visualStyle?: string, visualStylePrompt?: string) {
     const ageTag = age ? `${age}-year-old ` : '';
     const genderTag = gender && gender !== 'neutral' ? `${gender} ` : '';
@@ -57,7 +217,20 @@ export class CharacterService {
     ];
   }
 
-  async extractFacialAnchors(characterId: string, charName: string, desc: string = '', age?: number, gender?: string, wardrobeDesc?: string, existingFrontalUrl?: string, visualStyle?: string, visualStylePrompt?: string): Promise<CharacterPersona['facialAnchors']> {
+  async extractFacialAnchors(characterId: string, charName: string, desc: string = '', age?: number, gender?: string, wardrobeDesc?: string, existingFrontalUrl?: string, visualStyle?: string, visualStylePrompt?: string): Promise<{
+    frontAnchorUrl: string;
+    sideAnchorUrl: string;
+    expressionSheetUrl: string;
+    allAnchors?: Array<{
+      id: string;
+      name: string;
+      landmarkType: string;
+      matchScore: number;
+      status: 'locked';
+      imageUrl: string;
+    }>;
+    loraModelId: string;
+  }> {
     const loraModelId = `lora_${charName.toLowerCase().replace(/\s+/g, '_')}_v1`;
     const anchorDefinitions = this.getAnchorDefinitions(charName, desc, age, gender, wardrobeDesc, visualStyle, visualStylePrompt);
 
@@ -110,42 +283,45 @@ export class CharacterService {
       };
     }
 
-    // ─── STEP 2: Generate Remaining 7 Angles referencing the Frontal Image ─────
-    Logger.info(`[CharacterService] Generating remaining 7 angles referencing primary frontal face (${frontalUrl || 'default'})...`);
-
-    const remainingDefs = anchorDefinitions.slice(1);
-    const referencePool = frontalUrl ? [frontalUrl] : [];
+    // ─── STEP 2: Parallel Batch Generation with Continuity (anc-2 through anc-8)
+    const remainingIndices = [1, 2, 3, 4, 5, 6, 7];
 
     const remainingResults = await Promise.all(
-      remainingDefs.map(async (anc, idx) => {
-        const actualIndex = idx + 1;
+      remainingIndices.map(async (idx) => {
+        const anc = anchorDefinitions[idx];
+        const refPool = frontalUrl ? [frontalUrl] : [];
+        const consistentPrompt = frontalUrl
+          ? `${anc.prompt} Exact character continuity matching reference image, identical facial features, eyes, jawline, hair, and clothing.`
+          : anc.prompt;
+
         try {
-          const consistentPrompt = `${anc.prompt} Exact character continuity matching reference image, identical facial features, eyes, jawline, hair, and clothing.`;
           const res = await aiProviderRouter.generateImage(consistentPrompt, {
             aspectRatio: '9:16',
-            characterReferences: referencePool,
-            imageInputs: referencePool,
+            characterReferences: refPool,
+            imageInputs: refPool,
           });
 
           if (res?.url) {
             const s3 = await StorageFactory.uploadMedia(res.url, 'images', 'png', res.mimeType || 'image/png');
+            const anchorUrl = `/api/assets/file/${s3.key}`;
             return {
-              index: actualIndex,
+              index: idx,
               anchor: {
                 id: anc.id,
                 name: anc.name,
                 landmarkType: anc.landmarkType,
                 matchScore: anc.matchScore,
                 status: 'locked' as const,
-                imageUrl: `/api/assets/file/${s3.key}`,
+                imageUrl: anchorUrl,
               },
             };
           }
         } catch (err: any) {
           Logger.warn(`[CharacterService] Anchor generation failed for ${anc.name}: ${err.message}`);
         }
+
         return {
-          index: actualIndex,
+          index: idx,
           anchor: {
             id: anc.id,
             name: anc.name,
@@ -204,7 +380,67 @@ export class CharacterService {
       imageUrl: finalUrl,
     };
   }
+
+  async generateWardrobeLookbook(params: {
+    character_id: string;
+    variant_id?: string;
+    variant_name?: string;
+    char_name: string;
+    clothing_desc: string;
+    char_traits?: string;
+    age?: number;
+    gender?: string;
+    nationality?: string;
+    reference_avatar_url?: string;
+    visual_style?: string;
+    visual_style_prompt?: string;
+    user_id?: string;
+  }): Promise<{ image_url: string }> {
+    const { char_name, clothing_desc, char_traits, age, gender, nationality, reference_avatar_url, visual_style, visual_style_prompt, user_id } = params;
+    const styleModifier = visual_style_prompt || getVisualStylePrompt(visual_style || 'realistic');
+    const ageTag = age ? `${age}-year-old ` : '';
+    const genderTag = gender && gender !== 'neutral' ? `${gender} ` : '';
+    const natTag = nationality ? `${nationality} ` : '';
+
+    const physicalCharacteristics = [
+      natTag,
+      ageTag,
+      genderTag,
+      char_traits || '',
+    ].filter(Boolean).join(' ').trim() || 'Authentic cinematic character';
+
+    const wardrobePrompt = PromptLoader.render('assets/character_sheet', {
+      characterName: char_name,
+      physicalCharacteristics,
+      clothingAndAccessories: clothing_desc || 'Signature character wardrobe outfit',
+      visualStyle: styleModifier,
+      referenceImageUrl: reference_avatar_url,
+    });
+
+    if (user_id) {
+      try {
+        await CreditService.deductUserCredits(user_id, 'characterAnchors', 'Wardrobe Lookbook Generation', `Generated 16:9 2-in-1 wardrobe sheet for ${char_name}`);
+      } catch (cErr: any) {
+        Logger.warn(`[CharacterService] Credit deduction notice: ${cErr.message}`);
+      }
+    }
+
+    const refPool = reference_avatar_url ? [reference_avatar_url] : [];
+    const res = await aiProviderRouter.generateImage(wardrobePrompt, {
+      aspectRatio: '16:9',
+      characterReferences: refPool,
+      imageInputs: refPool,
+    });
+
+    if (!res || !res.url) {
+      throw new Error(`Failed to generate 16:9 wardrobe lookbook for ${char_name}`);
+    }
+
+    const s3 = await StorageFactory.uploadMedia(res.url, 'images', 'png', res.mimeType || 'image/png');
+    const finalUrl = `/api/assets/file/${s3.key}`;
+
+    return { image_url: finalUrl };
+  }
 }
 
 export const characterService = new CharacterService();
-

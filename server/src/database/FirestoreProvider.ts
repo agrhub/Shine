@@ -293,82 +293,82 @@ export class FirestoreProvider implements IDatabaseProvider {
 
   // ==================== Timeline & Versions ====================
   public async saveTimeline(
-    episodeId: string,
-    timelineData: any,
+    episode_id: string,
+    timeline_data: any,
     author: { id: string; name: string; avatar?: string },
-    changeSummary?: string
-  ): Promise<{ versionId: string; versionNumber: number; updatedAt: string }> {
+    change_summary?: string
+  ): Promise<{ version_id: string; version_number: number; updated_at: string }> {
     const now = new Date().toISOString();
-    const versionId = `ver_${nanoid(10)}`;
+    const version_id = `ver_${nanoid(10)}`;
 
-    const historySnap = await this.db.collection('timeline_versions').where('episodeId', '==', episodeId).get();
-    const versionNumber = historySnap.size + 1;
+    const historySnap = await this.db.collection('timeline_versions').where('episode_id', '==', episode_id).get();
+    const version_number = historySnap.size + 1;
 
     const versionDoc = {
-      id: versionId,
-      episodeId,
-      versionNumber,
-      timelineData,
+      id: version_id,
+      episode_id,
+      version_number,
+      timeline_data,
       author,
-      changeSummary: changeSummary || 'Timeline state update',
+      change_summary: change_summary || 'Timeline state update',
       created_at: now,
     };
 
     const batch = this.db.batch();
-    batch.set(this.db.collection('timeline_versions').doc(versionId), sanitizeForFirestore(versionDoc));
-    batch.set(this.db.collection('timelines').doc(episodeId), sanitizeForFirestore({
-      episodeId,
-      versionId,
-      versionNumber,
-      timelineData,
+    batch.set(this.db.collection('timeline_versions').doc(version_id), sanitizeForFirestore(versionDoc));
+    batch.set(this.db.collection('timelines').doc(episode_id), sanitizeForFirestore({
+      episode_id,
+      version_id,
+      version_number,
+      timeline_data,
       updated_at: now,
     }));
 
     await batch.commit();
-    return { versionId, versionNumber, updatedAt: now };
+    return { version_id, version_number, updated_at: now };
   }
 
-  public async getLatestTimeline(episodeId: string): Promise<any | null> {
-    const doc = await this.db.collection('timelines').doc(episodeId).get();
+  public async getLatestTimeline(episode_id: string): Promise<any | null> {
+    const doc = await this.db.collection('timelines').doc(episode_id).get();
     if (!doc.exists) return null;
     return doc.data();
   }
 
-  public async getTimelineHistory(episodeId: string, limit = 20, offset = 0): Promise<{ total: number; history: any[] }> {
-    const query = this.db.collection('timeline_versions').where('episodeId', '==', episodeId);
+  public async getTimelineHistory(episode_id: string, limit = 20, offset = 0): Promise<{ total: number; history: any[] }> {
+    const query = this.db.collection('timeline_versions').where('episode_id', '==', episode_id);
     try {
       const snapshot = await query.get();
       const list = snapshot.docs
         .map(doc => doc.data())
-        .sort((a: any, b: any) => (b.versionNumber || 0) - (a.versionNumber || 0));
+        .sort((a: any, b: any) => (b.version_number || 0) - (a.version_number || 0));
       return { total: list.length, history: list.slice(offset, offset + limit) };
     } catch {
       return { total: 0, history: [] };
     }
   }
 
-  public async getTimelineVersion(episodeId: string, versionId: string): Promise<any | null> {
-    const doc = await this.db.collection('timeline_versions').doc(versionId).get();
+  public async getTimelineVersion(episode_id: string, version_id: string): Promise<any | null> {
+    const doc = await this.db.collection('timeline_versions').doc(version_id).get();
     if (!doc.exists) return null;
     return doc.data();
   }
 
   public async restoreTimelineVersion(
-    episodeId: string,
-    versionId: string,
+    episode_id: string,
+    version_id: string,
     author: { id: string; name: string; avatar?: string },
     reason?: string
   ): Promise<any> {
-    const version = await this.getTimelineVersion(episodeId, versionId);
-    if (!version) throw new Error(`Version ${versionId} not found`);
+    const version = await this.getTimelineVersion(episode_id, version_id);
+    if (!version) throw new Error(`Version ${version_id} not found`);
 
     const result = await this.saveTimeline(
-      episodeId,
-      version.timelineData,
+      episode_id,
+      version.timeline_data,
       author,
-      `Restored from version ${version.versionNumber}: ${reason || ''}`
+      `Restored from version ${version.version_number}: ${reason || ''}`
     );
-    return { ...result, timelineData: version.timelineData };
+    return { ...result, timeline_data: version.timeline_data };
   }
 
   // ==================== Flow Accounts ====================
@@ -457,17 +457,17 @@ export class FirestoreProvider implements IDatabaseProvider {
   }
 
   public async getAssets(filter?: {
-    userId?: string;
-    seriesId?: string;
+    user_id?: string;
+    series_id?: string;
     type?: string;
-    characterId?: string;
+    character_id?: string;
     search?: string;
   }): Promise<AssetEntity[]> {
     let query: FirebaseFirestore.Query = this.db.collection('assets');
-    if (filter?.userId) query = query.where('userId', '==', filter.userId);
-    if (filter?.seriesId) query = query.where('seriesId', '==', filter.seriesId);
+    if (filter?.user_id) query = query.where('user_id', '==', filter.user_id);
+    if (filter?.series_id) query = query.where('series_id', '==', filter.series_id);
     if (filter?.type) query = query.where('type', '==', filter.type);
-    if (filter?.characterId) query = query.where('characterId', '==', filter.characterId);
+    if (filter?.character_id) query = query.where('character_id', '==', filter.character_id);
 
     const snapshot = await query.get();
     let list = snapshot.docs.map(doc => doc.data() as AssetEntity);
@@ -502,11 +502,11 @@ export class FirestoreProvider implements IDatabaseProvider {
 
   // ==================== Worker Telemetry & Monitoring ====================
   public async recordWorkerHeartbeat(heartbeat: WorkerHeartbeatEntity): Promise<void> {
-    const id = heartbeat.worker_id || (heartbeat as any).workerId || `worker_${nanoid(8)}`;
+    const id = heartbeat.worker_id || `worker_${nanoid(8)}`;
     const record: WorkerHeartbeatEntity = {
       ...heartbeat,
       worker_id: id,
-      last_heartbeat: heartbeat.last_heartbeat || (heartbeat as any).lastHeartbeat || new Date().toISOString(),
+      last_heartbeat: heartbeat.last_heartbeat || new Date().toISOString(),
     };
     await this.db.collection('worker_heartbeats').doc(id).set(record, { merge: true });
   }
@@ -516,24 +516,21 @@ export class FirestoreProvider implements IDatabaseProvider {
     const now = Date.now();
     return snap.docs.map(doc => {
       const w = doc.data() as WorkerHeartbeatEntity;
-      const ageMs = now - new Date(w.last_heartbeat || (w as any).lastHeartbeat || 0).getTime();
+      const ageMs = now - new Date(w.last_heartbeat || 0).getTime();
       const status = ageMs > 120000 ? 'OFFLINE' : w.status;
       return { ...w, status };
     });
   }
 
   public async recordWorkerJob(job: WorkerJobEntity): Promise<void> {
-    const id = job.job_id || (job as any).jobId || `job_${nanoid(10)}`;
-    const docRef = this.db.collection('worker_jobs').doc(id);
-    const existing = (await docRef.get()).data() || {};
+    const id = job.job_id || `job_${nanoid(10)}`;
     const record: WorkerJobEntity = {
-      ...existing,
       ...job,
       job_id: id,
-      submitted_at: job.submitted_at || (job as any).submittedAt || (existing as any).submitted_at || (existing as any).submittedAt || new Date().toISOString(),
+      submitted_at: job.submitted_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    await docRef.set(record, { merge: true });
+    await this.db.collection('worker_jobs').doc(id).set(sanitizeForFirestore(record), { merge: true });
   }
 
   public async getWorkerJobs(filter?: { status?: string; limit?: number }): Promise<WorkerJobEntity[]> {
@@ -543,7 +540,7 @@ export class FirestoreProvider implements IDatabaseProvider {
     }
     const snap = await query.get();
     let list = snap.docs.map(doc => doc.data() as WorkerJobEntity);
-    list.sort((a, b) => new Date(b.updated_at || (b as any).updatedAt || b.submitted_at || (b as any).submittedAt || 0).getTime() - new Date(a.updated_at || (a as any).updatedAt || a.submitted_at || (a as any).submittedAt || 0).getTime());
+    list.sort((a, b) => new Date(b.updated_at || b.submitted_at || 0).getTime() - new Date(a.updated_at || a.submitted_at || 0).getTime());
     if (filter?.limit) list = list.slice(0, filter.limit);
     return list;
   }
@@ -558,7 +555,7 @@ export class FirestoreProvider implements IDatabaseProvider {
     const failedJobs = jobs.filter(j => j.status === 'FAILED');
 
     const avgCpu = activeWorkers.length > 0
-      ? Math.round(activeWorkers.reduce((acc, w) => acc + (w.cpu_usage_pct || (w as any).cpuUsagePct || 0), 0) / activeWorkers.length)
+      ? Math.round(activeWorkers.reduce((acc, w) => acc + (w.cpu_usage_pct || 0), 0) / activeWorkers.length)
       : 0;
 
     return {
@@ -576,5 +573,58 @@ export class FirestoreProvider implements IDatabaseProvider {
       workers: workers,
       active_jobs: activeJobs.concat(queuedJobs),
     };
+  }
+
+  // ==================== Pipeline Background Jobs ====================
+  public async savePipelineJob(job: any): Promise<any> {
+    const id = job.id || `job_${nanoid(12)}`;
+    const docRef = this.db.collection('pipeline_jobs').doc(id);
+    const existing = (await docRef.get()).data() || {};
+    const record = sanitizeForFirestore({
+      ...existing,
+      ...job,
+      id,
+      created_at: job.created_at || (existing as any).created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    await docRef.set(record, { merge: true });
+    return record;
+  }
+
+  public async getPipelineJobById(job_id: string): Promise<any | null> {
+    const doc = await this.db.collection('pipeline_jobs').doc(job_id).get();
+    return doc.exists ? (doc.data() as any) : null;
+  }
+
+  public async getPipelineJobs(filter?: { user_id?: string; series_id?: string; episode_id?: string; status?: string; limit?: number }): Promise<any[]> {
+    let query: FirebaseFirestore.Query = this.db.collection('pipeline_jobs');
+    if (filter?.user_id) query = query.where('user_id', '==', filter.user_id);
+    if (filter?.series_id) query = query.where('series_id', '==', filter.series_id);
+    if (filter?.episode_id) query = query.where('episode_id', '==', filter.episode_id);
+    if (filter?.status) query = query.where('status', '==', filter.status.toLowerCase());
+
+    const snap = await query.get();
+    let list = snap.docs.map(doc => doc.data() as any);
+    list.sort((a, b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime());
+    if (filter?.limit) list = list.slice(0, filter.limit);
+    return list;
+  }
+
+  public async updatePipelineJob(job_id: string, patch: Partial<any>): Promise<any | null> {
+    const docRef = this.db.collection('pipeline_jobs').doc(job_id);
+    const snap = await docRef.get();
+    if (!snap.exists) return null;
+    const updated = sanitizeForFirestore({
+      ...snap.data(),
+      ...patch,
+      updated_at: new Date().toISOString(),
+    });
+    await docRef.set(updated, { merge: true });
+    return updated;
+  }
+
+  public async findActivePipelineJob(series_id: string, episode_id: string, type?: string): Promise<any | null> {
+    const jobs = await this.getPipelineJobs({ series_id, episode_id });
+    return jobs.find(j => (j.status === 'running' || j.status === 'queued') && (!type || j.type === type)) || null;
   }
 }

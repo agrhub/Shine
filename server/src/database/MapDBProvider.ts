@@ -314,76 +314,76 @@ export class MapDBProvider implements IDatabaseProvider {
 
   // ==================== Timeline & Versions ====================
   public async saveTimeline(
-    episodeId: string,
-    timelineData: any,
+    episode_id: string,
+    timeline_data: any,
     author: { id: string; name: string; avatar?: string },
-    changeSummary?: string
-  ): Promise<{ versionId: string; versionNumber: number; updatedAt: string }> {
+    change_summary?: string
+  ): Promise<{ version_id: string; version_number: number; updated_at: string }> {
     const now = new Date().toISOString();
-    const versionId = `ver_${nanoid(10)}`;
+    const version_id = `ver_${nanoid(10)}`;
 
-    const history = this.timelineVersions.get(episodeId) || [];
-    const versionNumber = history.length + 1;
+    const history = this.timelineVersions.get(episode_id) || [];
+    const version_number = history.length + 1;
 
     const versionDoc = {
-      id: versionId,
-      episodeId,
-      versionNumber,
-      timelineData,
+      id: version_id,
+      episode_id,
+      version_number,
+      timeline_data,
       author,
-      changeSummary: changeSummary || 'Timeline state update',
+      change_summary: change_summary || 'Timeline state update',
       created_at: now,
     };
 
     history.unshift(versionDoc);
-    this.timelineVersions.set(episodeId, history);
+    this.timelineVersions.set(episode_id, history);
 
     const latestDoc = {
-      episodeId,
-      versionId,
-      versionNumber,
-      timelineData,
+      episode_id,
+      version_id,
+      version_number,
+      timeline_data,
       updated_at: now,
     };
-    this.timelines.set(episodeId, latestDoc);
+    this.timelines.set(episode_id, latestDoc);
 
     this.scheduleSave();
-    return { versionId, versionNumber, updatedAt: now };
+    return { version_id, version_number, updated_at: now };
   }
 
-  public async getLatestTimeline(episodeId: string): Promise<any | null> {
-    const t = this.timelines.get(episodeId);
+  public async getLatestTimeline(episode_id: string): Promise<any | null> {
+    const t = this.timelines.get(episode_id);
     return t ? { ...t } : null;
   }
 
-  public async getTimelineHistory(episodeId: string, limit = 20, offset = 0): Promise<{ total: number; history: any[] }> {
-    const all = this.timelineVersions.get(episodeId) || [];
+  public async getTimelineHistory(episode_id: string, limit = 20, offset = 0): Promise<{ total: number; history: any[] }> {
+    const all = this.timelineVersions.get(episode_id) || [];
     const sliced = all.slice(offset, offset + limit);
     return { total: all.length, history: sliced };
   }
 
-  public async getTimelineVersion(episodeId: string, versionId: string): Promise<any | null> {
-    const all = this.timelineVersions.get(episodeId) || [];
-    const match = all.find(v => v.id === versionId);
+  public async getTimelineVersion(episode_id: string, version_id: string): Promise<any | null> {
+    const all = this.timelineVersions.get(episode_id) || [];
+    const match = all.find(v => v.id === version_id);
     return match ? { ...match } : null;
   }
 
   public async restoreTimelineVersion(
-    episodeId: string,
-    versionId: string,
+    episode_id: string,
+    version_id: string,
     author: { id: string; name: string; avatar?: string },
     reason?: string
   ): Promise<any> {
-    const version = await this.getTimelineVersion(episodeId, versionId);
-    if (!version) throw new Error(`Version ${versionId} not found`);
+    const version = await this.getTimelineVersion(episode_id, version_id);
+    if (!version) throw new Error(`Version ${version_id} not found`);
 
     const result = await this.saveTimeline(
-      episodeId,
-      version.timelineData,
+      episode_id,
+      version.timeline_data,
       author,
-      `Restored from version ${version.versionNumber}: ${reason || ''}`
+      `Restored from version ${version.version_number}: ${reason || ''}`
     );
-    return { ...result, timelineData: version.timelineData };
+    return { ...result, timeline_data: version.timeline_data };
   }
 
   // ==================== Flow Accounts ====================
@@ -449,17 +449,17 @@ export class MapDBProvider implements IDatabaseProvider {
   }
 
   public async getAssets(filter?: {
-    userId?: string;
-    seriesId?: string;
+    user_id?: string;
+    series_id?: string;
     type?: string;
-    characterId?: string;
+    character_id?: string;
     search?: string;
   }): Promise<AssetEntity[]> {
     let list = Array.from(this.assets.values());
-    if (filter?.userId) list = list.filter(a => a.user_id === filter.userId);
-    if (filter?.seriesId) list = list.filter(a => a.series_id === filter.seriesId);
+    if (filter?.user_id) list = list.filter(a => a.user_id === filter.user_id);
+    if (filter?.series_id) list = list.filter(a => a.series_id === filter.series_id);
     if (filter?.type) list = list.filter(a => a.type === filter.type);
-    if (filter?.characterId) list = list.filter(a => a.character_id === filter.characterId);
+    if (filter?.character_id) list = list.filter(a => a.character_id === filter.character_id);
     if (filter?.search) {
       const q = filter.search.toLowerCase();
       list = list.filter(a =>
@@ -489,11 +489,11 @@ export class MapDBProvider implements IDatabaseProvider {
 
   // ==================== Worker Telemetry & Monitoring ====================
   public async recordWorkerHeartbeat(heartbeat: WorkerHeartbeatEntity): Promise<void> {
-    const id = heartbeat.worker_id || (heartbeat as any).workerId || `worker_${nanoid(8)}`;
+    const id = heartbeat.worker_id || `worker_${nanoid(8)}`;
     this.workerHeartbeats.set(id, {
       ...heartbeat,
       worker_id: id,
-      last_heartbeat: heartbeat.last_heartbeat || (heartbeat as any).lastHeartbeat || new Date().toISOString(),
+      last_heartbeat: heartbeat.last_heartbeat || new Date().toISOString(),
     });
     this.scheduleSave();
   }
@@ -502,7 +502,7 @@ export class MapDBProvider implements IDatabaseProvider {
     const now = Date.now();
     return Array.from(this.workerHeartbeats.values()).map(w => {
       // Mark offline if no heartbeat for > 2 minutes
-      const last = w.last_heartbeat || (w as any).lastHeartbeat || 0;
+      const last = w.last_heartbeat || 0;
       const ageMs = now - new Date(last).getTime();
       const status = ageMs > 120000 ? 'OFFLINE' : w.status;
       return { ...w, status };
@@ -510,13 +510,13 @@ export class MapDBProvider implements IDatabaseProvider {
   }
 
   public async recordWorkerJob(job: WorkerJobEntity): Promise<void> {
-    const id = job.job_id || (job as any).jobId || `job_${nanoid(10)}`;
+    const id = job.job_id || `job_${nanoid(10)}`;
     const existing = this.workerJobs.get(id) || {};
     const updated: WorkerJobEntity = {
       ...existing,
       ...job,
       job_id: id,
-      submitted_at: job.submitted_at || (job as any).submittedAt || (existing as any).submitted_at || (existing as any).submittedAt || new Date().toISOString(),
+      submitted_at: job.submitted_at || (existing as any).submitted_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     this.workerJobs.set(id, updated);
@@ -529,7 +529,7 @@ export class MapDBProvider implements IDatabaseProvider {
       const targetStatus = filter.status.toUpperCase();
       list = list.filter(j => j.status?.toUpperCase() === targetStatus);
     }
-    list.sort((a, b) => new Date(b.updated_at || (b as any).updatedAt || b.submitted_at || (b as any).submittedAt || 0).getTime() - new Date(a.updated_at || (a as any).updatedAt || a.submitted_at || (a as any).submittedAt || 0).getTime());
+    list.sort((a, b) => new Date(b.updated_at || b.submitted_at || 0).getTime() - new Date(a.updated_at || a.submitted_at || 0).getTime());
     if (filter?.limit) list = list.slice(0, filter.limit);
     return list;
   }
@@ -544,7 +544,7 @@ export class MapDBProvider implements IDatabaseProvider {
     const failedJobs = jobs.filter(j => j.status === 'FAILED');
 
     const avgCpu = activeWorkers.length > 0
-      ? Math.round(activeWorkers.reduce((acc, w) => acc + (w.cpu_usage_pct || (w as any).cpuUsagePct || 0), 0) / activeWorkers.length)
+      ? Math.round(activeWorkers.reduce((acc, w) => acc + (w.cpu_usage_pct || 0), 0) / activeWorkers.length)
       : 0;
 
     return {
@@ -562,5 +562,52 @@ export class MapDBProvider implements IDatabaseProvider {
       workers: workers,
       active_jobs: activeJobs.concat(queuedJobs),
     };
+  }
+
+  // ==================== Pipeline Background Jobs ====================
+  private pipelineJobs: Map<string, any> = new Map();
+
+  public async savePipelineJob(job: any): Promise<any> {
+    const item = {
+      ...job,
+      created_at: job.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    this.pipelineJobs.set(job.id, item);
+    this.scheduleSave();
+    return item;
+  }
+
+  public async getPipelineJobById(job_id: string): Promise<any | null> {
+    return this.pipelineJobs.get(job_id) || null;
+  }
+
+  public async getPipelineJobs(filter?: { user_id?: string; series_id?: string; episode_id?: string; status?: string; limit?: number }): Promise<any[]> {
+    let list = Array.from(this.pipelineJobs.values());
+    if (filter?.user_id) list = list.filter(j => j.user_id === filter.user_id);
+    if (filter?.series_id) list = list.filter(j => j.series_id === filter.series_id);
+    if (filter?.episode_id) list = list.filter(j => j.episode_id === filter.episode_id);
+    if (filter?.status) list = list.filter(j => j.status?.toLowerCase() === filter.status?.toLowerCase());
+    list.sort((a, b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime());
+    if (filter?.limit) list = list.slice(0, filter.limit);
+    return list;
+  }
+
+  public async updatePipelineJob(job_id: string, patch: Partial<any>): Promise<any | null> {
+    const existing = await this.getPipelineJobById(job_id);
+    if (!existing) return null;
+    const updated = {
+      ...existing,
+      ...patch,
+      updated_at: new Date().toISOString(),
+    };
+    this.pipelineJobs.set(job_id, updated);
+    this.scheduleSave();
+    return updated;
+  }
+
+  public async findActivePipelineJob(series_id: string, episode_id: string, type?: string): Promise<any | null> {
+    const jobs = await this.getPipelineJobs({ series_id, episode_id });
+    return jobs.find(j => (j.status === 'running' || j.status === 'queued') && (!type || j.type === type)) || null;
   }
 }

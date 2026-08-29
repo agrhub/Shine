@@ -13,16 +13,16 @@ export type CreditTaskKey =
 
 export class CreditService {
   static async deductUserCredits(
-    userId: string | undefined,
+    user_id: string | undefined,
     taskKey: CreditTaskKey,
     activityName: string,
     details: string
   ): Promise<{ success: boolean; balance: number; error?: string }> {
-    if (!userId) {
-      throw new Error('userId is required for credit transactions');
+    if (!user_id) {
+      throw new Error('user_id is required for credit transactions');
     }
     const db = await getDatabaseProvider();
-    const effectiveUserId = userId;
+    const effectiveUserId = user_id;
 
     // Fetch dynamic rates configured by Admin
     let amount = 10;

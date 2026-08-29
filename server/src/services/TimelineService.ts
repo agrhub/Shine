@@ -143,7 +143,7 @@ export class TimelineService {
       videoClipIds.push(vClipId);
 
       // 2. Transition between visual clips
-      if (scIdx > 1 && scene.transition_effect && scene.transition_effect !== 'cut' && scene.transition_effect !== 'none') {
+      if (scIdx > 1 && scene.transition_effect && (scene.transition_effect as string) !== 'cut' && (scene.transition_effect as string) !== 'none') {
         const transClipId = `clip_trans_${episodeId}_s${scIdx - 1}`;
         clips[transClipId] = {
           id: transClipId,
@@ -232,7 +232,7 @@ export class TimelineService {
     };
 
     // Synchronize language tracks (voiceover & subtitles) for primary and configured languages
-    const primaryLang = episode.dubbing_languages?.[0] || episode.caption_languages?.[0] || series?.language || 'en-US';
+    const primaryLang = series?.language || episode.dubbing_languages?.[0] || episode.caption_languages?.[0] || 'vi-VN';
     this.syncLanguageTracksIntoTimeline(projectData, episode, primaryLang);
 
     return projectData;
@@ -254,23 +254,52 @@ export class TimelineService {
     const canvasWidth = timeline.settings?.width || 1080;
     const canvasHeight = timeline.settings?.height || 1920;
 
-    // Prune legacy non-language main tracks to avoid duplicates
-    timeline.tracks = timeline.tracks.filter(t => t.id !== 'track_voiceover_main' && t.id !== 'track_captions_main');
+    // Collect all configured language codes (always include primaryLang)
+    const langSet = new Set<string>();
+    if (primaryLang) langSet.add(primaryLang);
+
+    // Only add additional sub-languages if they have actual translations in scenes
+    const sceneTranslationLangs = new Set<string>();
+    rawScenes.forEach((sc: any) => {
+      if (sc.translations && typeof sc.translations === 'object') {
+        Object.keys(sc.translations).forEach(k => {
+          if (k && k !== primaryLang) {
+            sceneTranslationLangs.add(k);
+            langSet.add(k);
+          }
+        });
+      }
+    });
+
+    (episode.dubbing_languages || []).forEach(l => {
+      if (l && (l === primaryLang || sceneTranslationLangs.has(l))) {
+        langSet.add(l);
+      }
+    });
+    (episode.caption_languages || []).forEach(l => {
+      if (l && (l === primaryLang || sceneTranslationLangs.has(l))) {
+        langSet.add(l);
+      }
+    });
+
+    // Prune legacy or unconfigured language tracks to avoid leftover tracks (e.g. unwanted en-US)
+    timeline.tracks = timeline.tracks.filter(t => {
+      if (t.id === 'track_voiceover_main' || t.id === 'track_captions_main') return false;
+      if (t.type === 'Audio' && t.id.startsWith('track_voiceover_')) {
+        const lCode = t.languageCode || t.id.replace('track_voiceover_', '');
+        return langSet.has(lCode) || langSet.has(lCode.replace(/_/g, '-'));
+      }
+      if (t.type === 'Caption' && t.id.startsWith('track_caption_')) {
+        const lCode = t.languageCode || t.id.replace('track_caption_', '');
+        return langSet.has(lCode) || langSet.has(lCode.replace(/_/g, '-'));
+      }
+      return true;
+    });
+
     Object.keys(timeline.clips).forEach(cid => {
       const clip = timeline.clips[cid];
       if (clip && (clip.trackId === 'track_voiceover_main' || clip.trackId === 'track_captions_main')) {
         delete timeline.clips[cid];
-      }
-    });
-
-    // Collect all configured language codes (always include primaryLang)
-    const langSet = new Set<string>();
-    if (primaryLang) langSet.add(primaryLang);
-    (episode.dubbing_languages || []).forEach(l => l && langSet.add(l));
-    (episode.caption_languages || []).forEach(l => l && langSet.add(l));
-    rawScenes.forEach((sc: any) => {
-      if (sc.translations && typeof sc.translations === 'object') {
-        Object.keys(sc.translations).forEach(k => k && langSet.add(k));
       }
     });
 
@@ -658,7 +687,7 @@ export class TimelineService {
       }
 
       // 2. Transition between visual clips
-      if (scIdx > 1 && scene.transition_effect && scene.transition_effect !== 'cut' && scene.transition_effect !== 'none') {
+      if (scIdx > 1 && scene.transition_effect && (scene.transition_effect as string) !== 'cut' && (scene.transition_effect as string) !== 'none') {
         const transClipId = `clip_trans_${episodeId}_s${scIdx - 1}`;
         clips[transClipId] = {
           id: transClipId,
@@ -682,9 +711,9 @@ export class TimelineService {
           effectKey: scene.video_effect,
           intensity: 0.8,
           timing: {
-            display: { from: fromUs, to: toUs },
-            trim: { from: 0, to: sceneDurUs },
-            duration: sceneDurUs,
+            display: { from: fromUs, to: fromUs + 500_000 },
+            trim: { from: 0, to: 500_000 },
+            duration: 500_000,
             playbackRate: 1,
           },
           visible: true,
@@ -754,8 +783,8 @@ export class TimelineService {
     const series = await db.getSeriesById(episode.series_id);
     const latest = await db.getLatestTimeline(episodeId);
 
-    if (latest?.timelineData?.tracks && latest?.timelineData?.clips) {
-      const updatedTimeline = this.syncTimelineWithScenes(episode, { ...latest.timelineData }, series);
+    if (latest?.timeline_data?.tracks && latest?.timeline_data?.clips) {
+      const updatedTimeline = this.syncTimelineWithScenes(episode, { ...latest.timeline_data }, series);
       try {
         await db.saveTimeline(episodeId, updatedTimeline, { id: 'system', name: 'Studio System' }, 'Synchronized timeline with latest scene media');
       } catch (saveErr) {

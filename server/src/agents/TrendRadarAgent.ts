@@ -9,10 +9,10 @@ export interface TrendTopicOutput {
   topic: string;
   description?: string;
   trope: string;
-  hashtagVelocity: string;
-  competitorHook: string;
-  region: string;
-  engagementScore: number;
+  hashtag_velocity: string;
+  competitor_hook: string;
+  country: string;
+  engagement_score: number;
 }
 
 const LANGUAGE_NAMES: Record<string, string> = {
@@ -49,10 +49,10 @@ export class TrendRadarAgent {
           topic: item.title || item.topic || `Viral Trend ${idx + 1}`,
           description: item.description || `Trending micro-drama trope: ${(item.tropes || []).join(', ') || 'High-stakes conflict'}`,
           trope: (Array.isArray(item.tropes) && item.tropes[0]) || item.trope || 'High-Converting Trope',
-          hashtagVelocity: item.hashtagVelocity || `+${item.viralScore ? item.viralScore * 5 : 480}% (TikTok/Reels/Shorts)`,
-          competitorHook: item.competitorHook || `3-second opening hook for ${item.title || item.topic || 'story'}`,
-          region: item.region || cleanRegion,
-          engagementScore: item.viralScore || item.engagementScore || (98 - idx * 2),
+          hashtag_velocity: item.hashtagVelocity || `+${item.viralScore ? item.viralScore * 5 : 480}% (TikTok/Reels/Shorts)`,
+          competitor_hook: item.competitorHook || `3-second opening hook for ${item.title || item.topic || 'story'}`,
+          country: item.region || cleanRegion,
+          engagement_score: item.viralScore || item.engagementScore || (98 - idx * 2),
         }));
       }
     } catch (mcpError: any) {

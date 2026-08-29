@@ -84,7 +84,7 @@ You are generating shots for **Scene {{sceneIndex}} of {{totalScenes}}**:
       "end_frame_prompt": "...",
       "transition_effect": "",
       "effects": [ { "effect_key": "vignette", "intensity": 0.6 } ],
-      "video_effect": ""
+      "video_effect": "vignette"
     }
   ]
 }

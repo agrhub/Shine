@@ -1,0 +1,261 @@
+import { FunctionTool } from '@google/adk';
+import { Type } from '@google/genai';
+import { getDatabaseProvider } from '@/database/index.js';
+import type { SceneEntity, SceneDialogue } from '@/types.js';
+import { Logger } from '@/utils/logger.js';
+import { generateDialogueVoiceSynthesis } from '@/routes/voices.js';
+import { translateDialogueList, buildWordLevelCaptionsFromDialogue } from '@/utils/captionAlignment.js';
+import { executeWithRetry, withCreditDeduction, getActiveChatContext, type ToolContextParams, type ToolExecutionResult } from './context.js';
+
+export class AudioToolExecutors {
+  /**
+   * Generate voiceover TTS for a specific scene or all scenes.
+   * Rule: Main language voiceovers are kept as-is (not recreated).
+   * Sub-languages are translated, synthesized with TTS, and stored in scene.translations[subLang].
+   */
+  static async generateSceneVoiceover(params: {
+    userId: string;
+    seriesId: string;
+    episodeId: string;
+    sceneIndex?: number;
+    voiceId?: string;
+    emotion?: string;
+    languageCode?: string;
+    forceRegenerate?: boolean;
+  }): Promise<ToolExecutionResult> {
+    try {
+      const db = await getDatabaseProvider();
+      const series = await db.getSeriesById(params.seriesId);
+      if (!series) return { success: false, message: `Series ${params.seriesId} not found` };
+
+      const episode = await db.getEpisodeById(params.episodeId);
+      if (!episode) return { success: false, message: `Episode ${params.episodeId} not found` };
+
+      const scenes = (episode.scenes || []) as SceneEntity[];
+      if (scenes.length === 0) {
+        return { success: false, message: `Episode "${episode.title}" has no scenes to generate voiceovers for.` };
+      }
+
+      // Determine primary / main language and target language
+      const primaryLang = (series.language || episode.dubbing_languages?.[0] || 'vi-VN').trim();
+      const targetLang = (params.languageCode || primaryLang).trim();
+      const isMainLang = targetLang.toLowerCase() === primaryLang.toLowerCase();
+
+      let targets = scenes;
+      if (params.sceneIndex !== undefined) {
+        targets = scenes.filter((s: SceneEntity) => Number(s.index || s.scene_number) === Number(params.sceneIndex));
+        if (targets.length === 0) {
+          return { success: false, message: `Scene #${params.sceneIndex} not found in Episode "${episode.title}".` };
+        }
+      }
+
+      const results: any[] = [];
+      const updatedScenes: SceneEntity[] = [...scenes];
+
+      for (const sc of targets) {
+        const scIndex = Number(sc.index || sc.scene_number);
+        const sourceDialogue: SceneDialogue[] = Array.isArray(sc.dialogue) ? sc.dialogue : [];
+        const hasDialogue = sourceDialogue.length > 0 && sourceDialogue.some((d) => (d.line || '').trim().length > 0);
+
+        if (!hasDialogue) {
+          results.push({ sceneIndex: scIndex, status: 'no_dialogue_skipped' });
+          continue;
+        }
+
+        const sceneDur = Number(sc.duration_seconds) || 6;
+        const idx = updatedScenes.findIndex((s) => Number(s.index || s.scene_number) === scIndex);
+        if (idx < 0) continue;
+
+        if (isMainLang) {
+          // ── MAIN LANGUAGE: Keep existing unless forced or missing ─────────────
+          const existingVoice = sc.voiceover_url;
+          if (!params.forceRegenerate && existingVoice) {
+            results.push({
+              sceneIndex: scIndex,
+              language: primaryLang,
+              status: 'main_language_voice_already_exists',
+              audio_url: existingVoice,
+            });
+            continue;
+          }
+
+          // Synthesize voiceover for main language
+          const { result } = await executeWithRetry(`Generate Main Voiceover for Scene #${scIndex}`, async () => {
+            return await withCreditDeduction(params.userId, 'voiceoverTts', 'Dialogue Voiceover Synthesis', `Synthesized TTS voiceover (${primaryLang}) for Scene #${scIndex}`, async () => {
+              return await generateDialogueVoiceSynthesis({
+                dialogue: sourceDialogue,
+                voice_id: params.voiceId,
+                emotion: params.emotion,
+                language: primaryLang,
+                episode_id: params.episodeId,
+                scene_id: sc.id || `scene_${scIndex}`,
+              });
+            });
+          });
+
+          updatedScenes[idx].voiceover_url = result?.audio_url;
+          updatedScenes[idx].voice_duration_us = result?.duration_us || ((result?.duration_ms || 3000) * 1000);
+          updatedScenes[idx].voice_start_us = result?.start_us || 500_000;
+
+          if (result?.cues?.length) {
+            updatedScenes[idx].captions_data = result.cues;
+          }
+          if ((result as any)?.words?.length) {
+            updatedScenes[idx].words = (result as any).words;
+          }
+
+          results.push({
+            sceneIndex: scIndex,
+            language: primaryLang,
+            status: 'main_language_voice_generated',
+            audio_url: result?.audio_url,
+          });
+        } else {
+          // ── SUB-LANGUAGE: Translate and synthesize voiceover in subLang ────────
+          if (!updatedScenes[idx].translations) {
+            updatedScenes[idx].translations = {};
+          }
+          if (!updatedScenes[idx].translations[targetLang]) {
+            updatedScenes[idx].translations[targetLang] = {};
+          }
+
+          const existingSubVoice = updatedScenes[idx].translations[targetLang]?.voiceover_url;
+          if (!params.forceRegenerate && existingSubVoice) {
+            results.push({
+              sceneIndex: scIndex,
+              language: targetLang,
+              status: 'sub_language_voice_already_exists',
+              audio_url: existingSubVoice,
+            });
+            continue;
+          }
+
+          // 1. Check or generate translated dialogue
+          let translatedDialogue: SceneDialogue[] = updatedScenes[idx].translations[targetLang]?.dialogue || [];
+          if (!Array.isArray(translatedDialogue) || translatedDialogue.length === 0) {
+            const { result: transList } = await executeWithRetry(`Translate Scene #${scIndex} Dialogue to ${targetLang}`, async () => {
+              return await withCreditDeduction(params.userId, 'subtitleTranslate', 'Dialogue Translation', `Translated Scene #${scIndex} to ${targetLang}`, async () => {
+                return await translateDialogueList(sourceDialogue, targetLang);
+              });
+            });
+            translatedDialogue = transList || sourceDialogue;
+            updatedScenes[idx].translations[targetLang].dialogue = translatedDialogue;
+          }
+
+          // 2. Synthesize TTS voiceover in target language
+          const { result } = await executeWithRetry(`Generate Sub-language Voiceover for Scene #${scIndex}`, async () => {
+            return await withCreditDeduction(params.userId, 'voiceoverTts', 'Dialogue Voiceover Synthesis', `Synthesized TTS voiceover (${targetLang}) for Scene #${scIndex}`, async () => {
+              return await generateDialogueVoiceSynthesis({
+                dialogue: translatedDialogue,
+                voice_id: params.voiceId,
+                emotion: params.emotion,
+                language: targetLang,
+                episode_id: params.episodeId,
+                scene_id: sc.id || `scene_${scIndex}`,
+              });
+            });
+          });
+
+          const durUs = result?.duration_us || ((result?.duration_ms || 3000) * 1000);
+          const startUs = result?.start_us || 500_000;
+
+          updatedScenes[idx].translations[targetLang].voiceover_url = result?.audio_url;
+          updatedScenes[idx].translations[targetLang].voice_duration_us = durUs;
+          updatedScenes[idx].translations[targetLang].voice_start_us = startUs;
+
+          // 3. Align kinetic word-level captions for sub-language
+          if (result?.cues?.length) {
+            updatedScenes[idx].translations[targetLang].captions_data = result.cues;
+          } else {
+            const wordCaptions = buildWordLevelCaptionsFromDialogue(translatedDialogue, sceneDur, startUs / 1_000_000);
+            updatedScenes[idx].translations[targetLang].captions_data = wordCaptions.captions_data;
+            if (!updatedScenes[idx].translations[targetLang].words) {
+              updatedScenes[idx].translations[targetLang].words = wordCaptions.words;
+            }
+          }
+
+          if ((result as any)?.words?.length) {
+            updatedScenes[idx].translations[targetLang].words = (result as any).words;
+          }
+
+          results.push({
+            sceneIndex: scIndex,
+            language: targetLang,
+            status: 'sub_language_voice_generated',
+            audio_url: result?.audio_url,
+          });
+        }
+      }
+
+      // Add target language to episode.dubbing_languages if sub-language
+      const currentDubLangs = new Set(episode.dubbing_languages || []);
+      currentDubLangs.add(targetLang);
+      await db.updateEpisode(params.episodeId, {
+        scenes: updatedScenes,
+        dubbing_languages: Array.from(currentDubLangs),
+      });
+
+      const generatedCount = results.filter((r) => r.status.includes('generated')).length;
+      return {
+        success: true,
+        message: `Processed ${results.length} scene voiceover(s) for "${targetLang}" (${isMainLang ? 'Main Language' : 'Sub-Language Translation'}) in Episode #${episode.episode_number || 1} "${episode.title}": ${generatedCount} generated, ${results.length - generatedCount} kept/skipped.`,
+        data: {
+          episode_id: params.episodeId,
+          language: targetLang,
+          is_main_language: isMainLang,
+          scenes: updatedScenes,
+          details: results,
+        },
+      };
+    } catch (err: any) {
+      Logger.error(`[AudioTools] Failed to generate scene voiceover: ${err.message}`);
+      return { success: false, message: `Failed to generate scene voiceover: ${err.message}`, error: err.message };
+    }
+  }
+}
+
+export function createAudioTools(context?: ToolContextParams): FunctionTool[] {
+  return [
+    new FunctionTool({
+      name: 'generate_scene_voiceover',
+      description: 'Synthesize neural TTS voiceover for a specific scene or all scenes. For main language, existing voiceovers are kept intact. For sub-languages, dialogue is translated and synthesized with target-language TTS.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          scene_index: { type: Type.NUMBER, description: 'Scene index number' },
+          voice_id: { type: Type.STRING, description: 'Voice ID preset' },
+          emotion: { type: Type.STRING, description: 'Emotion tone' },
+          language_code: { type: Type.STRING, description: 'Target language code (e.g. en-US, vi-VN, ja-JP)' },
+          force_regenerate: { type: Type.BOOLEAN, description: 'Force regeneration' },
+        },
+      },
+      execute: async (args: any) => {
+        const ctx = getActiveChatContext();
+        const userId = args.userId || args.user_id || context?.userId || ctx?.userId;
+        const seriesId = args.seriesId || args.series_id || context?.seriesId || ctx?.seriesId;
+        const episodeId = args.episodeId || args.episode_id || context?.episodeId || ctx?.episodeId || '1';
+        const onItemUpdated = context?.onItemUpdated || ctx?.onItemUpdated;
+
+        if (!userId) return { success: false, message: `No user selected. Please select a user first.` };
+        if (!seriesId) return { success: false, message: `No series selected. Please select a series first.` };
+        if (!episodeId) return { success: false, message: `No episode selected. Please select an episode first.` };
+
+        const res = await AudioToolExecutors.generateSceneVoiceover({
+          userId,
+          seriesId,
+          episodeId,
+          sceneIndex: args.scene_index || args.sceneIndex,
+          voiceId: args.voice_id || args.voiceId,
+          emotion: args.emotion,
+          languageCode: args.language_code || args.languageCode,
+          forceRegenerate: args.force_regenerate || args.forceRegenerate,
+        });
+
+        if (res.success && res.data) {
+          onItemUpdated?.({ type: 'voiceovers_updated', data: res.data });
+        }
+        return res;
+      },
+    }),
+  ];
+}

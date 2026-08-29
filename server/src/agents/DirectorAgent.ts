@@ -1,4 +1,5 @@
-import { storySkeletonAgent, type StorySkeletonInput, type StorySkeletonOutput } from './StorySkeletonAgent.js';
+import { storySkeletonAgent } from './StorySkeletonAgent.js';
+import type { StorySkeletonInput, MasterPlanOutput } from '@/types.js';
 import { adaptationStrategyAgent } from './AdaptationStrategyAgent.js';
 import { scriptAgent, type ScriptAgentInput, type ScriptItem } from './ScriptAgent.js';
 import { supervisionAgent, type SupervisionResult } from './SupervisionAgent.js';
@@ -7,13 +8,16 @@ export interface FullScriptPipelineRequest {
   title: string;
   genre: string;
   visualStyle?: string;
+  visual_style?: string;
   synopsis: string;
   episodeNumber?: number;
+  episode_number?: number;
   totalEpisodes?: number;
+  total_episodes?: number;
 }
 
 export interface FullScriptPipelineResponse {
-  outline: StorySkeletonOutput;
+  outline: MasterPlanOutput;
   adaptation: any;
   scriptItem: ScriptItem;
   supervision: SupervisionResult;
@@ -25,25 +29,25 @@ export class DirectorAgent {
     const outline = await storySkeletonAgent.execute({
       title: request.title,
       genre: request.genre,
-      visualStyle: request.visualStyle,
+      visual_style: request.visual_style || request.visualStyle,
       synopsis: request.synopsis,
-      totalEpisodes: request.totalEpisodes || 20,
+      total_episodes: request.total_episodes || request.totalEpisodes || 20,
     });
 
     // 2. Compute adaptation strategy
     const adaptation = await adaptationStrategyAgent.execute({
       synopsis: request.synopsis,
-      targetEpisodeCount: outline.totalEpisodes,
+      targetEpisodeCount: outline.total_episodes,
       pacingStyle: 'aggressive_hook',
     });
 
     // 3. Generate target episode script
-    const targetEpisode = request.episodeNumber || 1;
+    const targetEpisode = request.episode_number || request.episodeNumber || 1;
     const scriptItem = await scriptAgent.execute({
-      seriesId: outline.seriesId,
-      episodeNumber: targetEpisode,
+      series_id: outline.series_id,
+      episode_number: targetEpisode,
       genre: request.genre,
-      visualStyle: request.visualStyle,
+      visual_style: request.visual_style,
       synopsis: request.synopsis,
     });
 

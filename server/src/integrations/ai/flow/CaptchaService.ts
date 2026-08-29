@@ -8,7 +8,9 @@ export type CaptchaMode = 'yescaptcha' | 'capsolver' | 'capmonster' | 'ezcaptcha
 
 export interface CaptchaSolveOptions {
     projectId: string;
-    action: 'IMAGE_GENERATION' | 'VIDEO_GENERATION';
+    action: 'IMAGE_GENERATION' | 'VIDEO_GENERATION'  | '';
+    toolId?: string;
+    websiteURL?: string;
     tokenId?: string;
 }
 
@@ -99,7 +101,7 @@ export class CaptchaService {
                     type: taskType,
                     websiteURL: projectUrl,
                     websiteKey: this.websiteKey,
-                    pageAction: options.action
+                    pageAction: options.action || ''
                 }
             });
 

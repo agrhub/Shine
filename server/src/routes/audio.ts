@@ -194,4 +194,91 @@ router.post('/spatial-mix', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/audio/sfx — Search or generate sound effects
+router.post('/sfx', async (req: Request, res: Response) => {
+  try {
+    const { query, prompt, duration, genre, visualStyle } = req.body;
+    const searchPrompt = query || prompt || 'cinematic whoosh transition';
+    const result = await SfxService.getSceneAudio({
+      prompt: searchPrompt,
+      duration: Number(duration) || 5,
+      genre,
+      visualStyle,
+    });
+
+    return res.json({
+      code: 200,
+      data: {
+        url: result.audioUrl,
+        audio_url: result.audioUrl,
+        title: result.title,
+        duration: result.duration,
+        provider: result.provider,
+      },
+      message: 'Sound effect retrieved successfully',
+      error: null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ code: 500, error: err.message, message: err.message });
+  }
+});
+
+// POST /api/audio/music — Search or generate background music
+router.post('/music', async (req: Request, res: Response) => {
+  try {
+    const { prompt, duration, genre, visualStyle } = req.body;
+    const searchPrompt = prompt || 'dramatic cinematic background music';
+    const result = await SfxService.getSceneAudio({
+      prompt: searchPrompt,
+      duration: Number(duration) || 15,
+      genre,
+      visualStyle,
+    });
+
+    return res.json({
+      code: 200,
+      data: {
+        url: result.audioUrl,
+        audio_url: result.audioUrl,
+        title: result.title,
+        duration: result.duration,
+        provider: result.provider,
+      },
+      message: 'Background music retrieved successfully',
+      error: null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ code: 500, error: err.message, message: err.message });
+  }
+});
+
+// POST /api/audio/transcribe — Transcribe spoken audio file into timestamped captions
+router.post('/transcribe', async (req: Request, res: Response) => {
+  try {
+    const { audio_url, audioUrl, language } = req.body;
+    const targetUrl = audio_url || audioUrl;
+    if (!targetUrl) {
+      return res.status(400).json({ code: 400, error: 'audio_url is required' });
+    }
+
+    const prompt = `Listen to this audio track carefully and generate word-by-word or phrase-level subtitle transcription in language "${language || 'en'}". Return JSON with array of { "start_ms": number, "end_ms": number, "text": string }`;
+    const jsonOutput = await geminiClient.generateText({
+      prompt,
+      jsonMode: true,
+      systemInstruction: 'You are an expert audio transcription and subtitle timing engine.',
+    });
+
+    const cues = Array.isArray(JSON.parse(jsonOutput || '[]')) ? JSON.parse(jsonOutput || '[]') : [];
+
+    return res.json({
+      code: 200,
+      data: { cues, language: language || 'en' },
+      message: 'Audio transcribed successfully',
+      error: null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ code: 500, error: err.message, message: err.message });
+  }
+});
+
 export default router;

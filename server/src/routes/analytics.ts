@@ -2,18 +2,19 @@ import { Router, Request, Response } from 'express';
 import { geminiClient } from '../integrations/ai/gemini/GeminiClient.js';
 import { getDatabaseProvider } from '../database/index.js';
 import { PromptLoader } from '../utils/PromptLoader.js';
+import { getUserId } from '@/utils/auth.js';
 
 export const analyticsPaywallRouter = Router();
 
 // GET /api/analytics/dashboard - Provide real creator studio dashboard analytics matching the logged-in user
 analyticsPaywallRouter.get('/dashboard', async (req: Request, res: Response) => {
   try {
-    const userId = (req.query.userId as string) || (req as any).user?.id || '';
+    const userId = getUserId(req);
     const db = await getDatabaseProvider();
     
     // 1. Fetch user series & assets
     const seriesList = userId ? await db.getSeriesList(userId, '', '') : [];
-    const userAssets = userId ? await db.getAssets({ userId }) : [];
+    const userAssets = userId ? await db.getAssets({ user_id: userId }) : [];
     const user = userId ? await db.getUserById(userId) : null;
     
     const totalSeries = seriesList.length;

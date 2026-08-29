@@ -135,6 +135,26 @@ export class SQLiteProvider implements IDatabaseProvider {
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY(user_id) REFERENCES users(id)
         );
+
+        CREATE TABLE IF NOT EXISTS pipeline_jobs (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          series_id TEXT NOT NULL,
+          episode_id TEXT NOT NULL,
+          session_id TEXT,
+          type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          status TEXT DEFAULT 'queued',
+          progress INTEGER DEFAULT 0,
+          current_step TEXT,
+          step_progress TEXT,
+          outputs TEXT,
+          logs TEXT,
+          error TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          completed_at DATETIME
+        );
       `);
 
       const userColumns = [
@@ -794,51 +814,51 @@ export class SQLiteProvider implements IDatabaseProvider {
   }
 
   async saveTimeline(
-    episodeId: string,
-    timelineData: any,
+    episode_id: string,
+    timeline_data: any,
     author: { id: string; name: string; avatar?: string },
-    changeSummary = 'Timeline updated'
-  ): Promise<{ versionId: string; versionNumber: number; updatedAt: string }> {
-    const versionId = `ver_${Math.random().toString(36).substring(2, 10)}`;
+    change_summary = 'Timeline updated'
+  ): Promise<{ version_id: string; version_number: number; updated_at: string }> {
+    const version_id = `ver_${Math.random().toString(36).substring(2, 10)}`;
     const now = new Date().toISOString();
-    const history = await this.getTimelineHistory(episodeId, 1, 0);
-    const versionNumber = history.total + 1;
-    const label = `v1.${versionNumber} - ${changeSummary}`;
-    const serializedData = typeof timelineData === 'string' ? timelineData : JSON.stringify(timelineData);
+    const history = await this.getTimelineHistory(episode_id, 1, 0);
+    const version_number = history.total + 1;
+    const label = `v1.${version_number} - ${change_summary}`;
+    const serializedData = typeof timeline_data === 'string' ? timeline_data : JSON.stringify(timeline_data);
 
     if (this.isFallback) {
       this.timelineSnapshotsStore.unshift({
-        id: versionId,
-        episode_id: episodeId,
-        version_number: versionNumber,
+        id: version_id,
+        episode_id,
+        version_number,
         label,
         author_id: author.id || 'usr_default',
         author_name: author.name || 'Editor',
         author_avatar: author.avatar || '',
-        change_summary: changeSummary,
+        change_summary,
         timeline_data: serializedData,
         created_at: now,
       });
-      return { versionId, versionNumber, updatedAt: now };
+      return { version_id, version_number, updated_at: now };
     }
 
     this.db.prepare(`
       INSERT INTO timeline_snapshots (id, episode_id, version_number, label, author_id, author_name, author_avatar, change_summary, timeline_data, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      versionId,
-      episodeId,
-      versionNumber,
+      version_id,
+      episode_id,
+      version_number,
       label,
       author.id || 'usr_default',
       author.name || 'Editor',
       author.avatar || '',
-      changeSummary,
+      change_summary,
       serializedData,
       now
     );
 
-    return { versionId, versionNumber, updatedAt: now };
+    return { version_id, version_number, updated_at: now };
   }
 
   async getLatestTimeline(episodeId: string): Promise<any | null> {
@@ -936,28 +956,28 @@ export class SQLiteProvider implements IDatabaseProvider {
   }
 
   async restoreTimelineVersion(
-    episodeId: string,
-    versionId: string,
+    episode_id: string,
+    version_id: string,
     author: { id: string; name: string; avatar?: string },
     reason = 'Restored version'
   ): Promise<any> {
-    const version = await this.getTimelineVersion(episodeId, versionId);
+    const version = await this.getTimelineVersion(episode_id, version_id);
     if (!version) throw new Error('Version snapshot not found');
 
     const saveRes = await this.saveTimeline(
-      episodeId,
-      version.timelineData,
+      episode_id,
+      version.timeline_data,
       author,
-      `Restored from ${version.versionId}: ${reason}`
+      `Restored from ${version.version_id}: ${reason}`
     );
 
     return {
       success: true,
-      restoredFromVersionId: versionId,
-      newVersionId: saveRes.versionId,
-      newVersionNumber: saveRes.versionNumber,
-      activeTimeline: version.timelineData,
-      createdAt: saveRes.updatedAt,
+      restored_from_version_id: version_id,
+      new_version_id: saveRes.version_id,
+      new_version_number: saveRes.version_number,
+      active_timeline: version.timeline_data,
+      created_at: saveRes.updated_at,
     };
   }
 
@@ -1091,5 +1111,129 @@ export class SQLiteProvider implements IDatabaseProvider {
       workers: workers,
       active_jobs: activeJobs.concat(queuedJobs),
     };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PIPELINE BACKGROUND JOBS
+  // ═══════════════════════════════════════════════════════════════════════════
+  private pipelineJobsStore: Map<string, any> = new Map();
+
+  async savePipelineJob(job: any): Promise<any> {
+    const jobData = {
+      ...job,
+      created_at: job.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (this.isFallback || !this.db) {
+      this.pipelineJobsStore.set(job.id, jobData);
+      return jobData;
+    }
+
+    try {
+      const stmt = this.db.prepare(`
+        INSERT OR REPLACE INTO pipeline_jobs (
+          id, user_id, series_id, episode_id, session_id, type, title, status,
+          progress, current_step, step_progress, outputs, logs, error, created_at, updated_at, completed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      stmt.run(
+        jobData.id,
+        jobData.user_id,
+        jobData.series_id,
+        jobData.episode_id,
+        jobData.session_id || null,
+        jobData.type,
+        jobData.title,
+        jobData.status || 'queued',
+        jobData.progress || 0,
+        jobData.current_step || '',
+        JSON.stringify(jobData.step_progress || {}),
+        JSON.stringify(jobData.outputs || {}),
+        JSON.stringify(jobData.logs || []),
+        jobData.error || null,
+        jobData.created_at,
+        jobData.updated_at,
+        jobData.completed_at || null
+      );
+      return jobData;
+    } catch (err: any) {
+      this.pipelineJobsStore.set(job.id, jobData);
+      return jobData;
+    }
+  }
+
+  async getPipelineJobById(jobId: string): Promise<any | null> {
+    if (this.isFallback || !this.db) {
+      return this.pipelineJobsStore.get(jobId) || null;
+    }
+
+    try {
+      const row = this.db.prepare('SELECT * FROM pipeline_jobs WHERE id = ?').get(jobId);
+      if (!row) return this.pipelineJobsStore.get(jobId) || null;
+      return {
+        ...row,
+        step_progress: typeof row.step_progress === 'string' ? JSON.parse(row.step_progress) : (row.step_progress || {}),
+        outputs: typeof row.outputs === 'string' ? JSON.parse(row.outputs) : (row.outputs || {}),
+        logs: typeof row.logs === 'string' ? JSON.parse(row.logs) : (row.logs || []),
+      };
+    } catch (err: any) {
+      return this.pipelineJobsStore.get(jobId) || null;
+    }
+  }
+
+  async getPipelineJobs(filter?: { userId?: string; seriesId?: string; episodeId?: string; status?: string; limit?: number }): Promise<any[]> {
+    if (this.isFallback || !this.db) {
+      let list = Array.from(this.pipelineJobsStore.values());
+      if (filter?.userId) list = list.filter(j => j.user_id === filter.userId);
+      if (filter?.seriesId) list = list.filter(j => j.series_id === filter.seriesId);
+      if (filter?.episodeId) list = list.filter(j => j.episode_id === filter.episodeId);
+      if (filter?.status) list = list.filter(j => j.status?.toLowerCase() === filter.status?.toLowerCase());
+      list.sort((a, b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime());
+      if (filter?.limit) list = list.slice(0, filter.limit);
+      return list;
+    }
+
+    try {
+      const conditions: string[] = [];
+      const params: any[] = [];
+      if (filter?.userId) { conditions.push('user_id = ?'); params.push(filter.userId); }
+      if (filter?.seriesId) { conditions.push('series_id = ?'); params.push(filter.seriesId); }
+      if (filter?.episodeId) { conditions.push('episode_id = ?'); params.push(filter.episodeId); }
+      if (filter?.status) { conditions.push('status = ?'); params.push(filter.status); }
+
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const limit = filter?.limit ? `LIMIT ${filter.limit}` : '';
+      const rows = this.db.prepare(`SELECT * FROM pipeline_jobs ${where} ORDER BY updated_at DESC ${limit}`).all(...params);
+
+      return rows.map((row: any) => ({
+        ...row,
+        step_progress: typeof row.step_progress === 'string' ? JSON.parse(row.step_progress) : (row.step_progress || {}),
+        outputs: typeof row.outputs === 'string' ? JSON.parse(row.outputs) : (row.outputs || {}),
+        logs: typeof row.logs === 'string' ? JSON.parse(row.logs) : (row.logs || []),
+      }));
+    } catch (err: any) {
+      return Array.from(this.pipelineJobsStore.values());
+    }
+  }
+
+  async updatePipelineJob(jobId: string, patch: Partial<any>): Promise<any | null> {
+    const existing = await this.getPipelineJobById(jobId);
+    if (!existing) return null;
+
+    const updated = {
+      ...existing,
+      ...patch,
+      updated_at: new Date().toISOString(),
+    };
+
+    return await this.savePipelineJob(updated);
+  }
+
+  async findActivePipelineJob(seriesId: string, episodeId: string, type?: string): Promise<any | null> {
+    const jobs = await this.getPipelineJobs({ seriesId, episodeId });
+    const active = jobs.find(j => (j.status === 'running' || j.status === 'queued') && (!type || j.type === type));
+    return active || null;
   }
 }

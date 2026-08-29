@@ -14,41 +14,13 @@ export const characterRouter = Router();
 // GET /api/characters — List characters directly from Database
 characterRouter.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
-    const seriesId = (req.query.series_id || req.query.seriesId) as string | undefined;
-    const db = await getDatabaseProvider();
-
-    if (seriesId) {
-      const series = await db.getSeriesById(seriesId);
-      const seriesChars = series?.characters || series?.master_plan?.characters || [];
-      
-      res.json({
-        code: 200,
-        data: seriesChars,
-        message: 'Characters fetched successfully from database',
-        error: null,
-      });
-      return;
-    }
-
-    // If no seriesId provided, aggregate characters from all user series
-    const allSeries = await db.getSeriesList();
-    const aggregatedChars: any[] = [];
-    for (const s of allSeries) {
-      const chars = s.characters || s.master_plan?.characters || [];
-      if (Array.isArray(chars)) {
-        for (const c of chars) {
-          aggregatedChars.push({
-            ...c,
-            series_id: s.id,
-          });
-        }
-      }
-    }
+    const series_id = req.query.series_id as string | undefined;
+    const list = await characterService.listCharacters(series_id);
 
     res.json({
       code: 200,
-      data: aggregatedChars,
-      message: 'All characters fetched successfully from database',
+      data: list,
+      message: 'Characters fetched successfully from database',
       error: null,
     });
   } catch (err: any) {
@@ -59,42 +31,23 @@ characterRouter.get('/', async (req: Request, res: Response): Promise<void> => {
 // POST /api/characters — Create/register character in Series within Database
 characterRouter.post('/', async (req: Request, res: Response) => {
   try {
-    const { name, gender, age, role, nationality, personality, visual_traits, visualTraits, series_id, seriesId, avatar } = req.body;
-    const charName = name || 'New Character';
-    const charTraits = visual_traits || visualTraits || personality || 'Modern cinematic look';
-    const db = await getDatabaseProvider();
+    const { name, gender, age, role, nationality, personality, visual_traits, series_id = 'series-001', avatar } = req.body;
+    const userId = (req as any).user?.id || (req as any).user?.user_id;
 
-    const charId = `char_${Date.now()}`;
-    const targetSeriesId = series_id || seriesId || 'series-001';
-    const newChar: any = {
-      id: charId,
-      series_id: targetSeriesId,
-      name: charName,
-      gender: gender || 'Female',
-      age: age || 25,
-      role: role || 'protagonist',
-      nationality: nationality || '',
-      identity: personality || '',
-      traits: charTraits,
-      visual_traits: charTraits,
-      physical_characteristics: charTraits,
-      appearance: charTraits,
-      clothing_and_accessories: '',
-      speech_style: 'Sharp and concise',
-      avatar: avatar || null,
-      lora_model: `lora-${charName.toLowerCase().replace(/\s+/g, '-')}-sdxl`,
-      description: '',
-      created_at: new Date().toISOString(),
-    };
-
-    if (targetSeriesId) {
-      const series = await db.getSeriesById(targetSeriesId);
-      if (series) {
-        const characters = Array.isArray(series.characters) ? [...series.characters] : [];
-        characters.push(newChar);
-        await db.updateSeries(targetSeriesId, { characters });
-      }
-    }
+    const newChar = await characterService.createCharacter(
+      series_id,
+      {
+        name,
+        gender,
+        age,
+        role,
+        nationality,
+        identity: personality,
+        visual_traits: visual_traits || personality,
+        avatar,
+      },
+      userId
+    );
 
     return res.json({
       code: 200,
@@ -111,112 +64,43 @@ characterRouter.post('/', async (req: Request, res: Response) => {
 characterRouter.post('/:characterId/portrait', async (req: Request, res: Response) => {
   try {
     const { characterId } = req.params;
-    const { series_id, seriesId, name, age, gender, nationality, visual_traits, visualTraits, prompt, style, visual_style, visualStyle, visual_style_prompt, visualStylePrompt, aspect_ratio, aspectRatio } = req.body;
-    const db = await getDatabaseProvider();
+    const { series_id, name, age, gender, nationality, visual_traits, prompt, style, visual_style, visual_style_prompt, aspect_ratio } = req.body;
+    const userId = (req as any).user?.id || (req as any).user?.user_id;
 
-    let charName = name;
-    let charTraits = visual_traits || visualTraits;
-    let charAge = age;
-    let charGender = gender;
-    let charNationality = nationality;
-    let targetSeries: any = null;
-    const targetSeriesId = series_id || seriesId;
-
-    if (targetSeriesId) {
-      targetSeries = await db.getSeriesById(targetSeriesId);
-      const dbChar = (targetSeries?.characters || targetSeries?.master_plan?.characters || []).find(
-        (c: any) => c.id === characterId || c.name === name
-      );
-      if (dbChar) {
-        charName = dbChar.name || charName;
-        charTraits = dbChar.visual_traits || dbChar.traits || charTraits;
-        charAge = dbChar.age || charAge;
-        charGender = dbChar.gender || charGender;
-        charNationality = dbChar.nationality || charNationality;
-      }
-    }
-
-    const resolvedStyle = visual_style || visualStyle || targetSeries?.visual_style || 'realistic';
-    const resolvedStylePrompt = visual_style_prompt || visualStylePrompt || getVisualStylePrompt(resolvedStyle);
-    const targetAspect = (aspect_ratio || aspectRatio || '9:16').trim();
-
-    charName = charName || 'Character';
-    charTraits = charTraits || 'Cinematic character portrait';
-    const ageTag = charAge ? `age: ${charAge}-year-old` : '';
-    const genderTag = charGender && charGender !== 'neutral' ? `gender: ${charGender}` : '';
-    const nationalityTag = charNationality ? `nationality: ${charNationality}` : '';
-    const fullPrompt = prompt || `${resolvedStylePrompt}, portrait of ${charName}, ${ageTag}, ${genderTag}, ${nationalityTag}, ${charTraits}, ${style || 'cinematic lighting'}, age-accurate facial features, character continuity reference.`;
-
-    const imgResult = await aiProviderRouter.generateImage(fullPrompt, {
-      aspectRatio: targetAspect,
-    });
-
-    if (!imgResult || !imgResult.url) {
-      throw new Error('Failed to generate character portrait');
-    }
-
-    const s3 = await StorageFactory.uploadMedia(imgResult.url, 'images', 'png', imgResult.mimeType || 'image/png');
-    const finalUrl = `/api/assets/file/${s3.key}`;
-
-    // Embed SynthID Watermark
-    const synthIdResult = await SynthIDService.embedSynthID({
-      assetType: 'image',
-      model: imgResult.provider || 'Google Flow',
-      seriesId: targetSeriesId,
-      sceneId: characterId,
-    });
-
-    // Save Asset to Database
-    const assetId = `ast_${nanoid(8)}`;
-    await db.saveAsset({
-      id: assetId,
-      name: `${charName}_Portrait`,
-      type: 'character_portrait',
-      ext: '.PNG',
-      size: `${(s3.size / (1024 * 1024)).toFixed(1)} MB`,
-      size_bytes: s3.size,
-      category_label: 'Character Portrait',
-      category_color: 'text-violet-500 dark:text-violet-400',
-      s3_key: s3.key,
-      url: finalUrl,
-      thumbnail: finalUrl,
-      series_id: targetSeriesId,
+    const { avatar_url, character } = await characterService.generatePortrait({
+      series_id,
       character_id: characterId,
-      prompt: fullPrompt,
-      provider: imgResult.provider,
-      aspect: 'aspect-[9/16]',
-      synth_id_verified: true,
-      synth_id_hash: synthIdResult.synthIdHash,
-      synth_id_metadata: synthIdResult.synthIdMetadata,
-      created_at: new Date().toISOString(),
+      name,
+      age,
+      gender,
+      nationality,
+      visual_traits,
+      prompt,
+      style,
+      visual_style,
+      visual_style_prompt,
+      aspect_ratio,
+      user_id: userId,
     });
-
-    // Update Series Character in Database
-    if (targetSeriesId && targetSeries && Array.isArray(targetSeries.characters)) {
-      const cIdx = targetSeries.characters.findIndex((c: any) => c.id === characterId || c.name === charName);
-      if (cIdx !== -1) {
-        targetSeries.characters[cIdx].avatar = finalUrl;
-        if (charAge) targetSeries.characters[cIdx].age = charAge;
-        if (charGender) targetSeries.characters[cIdx].gender = charGender;
-        await db.updateSeries(targetSeriesId, { characters: targetSeries.characters });
-      }
-    }
 
     return res.json({
       code: 200,
       data: {
-        image_url: finalUrl,
-        asset_id: assetId,
-        s3_key: s3.key,
-        character_id: characterId,
-        provider: imgResult.provider,
+        avatar: avatar_url,
+        image_url: avatar_url,
+        character,
       },
-      message: 'Character portrait generated and saved to database successfully',
+      message: 'Character portrait generated successfully',
       error: null,
     });
   } catch (err: any) {
-    Logger.error(`[characterRouter] Portrait generation error: ${err.message}`);
-    return res.status(500).json({ code: 500, data: null, message: err.message, error: 'PORTRAIT_GEN_FAILED' });
+    Logger.error(`[characterRouter] Portrait generation failed: ${err.message}`);
+    return res.status(500).json({
+      code: 500,
+      data: null,
+      message: err.message,
+      error: 'GENERATION_FAILED',
+    });
   }
 });
 
@@ -224,15 +108,15 @@ characterRouter.post('/:characterId/portrait', async (req: Request, res: Respons
 characterRouter.post('/:characterId/anchors', async (req: Request, res: Response) => {
   try {
     const { characterId } = req.params;
-    const { series_id, seriesId, name, age, gender, visual_traits, visualTraits, visual_style, visualStyle, visual_style_prompt, visualStylePrompt } = req.body;
+    const { series_id, name, age, gender, visual_traits, visual_style, visual_style_prompt } = req.body;
     const db = await getDatabaseProvider();
 
     let targetSeries: any = null;
     let charName = name;
-    let charTraits = visual_traits || visualTraits;
+    let charTraits = visual_traits;
     let charAge = age;
     let charGender = gender;
-    const targetSeriesId = series_id || seriesId;
+    const targetSeriesId = series_id;
 
     let cIdx = -1;
     if (targetSeriesId) {
@@ -251,8 +135,8 @@ characterRouter.post('/:characterId/anchors', async (req: Request, res: Response
       }
     }
 
-    const resolvedStyle = visual_style || visualStyle || targetSeries?.visual_style || 'realistic';
-    const resolvedStylePrompt = visual_style_prompt || visualStylePrompt || getVisualStylePrompt(resolvedStyle);
+    const resolvedStyle = visual_style || targetSeries?.visual_style || 'realistic';
+    const resolvedStylePrompt = visual_style_prompt || targetSeries?.visual_style_prompt || getVisualStylePrompt(resolvedStyle);
 
     charName = charName || 'Character';
     charTraits = charTraits || 'Modern cinematic look';
@@ -270,7 +154,7 @@ characterRouter.post('/:characterId/anchors', async (req: Request, res: Response
     let existingFrontalUrl = '';
     if (cIdx !== -1 && targetSeries?.characters?.[cIdx]) {
       const dbChar = targetSeries.characters[cIdx];
-      existingFrontalUrl = dbChar.avatar || dbChar.avatarUrl || dbChar.anchors?.[0]?.imageUrl || '';
+      existingFrontalUrl = dbChar.avatar || dbChar.image_url || '';
     }
 
     // 1. Generate multi-angle facial consistency anchors using CharacterService with age, gender, wardrobe, visualStyle, and frontal reference
@@ -365,42 +249,39 @@ characterRouter.post('/:characterId/anchors', async (req: Request, res: Response
 characterRouter.post('/:characterId/anchors/:anchorId', async (req: Request, res: Response) => {
   try {
     const { characterId, anchorId } = req.params;
-    const { seriesId, name, age, gender, visualTraits, wardrobeDesc, visualStyle, visualStylePrompt } = req.body;
+    const { series_id, name, age, gender, visual_traits, wardrobe_desc, visual_style, visual_style_prompt } = req.body;
     const db = await getDatabaseProvider();
 
     let targetSeries: any = null;
     let charName = name;
-    let charTraits = visualTraits;
+    let charTraits = visual_traits;
     let charAge = age;
     let charGender = gender;
-    let outfitTag = wardrobeDesc || '';
+    let outfitTag = wardrobe_desc || '';
 
-    if (seriesId) {
-      targetSeries = await db.getSeriesById(seriesId);
-      const dbChar = (targetSeries?.characters || targetSeries?.master_plan?.characters || []).find(
+    if (series_id) {
+      targetSeries = await db.getSeriesById(series_id);
+      const dbChar = (targetSeries?.characters || []).find(
         (c: any) => c.id === characterId || c.name === name
       );
       if (dbChar) {
         charName = dbChar.name || charName;
-        charTraits = dbChar.visualTraits || dbChar.traits || charTraits;
+        charTraits = dbChar.visual_traits || dbChar.traits || charTraits;
         charAge = dbChar.age || charAge;
         charGender = dbChar.gender || charGender;
-        if (!outfitTag && Array.isArray(dbChar.wardrobe) && dbChar.wardrobe.length > 0) {
-          outfitTag = Array.isArray(dbChar.wardrobe[0].tags) ? dbChar.wardrobe[0].tags.join(', ') : dbChar.wardrobe[0].name;
-        }
       }
     }
 
-    const resolvedStyle = visualStyle || targetSeries?.visual_style || 'realistic';
-    const resolvedStylePrompt = visualStylePrompt || getVisualStylePrompt(resolvedStyle);
+    const resolvedStyle = visual_style || targetSeries?.visual_style || 'realistic';
+    const resolvedStylePrompt = visual_style_prompt || getVisualStylePrompt(resolvedStyle);
 
     let referenceImageUrl = '';
     if (anchorId !== 'anc-1') {
-      const dbChar = (targetSeries?.characters || targetSeries?.master_plan?.characters || []).find(
+      const dbChar = (targetSeries?.characters || []).find(
         (c: any) => c.id === characterId || c.name === name
       );
       if (dbChar) {
-        referenceImageUrl = dbChar.anchors?.[0]?.imageUrl || dbChar.avatarUrl || dbChar.avatar || '';
+        referenceImageUrl = dbChar.avatar || dbChar.image_url || '';
       }
     }
 
@@ -408,7 +289,7 @@ characterRouter.post('/:characterId/anchors/:anchorId', async (req: Request, res
 
     // Update in database series
     let updatedAnchors: any[] = [];
-    if (seriesId && targetSeries && Array.isArray(targetSeries.characters)) {
+    if (series_id && targetSeries && Array.isArray(targetSeries.characters)) {
       const cIdx = targetSeries.characters.findIndex((c: any) => c.id === characterId || c.name === charName);
       if (cIdx !== -1) {
         const currentAnchors = Array.isArray(targetSeries.characters[cIdx].anchors) ? [...targetSeries.characters[cIdx].anchors] : [];
@@ -420,7 +301,7 @@ characterRouter.post('/:characterId/anchors/:anchorId', async (req: Request, res
         }
         targetSeries.characters[cIdx].anchors = currentAnchors;
         updatedAnchors = currentAnchors;
-        await db.updateSeries(seriesId, { characters: targetSeries.characters });
+        await db.updateSeries(series_id, { characters: targetSeries.characters });
       }
     }
 
@@ -432,7 +313,7 @@ characterRouter.post('/:characterId/anchors/:anchorId', async (req: Request, res
       ext: '.PNG',
       url: singleAnchor.imageUrl,
       thumbnail: singleAnchor.imageUrl,
-      series_id: seriesId,
+      series_id: series_id,
       character_id: characterId,
       category_label: 'Character Anchor',
       category_color: 'text-violet-500 dark:text-violet-400',
@@ -475,12 +356,12 @@ characterRouter.post('/:characterId/wardrobe', async (req: Request, res: Respons
       if (targetSeries) {
         seriesGenre = targetSeries.genre || seriesGenre;
         seriesVisual = targetSeries.visual_style || seriesVisual;
-        const dbChar = (targetSeries.characters || targetSeries.master_plan?.characters || []).find(
+        const dbChar = (targetSeries.characters || []).find(
           (c: any) => c.id === characterId
         );
         if (dbChar) {
           charName = dbChar.name || charName;
-          charTraits = dbChar.visualTraits || dbChar.traits || charTraits;
+          charTraits = dbChar.visual_traits || dbChar.traits || charTraits;
           charGender = dbChar.gender || charGender;
           charAge = dbChar.age || charAge;
         }
@@ -601,7 +482,7 @@ characterRouter.post('/sync-shots', async (req: Request, res: Response) => {
     }
 
     const series = targetSeriesId ? await db.getSeriesById(targetSeriesId) : null;
-    const characters: any[] = series?.characters || series?.master_plan?.characters || [];
+    const characters: any[] = series?.characters || [];
 
     if (characters.length === 0) {
       return res.json({

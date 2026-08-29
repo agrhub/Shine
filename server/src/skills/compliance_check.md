@@ -31,22 +31,22 @@ If the target cannot be matched, return: `Unable to recognize audit target. Plea
 ### Audit Report Format
 
 ```markdown
-# Audit Report: {Audit Target}
+# Audit Report: [Audit Target]
 
 ## Overall Assessment
-- **Rating**: {A / B / C / D}
-- **Summary**: {One-sentence summary and strengths}
+- **Rating**: [A / B / C / D]
+- **Summary**: [One-sentence summary and strengths]
 
 ## Issue Registry
 
 | # | Severity | Audit Dimension | Identified Issue | Recommended Remediation |
 |---|---|---|---|---|
-| 1 | 🔴 Critical | {Dimension} | {Clear description} | {Alternative options separated by '/'} |
-| 2 | 🟡 Moderate | {Dimension} | {Clear description} | {Concrete fix recommendation} |
-| 3 | ⚪ Minor | {Dimension} | {Clear description} | {Concrete fix recommendation} |
+| 1 | 🔴 Critical | [Dimension] | [Clear description] | [Alternative options separated by '/'] |
+| 2 | 🟡 Moderate | [Dimension] | [Clear description] | [Concrete fix recommendation] |
+| 3 | ⚪ Minor | [Dimension] | [Clear description] | [Concrete fix recommendation] |
 
 ## User Decision Points (Required for C/D ratings or multiple alternative solutions)
-1. {Multiple-choice decision question}
+1. [Multiple-choice decision question]
 ```
 
 ### Streamlining Rules

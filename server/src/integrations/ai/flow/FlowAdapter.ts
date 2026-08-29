@@ -279,14 +279,14 @@ export class FlowAdapter {
         }
     }
 
-    private getHeaders(account: IAIAccount){
+    private getHeaders(account: IAIAccount, customReferer?: string){
         const userAgent = account.last_fingerprint?.get('user_agent') || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
         const headers: any = {
             'authorization': `Bearer ${account.flow_at}`,
             'Content-Type': 'application/json',
             'User-Agent': userAgent,
             'x-browser-channel': 'stable',
-            'Referer': 'https://labs.google/fx/tools/flow',
+            'Referer': customReferer || 'https://labs.google/fx/tools/flow',
             'Origin': 'https://labs.google',
         };
 
@@ -822,6 +822,104 @@ export class FlowAdapter {
             Logger.warn(`[FlowAdapter] getMediaUrlRedirect failed for ${mediaName}: ${err.message}`);
         }
 
+        return null;
+    }
+
+    /**
+     * Generate Text / JSON content using Google Flow generateContent API (gemini-3-flash-preview)
+     */
+    public async generateContent(
+        account: IAIAccount,
+        prompt: string,
+        options: {
+            model?: string;
+            systemInstruction?: string;
+            jsonMode?: boolean;
+            thinkingLevel?: 'LOW' | 'MEDIUM' | 'HIGH';
+        } = {}
+    ): Promise<string | null> {
+        await this.syncFlowAccount(account);
+        let projectId = account.project_id;
+        if (!projectId) {
+            projectId = await flowSyncService.ensureProject(account);
+            account.project_id = projectId;
+        }
+        const url = `${this.apiBaseUrl}/flow:generateContent`;
+        const targetModel = options.model || 'gemini-3-flash-preview';
+
+        const appletUrl = `https://labs.google/fx/tools/flow/project/${projectId}/tool/f640e294-1f05-4fce-97a0-95ccfea29b9d`;
+
+        let retry = 3;
+        while (retry > 0) {
+            try {
+                const recaptchaToken = await captchaService.solve({
+                    projectId: projectId,
+                    websiteURL: appletUrl,
+                    action: '',
+                    tokenId: (account as any).id || (account as any)._id
+                });
+
+                if (!recaptchaToken) {
+                    throw new Error('Flow Text Generation Failed: ReCaptcha token missing');
+                }
+
+                let systemInstructionPayload: any = undefined;
+                if (options.systemInstruction) {
+                    systemInstructionPayload = {
+                        parts: [{ text: options.systemInstruction }]
+                    };
+                }
+
+                const payload: any = {
+                    model: targetModel,
+                    contents: [
+                        {
+                            role: 'user',
+                            parts: [{ text: prompt }]
+                        }
+                    ],
+                    systemInstruction: systemInstructionPayload,
+                    thinkingConfig: {
+                        thinkingLevel: options.thinkingLevel || 'LOW'
+                    },
+                    requestContext: {
+                        flowSdkInfo: {
+                            appletId: 'f640e294-1f05-4fce-97a0-95ccfea29b9d',
+                            appletVersionId: '4e59059a-055d-4f99-8467-4d882522ef90'
+                        }
+                    },
+                    recaptchaContext: {
+                        token: recaptchaToken,
+                        applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB'
+                    }
+                };
+
+                const headers = this.getHeaders(account, appletUrl);
+                Logger.info(`[FlowAdapter] [generateContent] targetURL: ${url}, model: ${targetModel}`);
+
+                const response = await axios.post(url, payload, { headers });
+
+                const candidates = response.data?.candidates;
+                if (Array.isArray(candidates) && candidates.length > 0) {
+                    const parts = candidates[0]?.content?.parts || [];
+                    const text = parts.map((p: any) => p.text || '').join('');
+                    if (text) {
+                        return text;
+                    }
+                }
+
+                Logger.error(`[FlowAdapter] No text returned from Flow generateContent: ${JSON.stringify(response.data).substring(0, 300)}...`);
+                throw new Error('Flow API Error: No text returned from generateContent');
+            } catch (error: any) {
+                const msg = error.response?.data?.error?.message || error.message;
+                if (msg !== 'reCAPTCHA evaluation failed') {
+                    throw new Error(`Flow generateContent Failed: ${msg}`);
+                }
+                Logger.info(`[FlowAdapter] reCAPTCHA evaluation failed. Retrying in 5s...`);
+                await new Promise(resolve => setTimeout(resolve, 5000));
+                retry--;
+            }
+        }
         return null;
     }
 }

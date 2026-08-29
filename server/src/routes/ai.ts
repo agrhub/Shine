@@ -12,10 +12,10 @@ export const aiRouter = Router();
 
 // GET /api/ai/trends/viral-topics — Delegated to TrendRadarAgent & trend_radar skill
 aiRouter.get('/trends/viral-topics', async (req, res) => {
-  const region = (req.query.region as string) || 'US';
-  const lang = (req.query.lang as string) || (req.query.language as string) || (req.headers['accept-language']?.split(',')[0]?.split(';')[0]) || 'en';
+  const country = (req.query.country as string) || (req.query.region as string) || 'US';
+  const lang = (req.query.lang as string) || (req.query.language as string) || (req.headers['accept-language']?.split(',')[0]?.split(';')[0]) || 'en-US';
   try {
-    const topics = await trendRadarAgent.execute(region, lang);
+    const topics = await trendRadarAgent.execute(country, lang);
     return res.json({
       code: 200,
       data: topics,
@@ -59,16 +59,16 @@ aiRouter.post('/generate-master-plan', async (req, res) => {
     const plan = await storySkeletonAgent.execute({
       title: title || 'Untitled Series',
       genre: genre || 'Suspense / Mystery',
-      visualStyle: visual_style || 'realistic',
-      visualStylePrompt: visual_style_prompt || '',
+      visual_style: visual_style || 'realistic',
+      visual_style_prompt: visual_style_prompt || '',
       synopsis: synopsis || 'A high-stakes conflict of ambition, betrayal, and power.',
-      totalEpisodes: total_episodes || 24,
-      episodeDurationSeconds: episode_duration_seconds ? Number(episode_duration_seconds) : undefined,
+      total_episodes: total_episodes || 24,
+      episode_duration_seconds: episode_duration_seconds ? Number(episode_duration_seconds) : undefined,
       country: country || 'United States',
       language: language || 'en-US',
       ratio: ratio || '9:16',
-      viralTopic: viral_topic || '',
-      referenceAssets: reference_assets,
+      viral_topic: viral_topic || '',
+      reference_assets: reference_assets,
     });
 
     return res.json({
@@ -100,9 +100,9 @@ aiRouter.post('/generate-outline', async (req, res) => {
     const outline = await storySkeletonAgent.execute({
       title: title || 'Undercover Mastermind',
       genre: genre || 'Suspense',
-      visualStyle: visual_style || 'realistic',
+      visual_style: visual_style || 'realistic',
       synopsis: synopsis || 'Betrayed heir undercover to dismantle corrupt board.',
-      totalEpisodes: total_episodes || 20,
+      total_episodes: total_episodes || 20,
     });
     return res.json({ code: 200, data: outline, message: 'Outline generated successfully', error: null });
   } catch (err: any) {
