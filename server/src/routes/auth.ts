@@ -812,20 +812,20 @@ router.post('/oauth/manual-link', async (req: Request, res: Response): Promise<v
     }
 
     const cleanHandle = handle ? (handle.startsWith('@') ? handle : `@${handle}`) : `@${channel_name.toLowerCase().replace(/\s+/g, '_')}`;
-    const newChannel = {
+    const newChannel : PlatformAccount = {
       id: `conn_${provider}_${nanoid(8)}`,
       provider,
-      channelId: `ch_${nanoid(10)}`,
-      channelName: channel_name,
+      channel_id: `ch_${nanoid(10)}`,
+      channel_name: channel_name,
       handle: cleanHandle,
-      channelAvatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(channel_name)}`,
-      connectedAt: new Date().toISOString(),
+      channel_avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(channel_name)}`,
+      connected_at: new Date().toISOString(),
       status: 'connected',
     };
 
-    const existingChannels = (user as any).connected_channels || [];
+    const existingChannels = user.connected_channels || [];
     const updatedChannels = [...existingChannels, newChannel];
-    (user as any).connected_channels = updatedChannels;
+    user.connected_channels = updatedChannels;
     await db.updateUser(user);
 
     res.send(`

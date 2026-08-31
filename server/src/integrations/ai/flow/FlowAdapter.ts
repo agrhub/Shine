@@ -115,20 +115,18 @@ export class FlowAdapter {
                     mimeType = parts[0].split(':')[1].split(';')[0];
                     buffer = Buffer.from(parts[1], 'base64');
                 } else {
-                    const stream = await StorageFactory.getFileStream(input);
-                    const chunks: any[] = [];
-                    buffer = await new Promise<Buffer>((resolve, reject) => {
-                        stream.on('data', (chunk: any) => chunks.push(chunk));
-                        stream.on('error', reject);
-                        stream.on('end', () => resolve(Buffer.concat(chunks)));
-                    });
-                    
-                    if (input.endsWith('.jpg') || input.endsWith('.jpeg')) mimeType = 'image/jpeg';
-                    else if (input.endsWith('.webp')) mimeType = 'image/webp';
-                    else if (input.endsWith('.mp4')) mimeType = 'video/mp4';
+                    const fileRes = await StorageFactory.getFileBuffer(input);
+                    buffer = fileRes.buffer;
+                    if (fileRes.mimeType) {
+                        mimeType = fileRes.mimeType;
+                    } else if (input.endsWith('.jpg') || input.endsWith('.jpeg')) {
+                        mimeType = 'image/jpeg';
+                    } else if (input.endsWith('.webp')) {
+                        mimeType = 'image/webp';
+                    } else if (input.endsWith('.mp4')) {
+                        mimeType = 'video/mp4';
+                    }
                 }
-
-                // Logger.info(`[FlowAdapter] Resolved media reference ${input} to ${buffer.length} bytes, mime: ${mimeType}`);
 
                 return {
                     mediaBytes: buffer.toString('base64'),

@@ -42,7 +42,7 @@ Each shot MUST include:
 - `visual_prompt`: ultra-detailed Cinematic 8K shot description for image generation
 - `end_frame_prompt`: final frozen frame visual state
 - `transition_effect`: "cut" | "fade" | "dissolve" | "smash_cut" | "match_cut"
-- `video_effect`: "glowFilter" | "vignette" | "depthBlur" | "none"
+- `video_effect`: "vignette" | "glowFilter" | "bloomFilter" | "retro70s" | "filmStripPro" | "sepia" | "tvScanlines" | "glitch" | "rgbGlitch" | "shine" | "oldFilmFilter" | "crtFilter" | "motionBlur" | "cameraMove" | "fastZoom" | "shockwaveFilter" | "depthBlur" | "godrayFilter" | "none"
 - `effects`: array of VFX tags (can be empty `[]`)
 - `scene_context`: story beat context for this shot
 - `prop_details`: specific props visible or interacted with in this shot

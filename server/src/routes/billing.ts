@@ -18,10 +18,10 @@ billingRouter.get('/tier', async (req: Request, res: Response) => {
       code: 200,
       data: {
         tier: rawTier.toLowerCase(),
-        creditBalance: user.credits ?? 100,
-        creditQuota: rawTier === 'ENTERPRISE' ? 10000 : rawTier === 'PRO' ? 1000 : 100,
+        credit_balance: user.credits ?? 100,
+        credit_quota: rawTier === 'ENTERPRISE' ? 10000 : rawTier === 'PRO' ? 1000 : 100,
         features: ['series.create', 'script.generate', 'voice.tts', 'publish.multi', 'cover.generate'],
-        monthlyPriceUsd: rawTier === 'ENTERPRISE' ? 299 : rawTier === 'PRO' ? 29 : 0,
+        monthly_price_usd: rawTier === 'ENTERPRISE' ? 299 : rawTier === 'PRO' ? 29 : 0,
       },
       message: 'Subscription tier retrieved',
       error: null,
@@ -53,7 +53,7 @@ billingRouter.post('/checkout', (req: Request, res: Response) => {
     return res.json({
       code: 200,
       data: {
-        sessionId: `cs_test_${Date.now()}`,
+        session_id: `cs_test_${Date.now()}`,
         url: `http://localhost:3000/settings?checkout_success=true&tier=${encodeURIComponent(tier)}`,
       },
       message: 'Stripe checkout session initialized',
@@ -76,7 +76,7 @@ billingRouter.post('/webhook', (req: Request, res: Response) => {
 
   return res.json({
     code: 200,
-    data: { received: true, eventType: event?.type || 'checkout.session.completed' },
+    data: { received: true, event_type: event?.type || 'checkout.session.completed' },
     message: 'Stripe webhook event processed',
     error: null,
   });
@@ -91,10 +91,10 @@ billingRouter.post('/revenue-splits', (req: Request, res: Response) => {
     code: 200,
     data: {
       seriesId: seriesId || 'series-001',
-      grossRevenueUsd: totalRevenueUsd || 1000,
-      platformFeeUsd: (totalRevenueUsd || 1000) * 0.3,
-      creatorPayoutUsd: netRevenue,
-      payoutStatus: 'scheduled',
+      gross_revenueUsd: totalRevenueUsd || 1000,
+      platform_fee_usd: (totalRevenueUsd || 1000) * 0.3,
+      creator_payout_usd: netRevenue,
+      payout_status: 'scheduled',
     },
     error: null,
     message: 'Revenue split calculated successfully',
@@ -117,7 +117,7 @@ billingRouter.get('/usage-history', async (req: Request, res: Response) => {
       type: t.activity,
       detail: t.details || 'AI Task Execution',
       credits: t.amount,
-      balanceAfter: t.balance_after,
+      balance_after: t.balance_after,
       date: t.created_at ? new Date(t.created_at).toISOString().replace('T', ' ').substring(0, 16) : new Date().toISOString().replace('T', ' ').substring(0, 16),
       status: t.status || 'Success',
     }));

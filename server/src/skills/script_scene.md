@@ -185,6 +185,31 @@ Characters: [Character Name]: [Exact physical_characteristics + Exact clothing_a
 Props: [Prop Name]: [Exact physical_characteristics from Prop Asset]
 ```
 
+### Video Effect & Transition Keys (MANDATORY ENUM)
+
+Every shot's `video_effect` field MUST be strictly one of the canonical keys from OpenVideo Effects Catalog:
+- `vignette` (Moody, dark corners, tension)
+- `glowFilter` (Dreamy, romantic, high-key drama)
+- `bloomFilter` (Intense light glow, angelic/shocking)
+- `retro70s` (Warm retro cinematic nostalgia)
+- `filmStripPro` (Old movie film strip aesthetic)
+- `sepia` (Historical / flashback sepia tone)
+- `tvScanlines` (Security camera, CRT monitor screen)
+- `glitch` (Cyberpunk, system error, hallucination)
+- `rgbGlitch` (Digital breakdown, extreme shock)
+- `shine` (Lens flare, epiphany, revelation)
+- `oldFilmFilter` (Vintage grain and scratches)
+- `crtFilter` (Retro screen phosphor look)
+- `motionBlur` (Fast action, panic, chase)
+- `cameraMove` (Dynamic simulated handheld motion)
+- `fastZoom` (Dramatic crash zoom)
+- `shockwaveFilter` (Impact shockwave, explosive turn)
+- `depthBlur` (Cinematic shallow depth of field)
+- `godrayFilter` (Atmospheric divine sunbeams)
+- `none` or `""` (Natural cinematic look without overlay)
+
+NEVER invent arbitrary effect names outside this exact list.
+
 ---
 
 ## Required Output Schema (JSON)

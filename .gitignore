@@ -36,3 +36,5 @@ scripts/test-render-worker.js
 scripts/test_preview.mjs
 scripts/test_screen.mjs
 scripts/test_slide5.mjs
+scripts/generate_act7_graphic.mjs
+scripts/generate_benefit_graphic.mjs

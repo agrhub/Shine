@@ -8,20 +8,6 @@ export interface OAuthUserProfile {
   providerId: string;
 }
 
-export interface OAuthConnectedChannel {
-  id: string;
-  provider: string;
-  channelId: string;
-  channelName: string;
-  handle?: string;
-  channelAvatar?: string;
-  accessToken?: string;
-  refreshToken?: string;
-  expiresAt?: number;
-  connectedAt: string;
-  status: string;
-}
-
 export class OAuthService {
   /**
    * Build authorization URL for Single Sign-On (Google, GitHub, Facebook)
@@ -250,7 +236,7 @@ export class OAuthService {
     code: string,
     redirectUri: string,
     config: any
-  ): Promise<OAuthConnectedChannel[]> {
+  ): Promise<PlatformAccount[]> {
     if (provider === 'youtube') {
       const clientId = config?.publishing?.youtube?.clientId || process.env.YOUTUBE_CLIENT_ID;
       const clientSecret = config?.publishing?.youtube?.clientSecret || process.env.YOUTUBE_CLIENT_SECRET;
@@ -284,14 +270,14 @@ export class OAuthService {
       return items.map((item: any) => ({
         id: `conn_yt_${item.id || nanoid(8)}`,
         provider: 'youtube',
-        channelId: item.id,
-        channelName: item.snippet?.title || 'YouTube Channel',
+        channel_id: item.id,
+        channel_name: item.snippet?.title || 'YouTube Channel',
         handle: item.snippet?.customUrl || `@${item.snippet?.title?.toLowerCase().replace(/\s+/g, '_')}`,
-        channelAvatar: item.snippet?.thumbnails?.default?.url || item.snippet?.thumbnails?.high?.url || '',
-        accessToken: access_token,
-        refreshToken: refresh_token,
-        expiresAt: Date.now() + (expires_in || 3600) * 1000,
-        connectedAt: new Date().toISOString(),
+        channel_avatar: item.snippet?.thumbnails?.default?.url || item.snippet?.thumbnails?.high?.url || '',
+        access_token: access_token,
+        refresh_token: refresh_token,
+        expires_at: Date.now() + (expires_in || 3600) * 1000,
+        connected_at: new Date().toISOString(),
         status: 'connected',
       }));
     }
@@ -326,14 +312,14 @@ export class OAuthService {
         {
           id: `conn_tt_${open_id || nanoid(8)}`,
           provider: 'tiktok',
-          channelId: open_id || data.open_id || `tt_${nanoid(8)}`,
-          channelName: data.display_name || data.username || 'TikTok Creator',
+          channel_id: open_id || data.open_id || `tt_${nanoid(8)}`,
+          channel_name: data.display_name || data.username || 'TikTok Creator',
           handle: data.username ? `@${data.username}` : '@tiktok_creator',
-          channelAvatar: data.avatar_url || '',
-          accessToken: access_token,
-          refreshToken: refresh_token,
-          expiresAt: Date.now() + (expires_in || 86400) * 1000,
-          connectedAt: new Date().toISOString(),
+          channel_avatar: data.avatar_url || '',
+          access_token: access_token,
+          refresh_token: refresh_token,
+          expires_at: Date.now() + (expires_in || 86400) * 1000,
+          connected_at: new Date().toISOString(),
           status: 'connected',
         },
       ];
@@ -373,12 +359,12 @@ export class OAuthService {
           {
             id: `conn_fb_${meRes.data.id}`,
             provider: 'facebook',
-            channelId: meRes.data.id,
-            channelName: `${meRes.data.name} (Personal)`,
+            channel_id: meRes.data.id,
+            channel_name: `${meRes.data.name} (Personal)`,
             handle: `@${meRes.data.name.toLowerCase().replace(/\s+/g, '_')}`,
-            channelAvatar: meRes.data.picture?.data?.url || '',
-            accessToken: userAccessToken,
-            connectedAt: new Date().toISOString(),
+            channel_avatar: meRes.data.picture?.data?.url || '',
+            access_token: userAccessToken,
+            connected_at: new Date().toISOString(),
             status: 'connected',
           },
         ];
@@ -387,12 +373,12 @@ export class OAuthService {
       return pages.map((page: any) => ({
         id: `conn_fb_${page.id}`,
         provider: 'facebook',
-        channelId: page.id,
-        channelName: page.name,
+        channel_id: page.id,
+        channel_name: page.name,
         handle: `@${page.name.toLowerCase().replace(/\s+/g, '_')}`,
-        channelAvatar: page.picture?.data?.url || '',
-        accessToken: page.access_token || userAccessToken,
-        connectedAt: new Date().toISOString(),
+        channel_avatar: page.picture?.data?.url || '',
+        access_token: page.access_token || userAccessToken,
+        connected_at: new Date().toISOString(),
         status: 'connected',
       }));
     }

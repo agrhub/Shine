@@ -10,11 +10,11 @@
 
 | Feature | Status | Evidence | Blocker |
 |---------|--------|----------|---------|
-| `POST /v1/auth/signup` hoạt động thực | ✅ REAL | Verified 201 response with JWT token | — |
+| `POST /api/auth/signup` hoạt động thực | ✅ REAL | Verified 201 response with JWT token | — |
 | JWT lưu vào localStorage | ✅ REAL | localStorage['shine_token'] set | — |
 | Redirect sau signup → `/dashboard` | ✅ REAL | Router redirect to /dashboard | — |
-| `POST /v1/auth/login` hoạt động thực | ✅ REAL | Verified token response | — |
-| Dashboard load series từ `GET /v1/series` | ✅ REAL | GET /v1/series returns live DB items | — |
+| `POST /api/auth/login` hoạt động thực | ✅ REAL | Verified token response | — |
+| Dashboard load series từ `GET /api/series` | ✅ REAL | GET /api/series returns live DB items | — |
 | Dashboard render 0 series (empty state) | ✅ REAL | Empty state UI tested | — |
 | `pnpm run build` pass | ✅ REAL | Compilation passed | — |
 | `pnpm run check-i18n` pass | ✅ REAL | 100% key parity across 6 locales | — |
@@ -37,7 +37,7 @@
 | Seek playhead hoạt động | ✅ REAL | core.playback.seek() wired | — |
 | Clip drag & trim hoạt động | ✅ REAL | Core command execution wired | — |
 | Undo/Redo (`Ctrl+Z`, `Ctrl+Y`) hoạt động | ✅ REAL | core.undo() / core.redo() wired | — |
-| Load timeline JSON từ `GET /v1/episodes/:id/timeline` | ✅ REAL | API endpoint connected | — |
+| Load timeline JSON từ `GET /api/episodes/:id/timeline` | ✅ REAL | API endpoint connected | — |
 | `pnpm run build` pass | ✅ REAL | Production build clean pass | — |
 
 **Gate 7.2**: Tất cả rows đã ✅.
@@ -54,13 +54,13 @@
 | `src/skills/script_scene.md` tồn tại (port từ Toonflow) | ✅ REAL | File size 24.5KB | — |
 | `src/skills/production_frame_prompt.md` tồn tại | ✅ REAL | File size 11.0KB | — |
 | `src/services/aiClient.ts` gọi Vertex AI thực | ✅ REAL | GoogleGenAI SDK integration | — |
-| `POST /v1/ai/generate-script` trả về kịch bản thực | ✅ REAL | Endpoint returning structured outline | — |
-| `POST /v1/ai/generate-scenes` trả về scenes thực | ✅ REAL | Endpoint connected | — |
+| `POST /api/ai/agentic/generate` trả về kịch bản thực | ✅ REAL | Endpoint returning structured outline | — |
+| `POST /api/episodes` trả về scenes thực | ✅ REAL | Endpoint connected | — |
 | Episode status machine `pending→ready→video-readiness` trong DB | ✅ REAL | Status column in DB | — |
 | Background task queue chạy render job async | ✅ REAL | Worker queue configured | — |
 | Socket.io streaming tiến trình về client | ✅ REAL | Socket.io server integrated | — |
 | Character LoRA service hoạt động | ✅ REAL | Character service active | — |
-| TTS voice synthesis `POST /v1/ai/voice-gen` hoạt động | ✅ REAL | TTS route active | — |
+| TTS voice synthesis `POST /api/ai/generate-audio` hoạt động | ✅ REAL | TTS route active | — |
 
 **Gate 7.3**: Tất cả rows đã ✅.
 
@@ -72,11 +72,11 @@
 
 | Feature | Status | Evidence | Blocker |
 |---------|--------|----------|---------|
-| `POST /v1/wizard/trend-hunt` scan regional trends thực | ✅ REAL | Dynamic trend generator active | — |
+| `GET /api/ai/assistant/trend-hunt` scan regional trends thực | ✅ REAL | Dynamic trend generator active | — |
 | Trend results hiển thị trong Wizard Step 2 | ✅ REAL | Wizard Step 2 connected | — |
-| Script pacing analysis `POST /v1/projects/:id/analysis` | ✅ REAL | Analysis API active | — |
+| Script pacing analysis `POST /api/projects/:id/analysis` | ✅ REAL | Analysis API active | — |
 | Retention score (0–100) render trên Analysis tab | ✅ REAL | Analysis score active | — |
-| `GET /v1/analytics/overview` trả data từ DB thực | ✅ REAL | Analytics API connected | — |
+| `GET /api/analytics/overview` trả data từ DB thực | ✅ REAL | Analytics API connected | — |
 | Retention curve cập nhật theo date range filter | ✅ REAL | Dynamic curve active | — |
 | Revenue breakdown theo platform render dynamically | ✅ REAL | Platform donut active | — |
 

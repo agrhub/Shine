@@ -1,4 +1,6 @@
-//import './services/compositor/polyfills.js';
+import EventEmitter from 'events';
+EventEmitter.defaultMaxListeners = 100;
+
 import express, { Request, Response } from 'express';
 import http from 'http';
 import { Server } from 'socket.io';

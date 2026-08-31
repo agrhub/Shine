@@ -11,7 +11,7 @@ import {
   LocationAssetSchema,
   PropAssetSchema,
   SceneEntitySchema,
-} from '@/schemas/aiSchemas.js';
+} from '@/schemas/AISchemas.js';
 import { nanoid } from 'nanoid';
 
 export interface DialogueLine {
@@ -211,6 +211,10 @@ export class EntityNormalizer {
     if (!raw) return {};
     const rawScenes = Array.isArray(raw.scenes) ? raw.scenes : [];
     const scenes = rawScenes.map((s: any, idx: number) => this.normalizeScene(s, idx + 1)).filter((s): s is SceneEntity => s !== null);
+    const scenesTotalDuration = scenes.reduce((sum: number, sc: any) => sum + (Number(sc.duration_seconds) || 0), 0);
+    const resolvedDuration = scenesTotalDuration > 0
+      ? scenesTotalDuration
+      : (Number(raw.duration_seconds) || Number(raw.duration) || 60);
 
     return {
       id: raw.id || `ep_${index}`,
@@ -222,7 +226,8 @@ export class EntityNormalizer {
       conflict_escalation: raw.conflict_escalation || '',
       cliffhanger_hook: raw.cliffhanger_hook || '',
       phase: raw.phase || '',
-      duration: Number(raw.duration) || 90,
+      duration: resolvedDuration,
+      duration_seconds: resolvedDuration,
       reference_assets: raw.reference_assets || { character_ids: [], location_ids: [], prop_ids: [] },
       scenes,
       cover_image: raw.cover_image || '',

@@ -7,6 +7,7 @@ import { TimelineService } from '@/services/TimelineService.js';
 import { generateDialogueVoiceSynthesis } from '@/routes/voices.js';
 import { generateCaptionsInternal } from '@/routes/captions.js';
 import { EntityNormalizer } from '@/utils/EntityNormalizer.js';
+import { translateDialogueList, buildWordLevelCaptionsFromDialogue, cleanDialogueLine } from '@/utils/captionAlignment.js';
 import { withCreditDeduction, getActiveChatContext, type ToolContextParams, type ToolExecutionResult } from './context.js';
 
 export class RenderToolExecutors {
@@ -99,15 +100,34 @@ export class RenderToolExecutors {
       for (const dLang of dubbingLangs) {
         const isPrimary = dLang === primaryLang;
         for (const sc of scenesList) {
-          const diag = sc.dialogue || sc.translations?.[dLang]?.dialogue;
-          const hasDiag = Array.isArray(diag) ? diag.length > 0 : Boolean(String(diag || '').trim());
+          const rawDiag = sc.dialogue || [];
+          const hasSourceDiag = Array.isArray(rawDiag) ? rawDiag.length > 0 && rawDiag.some((d: any) => (d.line || '').trim()) : Boolean(String(rawDiag || '').trim());
+          if (!hasSourceDiag) continue;
+
+          // If sub-language dialogue translation is missing, translate now
+          if (!isPrimary) {
+            if (!sc.translations) sc.translations = {};
+            if (!sc.translations[dLang]) sc.translations[dLang] = {};
+            if (!Array.isArray(sc.translations[dLang].dialogue) || sc.translations[dLang].dialogue.length === 0) {
+              try {
+                Logger.info(`[RenderTools] Translating Scene #${sc.index || 1} dialogue to ${dLang}...`);
+                const translated = await translateDialogueList(rawDiag, dLang);
+                sc.translations[dLang].dialogue = translated;
+                episodeUpdated = true;
+              } catch (trErr: any) {
+                Logger.warn(`[RenderTools] Translation failed for Scene #${sc.index} (${dLang}): ${trErr.message}`);
+              }
+            }
+          }
+
+          const diag = isPrimary ? rawDiag : (sc.translations?.[dLang]?.dialogue || rawDiag);
           const existingVo = sc.translations?.[dLang]?.voiceover_url || (isPrimary ? sc.voiceover_url : null);
 
-          if (hasDiag && !existingVo) {
+          if (!existingVo) {
             Logger.info(`[RenderTools] Generating missing TTS voiceover for scene #${sc.index || 1} (${dLang})...`);
             try {
               const ttsRes = await generateDialogueVoiceSynthesis({
-                dialogue: Array.isArray(diag) ? diag : [{ line: String(diag) }],
+                dialogue: Array.isArray(diag) ? diag : [{ character: 'Character', line: String(diag), emotion: 'neutral', speech_tone: 'natural' }],
                 language: dLang,
                 episode_id: params.episodeId,
                 scene_id: sc.id || `scene_${sc.index || 1}`,
@@ -137,41 +157,59 @@ export class RenderToolExecutors {
         }
       }
 
-      // 4. Auto-provision missing CAPTION language cues
+      // 4. Auto-provision missing CAPTION language cues with word-by-word alignment
       for (const cLang of captionLangs) {
         if (cLang === 'none') continue;
         const isPrimary = cLang === primaryLang;
         for (const sc of scenesList) {
-          const diag = sc.dialogue || sc.translations?.[cLang]?.dialogue;
-          const hasDiag = Array.isArray(diag) ? diag.length > 0 : Boolean(String(diag || '').trim());
+          const rawDiag = sc.dialogue || [];
+          const hasSourceDiag = Array.isArray(rawDiag) ? rawDiag.length > 0 && rawDiag.some((d: any) => (d.line || '').trim()) : Boolean(String(rawDiag || '').trim());
+          if (!hasSourceDiag) continue;
+
+          // If sub-language dialogue translation is missing, translate now
+          if (!isPrimary) {
+            if (!sc.translations) sc.translations = {};
+            if (!sc.translations[cLang]) sc.translations[cLang] = {};
+            if (!Array.isArray(sc.translations[cLang].dialogue) || sc.translations[cLang].dialogue.length === 0) {
+              try {
+                Logger.info(`[RenderTools] Translating Scene #${sc.index || 1} captions to ${cLang}...`);
+                const translated = await translateDialogueList(rawDiag, cLang);
+                sc.translations[cLang].dialogue = translated;
+                episodeUpdated = true;
+              } catch (trErr: any) {
+                Logger.warn(`[RenderTools] Translation failed for Scene #${sc.index} (${cLang}): ${trErr.message}`);
+              }
+            }
+          }
+
           const existingCaptions = sc.translations?.[cLang]?.captions_data || (isPrimary ? sc.captions_data : null);
 
-          if (hasDiag && (!existingCaptions || existingCaptions.length === 0)) {
-            Logger.info(`[RenderTools] Generating missing captions for scene #${sc.index || 1} (${cLang})...`);
-            const diagText = sc.translations?.[cLang]?.translated_dialogue || sc.translations?.[cLang]?.dialogue || sc.dialogue;
-            const textStr = Array.isArray(diagText)
-              ? diagText.map((d: any) => (typeof d === 'string' ? d : d.line || d.text || '')).join(' ')
-              : String(diagText || '');
+          if (!existingCaptions || existingCaptions.length === 0) {
+            Logger.info(`[RenderTools] Generating kinetic word-by-word captions for scene #${sc.index || 1} (${cLang})...`);
+            const targetDialogue = isPrimary ? rawDiag : (sc.translations?.[cLang]?.dialogue || rawDiag);
+            const sceneDur = Number(sc.duration_seconds) || 6;
+            const voiceStartSec = ((isPrimary ? sc.voice_start_us : sc.translations?.[cLang]?.voice_start_us) || 500_000) / 1_000_000;
 
-            if (textStr.trim()) {
-              try {
-                const capRes = await generateCaptionsInternal({
-                  episodeId: params.episodeId,
-                  language: cLang,
-                  text: textStr.trim(),
-                });
-                if (capRes?.cues?.length) {
-                  if (!sc.translations) sc.translations = {};
-                  if (!sc.translations[cLang]) sc.translations[cLang] = {};
-                  sc.translations[cLang].captions_data = capRes.cues;
-                  if (isPrimary && (!sc.captions_data || sc.captions_data.length === 0)) {
-                    sc.captions_data = capRes.cues;
-                  }
-                  episodeUpdated = true;
-                }
-              } catch (capErr: any) {
-                Logger.warn(`[RenderTools] Failed to auto-generate captions for scene #${sc.index} (${cLang}): ${capErr.message}`);
+            const { captions_data, words, voice_start_us, voice_duration_us } = buildWordLevelCaptionsFromDialogue(
+              targetDialogue,
+              sceneDur,
+              voiceStartSec
+            );
+
+            if (captions_data.length > 0) {
+              if (!sc.translations) sc.translations = {};
+              if (!sc.translations[cLang]) sc.translations[cLang] = {};
+              sc.translations[cLang].captions_data = captions_data;
+              sc.translations[cLang].words = words;
+              if (!sc.translations[cLang].voice_duration_us) {
+                sc.translations[cLang].voice_duration_us = voice_duration_us;
+                sc.translations[cLang].voice_start_us = voice_start_us;
               }
+              if (isPrimary && (!sc.captions_data || sc.captions_data.length === 0)) {
+                sc.captions_data = captions_data;
+                sc.words = words;
+              }
+              episodeUpdated = true;
             }
           }
         }
@@ -213,10 +251,11 @@ export class RenderToolExecutors {
       });
 
       const finalJob: RenderJobState = await new Promise((resolve, reject) => {
+        // Extended safety timeout (60 minutes) to allow remote Cloud Run workers or local rendering to finish smoothly
         const timeout = setTimeout(() => {
           cleanup();
-          reject(new Error('CompositorWorker render job timed out after 3 minutes'));
-        }, 180000);
+          reject(new Error('CompositorWorker render job timed out after 30 minutes'));
+        }, 60*60*1000);
 
         const onCompleted = (completedJob: RenderJobState) => {
           if (completedJob.jobId === job.jobId) {
@@ -357,20 +396,31 @@ export function createRenderTools(context?: ToolContextParams): FunctionTool[] {
         if (!userId) return { success: false, message: `No user selected. Please select a user first.` };
         if (!seriesId) return { success: false, message: `No series selected. Please select a series first.` };
         if (!episodeId) return { success: false, message: `No episode selected. Please select an episode first.` };
-        const res = await RenderToolExecutors.renderEpisodeVideo({
-          userId,
-          seriesId,
-          episodeId,
-          languageCode: args.language_code || args.languageCode,
-          dubbingLanguages: args.dubbing_languages || args.dubbingLanguages,
-          captionLanguages: args.caption_languages || args.captionLanguages,
-          noCaptions: args.no_captions || args.noCaptions,
-          forceRegenerate: args.force_regenerate || args.forceRegenerate,
+
+        const { PipelineJobService } = await import('@/services/PipelineJobService.js');
+        const { job, is_new } = await PipelineJobService.startOrGetPipelineJob({
+          user_id: userId,
+          series_id: seriesId,
+          episode_id: episodeId,
+          type: 'render',
+          force_regenerate: args.force_regenerate || args.forceRegenerate,
         });
-        if (res.success && res.data) {
-          onItemUpdated?.({ type: 'episode_rendered', data: res.data });
-        }
-        return res;
+
+        onItemUpdated?.({ type: 'job_started', data: job });
+
+        return {
+          success: true,
+          message: is_new
+            ? `🎬 Video Render Job **${job.id}** has been started in the background!\n- Status: ${job.status}\n- Progress: ${job.progress}%\n- You can monitor progress in the Job Popover or I will notify you once rendering is completed.`
+            : `⚡ Video Render Job **${job.id}** is already in progress (${job.progress}% - ${job.current_step}).`,
+          data: {
+            job_id: job.id,
+            status: job.status,
+            progress: job.progress,
+            current_step: job.current_step,
+            is_new,
+          },
+        };
       },
     }),
 

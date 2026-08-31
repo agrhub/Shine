@@ -295,8 +295,8 @@ graph TD
 | Component | Cloud Service | Region | Specs (Default) | Scaling & Quota Protection |
 | :--- | :--- | :--- | :--- | :--- |
 | **Main App (`shine-app`)** | Cloud Run | `us-central1` | 2 CPU, 4Gi RAM, Timeout: 300s | `--min-instances 0`, `--max-instances 3`. $0 idle cost. |
-| **Render Worker (`shine-render-worker`)** | Cloud Run | `us-central1` | 2 CPU, 4Gi RAM, Timeout: 600s | `--min-instances 0`, `--max-instances 3`, `--concurrency 1`. Headless Chromium WebCodecs compositor. |
-| **Demucs Worker (`demucs-worker`)** | Cloud Run | `us-central1` | 2 CPU, 4Gi RAM, Timeout: 300s | `--min-instances 0`, `--max-instances 3`. PyTorch Demucs v4 stem isolation. |
+| **Render Worker (`shine-render-worker`)** | Cloud Run | `us-central1` | 2 CPU, 4Gi RAM, Timeout: 600s | `--min-instances 0`, `--max-instances 5`, `--concurrency 10`. Managed **`VideoRendererPool`** (1–100 instances based on RAM/CPU, max 4 parallel instances per 4Gi container). |
+| **Demucs Worker (`demucs-worker`)** | Cloud Run | `us-central1` | 1 CPU, 2Gi RAM, Timeout: 300s | `--min-instances 0`, `--max-instances 3`. PyTorch Demucs v4 stem isolation. |
 | **Token Sync Heartbeat** | Cloud Scheduler | `us-central1` | `*/5 * * * *` | Calls `POST /api/admin/flow-accounts/sync` to refresh Google Flow session tokens. |
 | **Primary Database** | Firestore Native | `us-central1` | Multi-region HA | Database ID: `shine-db`. Auto-deployed composite indexes. |
 | **Media Storage** | Cloud Storage | `us-central1` | Standard Storage Class | Bucket: `gs://shine-studio-media` with Uniform Bucket Access & V4 Signed URLs. |
@@ -312,7 +312,7 @@ The deployment scripts support granular control to minimize build times and opti
 | :--- | :---: | :--- |
 | **`pnpm run deploy:app`** | **~1–2 mins** | Deploys Main App only (`-SkipWorkers -SkipInfra`), dynamically reusing active worker URLs on Cloud Run. |
 | **`pnpm run deploy:cloudrun`** | **~3–5 mins** | Full ecosystem deployment (GCP APIs + IAM + Infra + Demucs Worker + Render Worker + Main App + Scheduler). |
-| **`pnpm run deploy:render-worker`** | **~1–2 mins** | Standalone Video Render Worker deployment with auto-provisioned IAM roles. |
+| **`pnpm run deploy:render-worker`** | **~1–2 mins** | Standalone Video Render Worker deployment with auto-provisioned IAM roles and `VideoRendererPool` settings. |
 | **`pnpm run deploy:demucs-worker`** | **~1–2 mins** | Standalone Demucs AI Audio Worker deployment with auto-provisioned IAM roles. |
 
 ### 11.2 Environment & Autoscaling Configuration (`.env`)
@@ -321,16 +321,20 @@ The deployment scripts support granular control to minimize build times and opti
 DEPLOY_WORKERS="true"
 DEPLOY_INFRA="true"
 
-# Render Worker Resources
+# Render Worker: 2 CPU / 4Gi RAM with Instance Pool (1-100 instances based on RAM/CPU)
 RENDER_WORKER_CPU="2"
 RENDER_WORKER_MEMORY="4Gi"
 RENDER_WORKER_TIMEOUT="600"
 RENDER_WORKER_MIN_INSTANCES="0"
-RENDER_WORKER_MAX_INSTANCES="3"
+RENDER_WORKER_MAX_INSTANCES="5"
+RENDER_WORKER_CONCURRENCY="10"
+RENDER_POOL_SIZE="4"
+RENDER_POOL_MIN="1"
+RENDER_MAX_PER_INSTANCE="25"
 
 # Demucs Worker Resources
-DEMUCS_WORKER_CPU="2"
-DEMUCS_WORKER_MEMORY="4Gi"
+DEMUCS_WORKER_CPU="1"
+DEMUCS_WORKER_MEMORY="2Gi"
 DEMUCS_WORKER_TIMEOUT="300"
 DEMUCS_WORKER_MIN_INSTANCES="0"
 DEMUCS_WORKER_MAX_INSTANCES="3"

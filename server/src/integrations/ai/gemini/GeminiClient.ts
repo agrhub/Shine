@@ -339,20 +339,18 @@ export class GeminiClient {
         mimeType = parts[0].split(':')[1].split(';')[0];
         buffer = Buffer.from(parts[1], 'base64');
       } else {
-        const stream = await StorageFactory.getFileStream(input);
-        const chunks: any[] = [];
-        buffer = await new Promise<Buffer>((resolve, reject) => {
-          stream.on('data', (chunk: any) => chunks.push(chunk));
-          stream.on('error', reject);
-          stream.on('end', () => resolve(Buffer.concat(chunks)));
-        });
-
-        if (input.endsWith('.jpg') || input.endsWith('.jpeg')) mimeType = 'image/jpeg';
-        else if (input.endsWith('.webp')) mimeType = 'image/webp';
-        else if (input.endsWith('.mp4')) mimeType = 'video/mp4';
+        const fileRes = await StorageFactory.getFileBuffer(input);
+        buffer = fileRes.buffer;
+        if (fileRes.mimeType) {
+          mimeType = fileRes.mimeType;
+        } else if (input.endsWith('.jpg') || input.endsWith('.jpeg')) {
+          mimeType = 'image/jpeg';
+        } else if (input.endsWith('.webp')) {
+          mimeType = 'image/webp';
+        } else if (input.endsWith('.mp4')) {
+          mimeType = 'video/mp4';
+        }
       }
-
-      Logger.info(`[GeminiClient] Resolved media reference ${input} to ${buffer.length} bytes, mime: ${mimeType}`);
 
       return {
         mediaBytes: buffer.toString('base64'),
@@ -573,6 +571,12 @@ export class GeminiClient {
         };
 
         const styleInstructions: string[] = [];
+        if (options.emotion) {
+          styleInstructions.push(`Express with strong emotion: ${options.emotion}`);
+        }
+        if (options.speech_tone) {
+          styleInstructions.push(`Tone of voice & delivery: ${options.speech_tone}`);
+        }
         if (options.speed && options.speed !== 1.0) {
           styleInstructions.push(options.speed > 1.0 ? `speak faster at ${options.speed}x speed` : `speak slower at ${options.speed}x speed`);
         }
@@ -580,7 +584,7 @@ export class GeminiClient {
           styleInstructions.push(options.pitch > 0 ? `use a higher pitch (+${options.pitch})` : `use a lower pitch (${options.pitch})`);
         }
         if (styleInstructions.length > 0) {
-          finalText = `Instructions: Please ${styleInstructions.join(' and ')} when reading the following text aloud.\n\nText:\n${text}`;
+          finalText = `[Acting & Vocal Direction]\n${styleInstructions.map(s => `- ${s}`).join('\n')}\n\n[Spoken Dialogue]\n"${text}"`;
         }
       }
 

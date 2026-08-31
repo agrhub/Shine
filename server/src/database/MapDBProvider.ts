@@ -12,8 +12,13 @@ import {
   WorkerHeartbeatEntity,
   WorkerJobEntity,
   ClusterMetricsSummary,
+  IProject,
+  TimelineSnapshotVersion,
+  TimelineSnapshotHistoryItem,
+  RestoreTimelineResult,
 } from './IDatabaseProvider.js';
 import { Logger } from '../utils/logger.js';
+import { normalizePureTimeline } from '../utils/timeline.js';
 
 export class MapDBProvider implements IDatabaseProvider {
   private filePath: string;
@@ -315,7 +320,7 @@ export class MapDBProvider implements IDatabaseProvider {
   // ==================== Timeline & Versions ====================
   public async saveTimeline(
     episode_id: string,
-    timeline_data: any,
+    timeline_data: IProject,
     author: { id: string; name: string; avatar?: string },
     change_summary?: string
   ): Promise<{ version_id: string; version_number: number; updated_at: string }> {
@@ -324,12 +329,13 @@ export class MapDBProvider implements IDatabaseProvider {
 
     const history = this.timelineVersions.get(episode_id) || [];
     const version_number = history.length + 1;
+    const pureTimeline = normalizePureTimeline(timeline_data);
 
     const versionDoc = {
       id: version_id,
       episode_id,
       version_number,
-      timeline_data,
+      timeline_data: pureTimeline,
       author,
       change_summary: change_summary || 'Timeline state update',
       created_at: now,
@@ -342,7 +348,7 @@ export class MapDBProvider implements IDatabaseProvider {
       episode_id,
       version_id,
       version_number,
-      timeline_data,
+      timeline_data: pureTimeline,
       updated_at: now,
     };
     this.timelines.set(episode_id, latestDoc);
@@ -351,21 +357,37 @@ export class MapDBProvider implements IDatabaseProvider {
     return { version_id, version_number, updated_at: now };
   }
 
-  public async getLatestTimeline(episode_id: string): Promise<any | null> {
+  public async getLatestTimeline(episode_id: string): Promise<IProject | null> {
     const t = this.timelines.get(episode_id);
-    return t ? { ...t } : null;
+    if (!t) return null;
+    return normalizePureTimeline(t.timeline_data || t);
   }
 
-  public async getTimelineHistory(episode_id: string, limit = 20, offset = 0): Promise<{ total: number; history: any[] }> {
+  public async getTimelineHistory(episode_id: string, limit = 20, offset = 0): Promise<{ total: number; history: TimelineSnapshotHistoryItem[] }> {
     const all = this.timelineVersions.get(episode_id) || [];
-    const sliced = all.slice(offset, offset + limit);
+    const sliced: TimelineSnapshotHistoryItem[] = all.slice(offset, offset + limit).map(v => ({
+      version_id: v.id,
+      version_number: v.version_number,
+      label: v.label,
+      author: v.author,
+      change_summary: v.change_summary,
+      created_at: v.created_at,
+    }));
     return { total: all.length, history: sliced };
   }
 
-  public async getTimelineVersion(episode_id: string, version_id: string): Promise<any | null> {
+  public async getTimelineVersion(episode_id: string, version_id: string): Promise<TimelineSnapshotVersion | null> {
     const all = this.timelineVersions.get(episode_id) || [];
     const match = all.find(v => v.id === version_id);
-    return match ? { ...match } : null;
+    if (!match) return null;
+    return {
+      version_id: match.id,
+      version_number: match.version_number,
+      author: match.author,
+      change_summary: match.change_summary,
+      created_at: match.created_at,
+      timeline_data: normalizePureTimeline(match.timeline_data || match.timelineData),
+    };
   }
 
   public async restoreTimelineVersion(
@@ -373,7 +395,7 @@ export class MapDBProvider implements IDatabaseProvider {
     version_id: string,
     author: { id: string; name: string; avatar?: string },
     reason?: string
-  ): Promise<any> {
+  ): Promise<RestoreTimelineResult> {
     const version = await this.getTimelineVersion(episode_id, version_id);
     if (!version) throw new Error(`Version ${version_id} not found`);
 
@@ -383,7 +405,14 @@ export class MapDBProvider implements IDatabaseProvider {
       author,
       `Restored from version ${version.version_number}: ${reason || ''}`
     );
-    return { ...result, timeline_data: version.timeline_data };
+    return {
+      success: true,
+      restored_from_version_id: version_id,
+      new_version_id: result.version_id,
+      new_version_number: result.version_number,
+      active_timeline: version.timeline_data,
+      created_at: result.updated_at,
+    };
   }
 
   // ==================== Flow Accounts ====================
@@ -604,6 +633,12 @@ export class MapDBProvider implements IDatabaseProvider {
     this.pipelineJobs.set(job_id, updated);
     this.scheduleSave();
     return updated;
+  }
+
+  public async deletePipelineJob(job_id: string): Promise<boolean> {
+    const deleted = this.pipelineJobs.delete(job_id);
+    if (deleted) this.scheduleSave();
+    return deleted;
   }
 
   public async findActivePipelineJob(series_id: string, episode_id: string, type?: string): Promise<any | null> {

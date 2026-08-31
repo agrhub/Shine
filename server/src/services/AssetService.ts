@@ -335,7 +335,8 @@ export class AssetService {
     scene_index: number;
     visual_prompt?: string;
     user_id: string;
-  }): Promise<{ image_url: string; scene: SceneEntity }> {
+    generate_start_end_frame?: boolean;
+  }): Promise<{ image_url: string; end_frame_url?: string; scene: SceneEntity }> {
     const db = await getDatabaseProvider();
     const series = await db.getSeriesById(params.series_id);
     if (!series) throw new Error(`Series ${params.series_id} not found`);
@@ -428,7 +429,7 @@ export class AssetService {
       }
     }
 
-    // 5. Build prompt
+    // 5. Build prompt for Start Frame
     const visualDesc = scene.visual_prompt || scene.frame_description || scene.description || scene.action || `Cinematic vertical shot for scene #${params.scene_index}`;
     const prompt = PromptLoader.render('scene/scene_image_final', {
       locationContext: locationContext || undefined,
@@ -449,7 +450,7 @@ export class AssetService {
       }
     }
 
-    Logger.info(`[AssetService.generateStoryboardShot] Generating scene #${params.scene_index} with ${referenceImages.length} reference image(s): ${referenceImages.join(', ')}`);
+    Logger.info(`[AssetService.generateStoryboardShot] Generating scene #${params.scene_index} start frame with ${referenceImages.length} reference image(s): ${referenceImages.join(', ')}`);
 
     const result = await aiProviderRouter.generateImage(fullPrompt, {
       aspectRatio: targetAspect,
@@ -466,9 +467,49 @@ export class AssetService {
     scene.storyboard_frame_url = imageUrl;
     scene.status = 'image_ready';
 
+    // 6. Optional End Frame generation if GENERATE_START_END_FRAME is enabled (default is false)
+    const shouldGenerateEndFrame = Boolean(
+      params.generate_start_end_frame ??
+      (process.env.GENERATE_START_END_FRAME === 'true')
+    );
+
+    let endFrameUrl: string | undefined;
+
+    if (shouldGenerateEndFrame) {
+      try {
+        Logger.info(`[AssetService.generateStoryboardShot] GENERATE_START_END_FRAME=true: Generating end frame for Scene #${params.scene_index}`);
+        const endVisualDesc = scene.end_frame_prompt || scene.visual_prompt_end || `${visualDesc}, concluding moment of the action`;
+        const endPrompt = PromptLoader.render('scene/scene_image_final', {
+          locationContext: locationContext || undefined,
+          propContext: propContextList.length > 0 ? propContextList.join('; ') : (scene.prop_details || undefined),
+          visualDescription: endVisualDesc,
+          characterContext: characterContextList.length > 0 ? characterContextList.join('\n') : undefined,
+          visualStyle: stylePrompt,
+        });
+
+        const fullEndPrompt = `${stylePrompt}, ${endPrompt}, aspect ratio ${targetAspect}.`;
+        const endRefImages = [imageUrl, ...referenceImages.filter((r) => r !== imageUrl)];
+
+        const endResult = await aiProviderRouter.generateImage(fullEndPrompt, {
+          aspectRatio: targetAspect,
+          characterReferences: endRefImages,
+          imageInputs: endRefImages,
+        });
+
+        if (endResult?.url) {
+          const endS3 = await StorageFactory.uploadMedia(endResult.url, 'images', 'png', endResult.mimeType || 'image/png');
+          endFrameUrl = `/api/assets/file/${endS3.key}`;
+          scene.storyboard_end_frame_url = endFrameUrl;
+          Logger.info(`[AssetService.generateStoryboardShot] End frame generated for Scene #${params.scene_index}: ${endFrameUrl}`);
+        }
+      } catch (endErr: any) {
+        Logger.warn(`[AssetService.generateStoryboardShot] End frame generation skipped for Scene #${params.scene_index}: ${endErr.message}`);
+      }
+    }
+
     scenesList[sceneIdx] = scene;
     await db.updateEpisode(params.episode_id, { scenes: scenesList });
 
-    return { image_url: imageUrl, scene: scenesList[sceneIdx] };
+    return { image_url: imageUrl, end_frame_url: endFrameUrl, scene: scenesList[sceneIdx] };
   }
 }

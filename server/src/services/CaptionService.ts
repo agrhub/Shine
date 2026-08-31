@@ -6,10 +6,10 @@ import path from 'path';
 import os from 'os';
 import { geminiClient } from '@/integrations/ai/gemini/GeminiClient.js';
 import { ttsService } from '@/services/TtsService.js';
-import { DspAudioService } from '@/services/DspAudioService.js';
 import { DemucsAudioService } from '@/services/DemucsAudioService.js';
 import { StorageFactory } from '@/services/storage/StorageFactory.js';
-import { getDatabaseProvider } from '@/database/index.js';
+import { CharacterSeriesEntity, getDatabaseProvider, SceneDialogue, SceneEntity } from '@/database/index.js';
+import { cleanDialogueLine } from '@/utils/captionAlignment.js';
 import { EnvConfig } from '@/config/env.js';
 import { Logger } from '@/utils/logger.js';
 
@@ -119,12 +119,9 @@ export class CaptionService {
 
     if (url.startsWith('/api/assets/file/') || url.startsWith('assets/')) {
       try {
-        const stream = await StorageFactory.getFileStream(url);
-        const chunks: Buffer[] = [];
-        for await (const chunk of stream) {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-        }
-        buffer = Buffer.concat(chunks);
+        const fileRes = await StorageFactory.getFileBuffer(url);
+        buffer = fileRes.buffer;
+        if (fileRes.mimeType) mimeType = fileRes.mimeType;
       } catch (err: any) {
         Logger.warn(`[CaptionService] fetchMediaBuffer from storage stream failed: ${err.message}`);
       }
@@ -162,7 +159,7 @@ export class CaptionService {
     const { videoUrl, dialogue = [], language = 'en-US', durationSeconds = 6 } = params;
 
     const fullText = Array.isArray(dialogue)
-      ? dialogue.map((d: any) => `${d.character ? `${d.character}: ` : ''}${d.line || d.text || ''}`).join(' ')
+      ? dialogue.map((d: any) => cleanDialogueLine(d.line || d.text || '', d.character)).filter(Boolean).join(' ')
       : '';
 
     const { buffer, mimeType } = await this.fetchMediaBuffer(videoUrl);
@@ -283,7 +280,7 @@ Respond with ONLY a JSON object matching this schema:
     episodeId?: string;
     sceneId?: string;
     sceneIndex: number;
-    dialogue?: any[];
+    dialogue?: SceneDialogue[];
     language?: string;
     voiceId?: string;
     durationSeconds?: number;
@@ -309,9 +306,9 @@ Respond with ONLY a JSON object matching this schema:
       try {
         const ep = await db.getEpisodeById(episodeId);
         if (ep) {
-          const rawScenes: any = ep.scenes || (typeof ep.script === 'object' ? (ep.script as any)?.scenes : []);
-          const scenes: any[] = Array.isArray(rawScenes) ? rawScenes : [];
-          const scene = scenes.find((s: any) => (sceneId && s.id === sceneId) || s.index === sceneIndex || s.id === `scene_${sceneIndex}`);
+          const rawScenes: SceneEntity[] = ep.scenes || (typeof ep.script === 'object' ? (ep.script as any)?.scenes : []);
+          const scenes: SceneEntity[] = Array.isArray(rawScenes) ? rawScenes : [];
+          const scene = scenes.find((s: SceneEntity) => (sceneId && s.id === sceneId) || s.index === sceneIndex || s.id === `scene_${sceneIndex}`);
 
           if ((!dialogue || dialogue.length === 0) && scene?.dialogue && scene.dialogue.length > 0) {
             dialogue = scene.dialogue;
@@ -323,7 +320,7 @@ Respond with ONLY a JSON object matching this schema:
               seriesLanguage = series.language || series.country || seriesLanguage;
               const firstChar = dialogue[0]?.character;
               const matchedChar = series.characters?.find(
-                (c: any) => c.name?.toLowerCase().trim() === String(firstChar || '').toLowerCase().trim()
+                (c: CharacterSeriesEntity) => c.name?.toLowerCase().trim() === String(firstChar || '').toLowerCase().trim()
               );
               if (matchedChar?.voice_id) {
                 targetVoiceId = matchedChar.voice_id;
@@ -340,18 +337,30 @@ Respond with ONLY a JSON object matching this schema:
     let voiceoverUrl = '';
     let totalVoiceDurationUs = Math.round(durationSeconds * 1_000_000);
 
-    if (dialogue && dialogue.length > 0) {
+    const hasDialogue = Boolean(
+      dialogue &&
+      dialogue.length > 0 &&
+      dialogue.some((d: SceneDialogue) => (d.line || '').trim().length > 0)
+    );
+
+    if (hasDialogue) {
       const dialogueText = dialogue
-        .map((d: any) => d.line || d.text || '')
+        .map((d: SceneDialogue) => cleanDialogueLine(d.line || '', d.character))
         .filter(Boolean)
         .join(' ');
+
+      const emotion = dialogue.map((d: SceneDialogue) => d.emotion).filter(Boolean).join(', ');
+      const speechTone = dialogue.map((d: SceneDialogue) => d.speech_tone).filter(Boolean).join(', ');
+      const speechSpeed = (dialogue.find((d: SceneDialogue) => typeof d.speed === 'number' && d.speed > 0))?.speed || 1.0;
 
       try {
         const ttsRes = await ttsService.generateVoice({
           text: dialogueText,
           voiceId: targetVoiceId,
           language: seriesLanguage,
-          speed: 1.0,
+          speed: speechSpeed,
+          emotion: emotion || undefined,
+          speech_tone: speechTone || undefined,
         });
 
         if (ttsRes?.audioUrl && !ttsRes.audioUrl.includes('default')) {
@@ -362,7 +371,9 @@ Respond with ONLY a JSON object matching this schema:
         } else {
           // Fallback to Gemini Audio
           const generated = await geminiClient.generateAudio(dialogueText, targetVoiceId, undefined, {
-            speed: 1.0,
+            speed: speechSpeed,
+            emotion: emotion || undefined,
+            speech_tone: speechTone || undefined,
           });
           const s3Res = await StorageFactory.uploadMedia(generated.url, 'audio', 'wav', generated.mimeType || 'audio/wav');
           voiceoverUrl = `/api/assets/file/${s3Res.key}`;
@@ -376,14 +387,32 @@ Respond with ONLY a JSON object matching this schema:
     }
 
     // 3. Extract clean BGM via Demucs AI (Cloud Run) / DSP Fallback
+    // Rule: Only separate if BGM is missing AND scene has dialogue (to preserve BGM while replacing speech with TTS).
+    // If scene has NO dialogue, separation is not needed because the video already has its own native BGM/audio.
     let bgmUrl = '';
-    if (videoUrl) {
+    let existingBgm = '';
+    if (episodeId) {
       try {
+        const ep = await db.getEpisodeById(episodeId);
+        const rawScenes: SceneEntity[] = ep?.scenes || (typeof ep?.script === 'object' ? (ep?.script as any)?.scenes : []);
+        const scenes: SceneEntity[] = Array.isArray(rawScenes) ? rawScenes : [];
+        const sc = scenes.find((s: SceneEntity) => (sceneId && s.id === sceneId) || s.index === sceneIndex || s.id === `scene_${sceneIndex}`);
+        existingBgm = sc?.bgm_url || '';
+      } catch {}
+    }
+
+    if (existingBgm) {
+      bgmUrl = existingBgm;
+    } else if (hasDialogue && videoUrl) {
+      try {
+        Logger.info(`[CaptionService] Scene #${sceneIndex} has dialogue: Separating clean BGM stem via Demucs...`);
         const separationResult = await DemucsAudioService.separateStem(videoUrl);
         bgmUrl = separationResult?.bgmUrl || '';
       } catch (e: any) {
         Logger.warn(`[CaptionService] BGM stem separation notice: ${e.message}`);
       }
+    } else {
+      Logger.info(`[CaptionService] Scene #${sceneIndex} has no dialogue; skipping Demucs BGM separation (video will play native audio/bgm).`);
     }
 
     // 4. Extract exact Word-by-Word Captions and Speech Timestamps directly with Gemini Multimodal
@@ -391,22 +420,28 @@ Respond with ONLY a JSON object matching this schema:
     let speechStartUs = 0;
     let speechEndUs = totalVoiceDurationUs;
     let hasSpeechActivity = false;
-
     let extractedWords: DeepgramWord[] = [];
-    const mediaForTranscription = voiceoverUrl || videoUrl;
-    if (mediaForTranscription) {
-      const extractionResult = await this.extractWordLevelCaptionsFromVideo({
-        videoUrl: mediaForTranscription,
-        dialogue,
-        language: seriesLanguage,
-        durationSeconds: Math.round(totalVoiceDurationUs / 1_000_000),
-      });
 
-      extractedWords = extractionResult.words;
-      captionsData = extractionResult.cues;
-      speechStartUs = extractionResult.speechStartUs;
-      speechEndUs = extractionResult.speechEndUs;
-      hasSpeechActivity = extractionResult.hasSpeechActivity;
+    if (hasDialogue) {
+      const mediaForTranscription = voiceoverUrl || videoUrl;
+      if (mediaForTranscription) {
+        try {
+          const extractionResult = await this.extractWordLevelCaptionsFromVideo({
+            videoUrl: mediaForTranscription,
+            dialogue,
+            language: seriesLanguage,
+            durationSeconds: Math.round(totalVoiceDurationUs / 1_000_000),
+          });
+
+          extractedWords = extractionResult.words;
+          captionsData = extractionResult.cues;
+          speechStartUs = extractionResult.speechStartUs;
+          speechEndUs = extractionResult.speechEndUs;
+          hasSpeechActivity = extractionResult.hasSpeechActivity;
+        } catch (capErr: any) {
+          Logger.warn(`[CaptionService] Word-level caption extraction notice: ${capErr.message}`);
+        }
+      }
     }
 
     // 5. Auto-update Episode Scene Assets in Database

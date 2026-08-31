@@ -194,9 +194,10 @@ aiRouter.post('/generate-script', async (req, res) => {
 // POST /api/ai/verify-compliance — Master Plan Compliance & Safety Audit
 aiRouter.post('/verify-compliance', async (req, res) => {
   try {
-    const { master_plan, country, ratio } = req.body;
+    const { master_plan, masterPlan, country, ratio } = req.body;
+    const plan = master_plan || masterPlan;
     const result = await supervisionAgent.verifyMasterPlanCompliance({
-      masterPlan: master_plan,
+      masterPlan: plan,
       country,
       ratio,
     });

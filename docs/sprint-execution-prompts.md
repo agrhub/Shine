@@ -519,7 +519,7 @@ Inspect and strictly follow these authoritative project documents:
 - SRS Requirements: `docs/requirements-document.md` (FR-026 to FR-030, FR-090 to FR-093, FR-099, FR-101 to FR-128)
 - System Architecture: `docs/architecture-document.md` (Section 13.3, Section 13.4, Section 14, Section 15.3, Section 16, Section 17, Section 18, Section 19, Section 20)
 - UI Design System: `docs/design.md` & `packages/vue-element-plus`
-- API Reference: `docs/api-document.md` (`POST /publish/multi-platform`, `POST /export/c2pa-watermark`, `POST /voices/steer-emotion`, `POST /export/platform-recut`, `GET /marketplace/templates`, `GET /api/v1/render/stream`, `POST /audio/copyright-verify`, `POST /billing/revenue-splits`, `POST /ai/convert-novel`, `POST /live/polling`, `GET /marketplace/actors`, `POST /ai/cultural-adapt`, `GET /analytics/paywall-recommendation`)
+- API Reference: `docs/api-document.md` (`POST /publish/multi-platform`, `POST /export/c2pa-watermark`, `POST /voices/steer-emotion`, `POST /export/platform-recut`, `GET /marketplace/templates`, `GET /api/render/stream`, `POST /audio/copyright-verify`, `POST /billing/revenue-splits`, `POST /ai/convert-novel`, `POST /live/polling`, `GET /marketplace/actors`, `POST /ai/cultural-adapt`, `GET /analytics/paywall-recommendation`)
 - Test Plan: `docs/test-document.md` (TC-BRN-001, TC-PPL-001, TC-OFF-001, TC-ABV-001, TC-CVR-001)
 - UI/UX Proposals: `docs/ui-ux-design-proposals.md`
 - Commercial Strategy: `docs/product-market-strategy.md` (Proposals 17 to 30)
@@ -536,7 +536,7 @@ Inspect and strictly follow these authoritative project documents:
    - AI Virtual Actor Royalty Marketplace (`GET /marketplace/actors`).
    - Cultural Geo-Localization Engine (`POST /ai/cultural-adapt`).
    - Predictive Paywall Placement Doctor (`GET /analytics/paywall-recommendation`).
-   - Cloud Pub/Sub Async Render Progress Stream over SSE/WebSockets (`GET /api/v1/render/stream`).
+   - Cloud Pub/Sub Async Render Progress Stream over SSE/WebSockets (`GET /api/render/stream`).
    - AI Copyright Audio Fingerprinting Scan (`POST /audio/copyright-verify`).
    - Virtual Canvas Viewport & Lazy Asset Memory Manager (5-clip WebGL windowing).
    - Touch-Optimized Tablet & Foldable Gesture Studio.

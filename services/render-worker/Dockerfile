@@ -23,6 +23,7 @@ RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearm
     rm -rf /var/lib/apt/lists/*
 
 COPY package.json tsconfig.json ./
+COPY scripts ./scripts
 
 # Install npm dependencies
 RUN npm install
@@ -31,7 +32,7 @@ RUN npm install
 RUN rm -rf /app/node_modules/@openvideo/video-renderer/node_modules/@openvideo/engine-pixi && \
     mkdir -p /app/node_modules/@openvideo/video-renderer/node_modules/@openvideo && \
     cp -r /app/node_modules/@openvideo/engine-pixi /app/node_modules/@openvideo/video-renderer/node_modules/@openvideo/ && \
-    node -e "const fs=require('fs');const f='/app/node_modules/@openvideo/video-renderer/dist/renderer.js';if(fs.existsSync(f)){let c=fs.readFileSync(f,'utf8');if(!c.includes('--disable-web-security')){c=c.replace('\"--no-sandbox\",','\"--no-sandbox\",\n                \"--disable-web-security\",\n                \"--disable-features=IsolateOrigins,site-per-process\",\n                \"--allow-running-insecure-content\",');}if(!c.includes('channel:')){c=c.replace('headless: true,','headless: true,\n            channel: \"chrome\",');}fs.writeFileSync(f,c,'utf8');console.log('Patched renderer.js with chrome channel and web-security bypass');}"
+    node scripts/patch-renderer.js
 
 # Install Playwright Chromium with system dependencies
 RUN npx playwright install --with-deps chromium

@@ -23,12 +23,25 @@ export interface CollaboratorInfo {
 }
 
 export class PatchSyncService {
+  private static instance: PatchSyncService | null = null;
   private io: Server;
   private roomCollaborators: Map<string, Map<string, CollaboratorInfo>> = new Map();
 
   constructor(io: Server) {
     this.io = io;
+    PatchSyncService.instance = this;
     this.initListeners();
+  }
+
+  public static getInstance(): PatchSyncService | null {
+    return PatchSyncService.instance;
+  }
+
+  public static broadcast(seriesId: string, eventName: string, data: any) {
+    if (PatchSyncService.instance) {
+      PatchSyncService.instance.io.to(`series:${seriesId}`).emit(eventName, data);
+      PatchSyncService.instance.io.emit(eventName, data);
+    }
   }
 
   private initListeners() {

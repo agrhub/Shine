@@ -3,33 +3,82 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const shineRoot = path.resolve(__dirname, '..');
-const repoRoot = path.resolve(shineRoot, '..', '..');
+const workerRoot = path.resolve(__dirname, '..');
+const repoRoot = path.resolve(workerRoot, '..', '..');
 
-// Target direct known locations instantly without recursive node_modules scanning
 const candidatePaths = [
-  path.join(shineRoot, 'node_modules', '@openvideo', 'video-renderer', 'dist', 'renderer.js'),
-  path.join(shineRoot, 'server', 'node_modules', '@openvideo', 'video-renderer', 'dist', 'renderer.js'),
-  path.join(shineRoot, 'services', 'render-worker', 'node_modules', '@openvideo', 'video-renderer', 'dist', 'renderer.js'),
+  path.join(workerRoot, 'server', 'node_modules', '@openvideo', 'video-renderer', 'dist', 'renderer.js'),
+  path.join(workerRoot, 'services', 'render-worker', 'node_modules', '@openvideo', 'video-renderer', 'dist', 'renderer.js'),
   path.join(repoRoot, 'node_modules', '@openvideo', 'video-renderer', 'dist', 'renderer.js'),
+  path.join(process.cwd(), 'node_modules', '@openvideo', 'video-renderer', 'dist', 'renderer.js'),
 ];
 
-// Also check .pnpm store locations if exists
-const pnpmDirs = [
-  path.join(shineRoot, 'node_modules', '.pnpm'),
-  path.join(repoRoot, 'node_modules', '.pnpm'),
-];
+// Look for pnpm virtual store locations too
+const pnpmStore = path.join(workerRoot, 'node_modules', '.pnpm');
+if (fs.existsSync(pnpmStore)) {
+  for (const entry of fs.readdirSync(pnpmStore)) {
+    if (entry.includes('@openvideo+video-renderer')) {
+      candidatePaths.push(path.join(pnpmStore, entry, 'node_modules', '@openvideo', 'video-renderer', 'dist', 'renderer.js'));
+    }
+  }
+}
 
-for (const pDir of pnpmDirs) {
-  if (fs.existsSync(pDir)) {
-    try {
-      const list = fs.readdirSync(pDir);
-      for (const item of list) {
-        if (item.startsWith('@openvideo+video-renderer@')) {
-          candidatePaths.push(path.join(pDir, item, 'node_modules', '@openvideo', 'video-renderer', 'dist', 'renderer.js'));
-        }
+const rootPnpmStore = path.join(repoRoot, 'node_modules', '.pnpm');
+if (fs.existsSync(rootPnpmStore)) {
+  for (const entry of fs.readdirSync(rootPnpmStore)) {
+    if (entry.includes('@openvideo+video-renderer')) {
+      candidatePaths.push(path.join(rootPnpmStore, entry, 'node_modules', '@openvideo', 'video-renderer', 'dist', 'renderer.js'));
+    }
+  }
+}
+
+// Also collect package roots for package.json and renderer restoration
+const pkgRoots = new Set();
+for (const p of candidatePaths) {
+  const dir = path.dirname(path.dirname(p));
+  if (fs.existsSync(path.join(dir, 'package.json'))) {
+    pkgRoots.add(dir);
+  }
+}
+
+// Find a valid reference renderer.js if any exists
+let validRendererContent = '';
+for (const dir of pkgRoots) {
+  const rPath = path.join(dir, 'dist', 'renderer.js');
+  if (fs.existsSync(rPath)) {
+    const data = fs.readFileSync(rPath, 'utf8');
+    if (data.length > 500 && data.includes('VideoRenderer')) {
+      validRendererContent = data;
+      break;
+    }
+  }
+}
+
+// Fix package.json exports and ensure dist/renderer.js is not empty
+for (const dir of pkgRoots) {
+  const pkgJsonPath = path.join(dir, 'package.json');
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+    let pkgChanged = false;
+    if (pkg.exports && pkg.exports['.']) {
+      if (typeof pkg.exports['.'] === 'object' && !pkg.exports['.']['default']) {
+        pkg.exports['.']['default'] = pkg.exports['.']['import'] || './dist/index.js';
+        pkgChanged = true;
       }
-    } catch (_) {}
+    }
+    if (pkgChanged) {
+      fs.writeFileSync(pkgJsonPath, JSON.stringify(pkg, null, 2), 'utf8');
+      console.log(`[Patch] Updated exports in: ${pkgJsonPath}`);
+    }
+  } catch (_) {}
+
+  const rPath = path.join(dir, 'dist', 'renderer.js');
+  if (!fs.existsSync(rPath) || fs.statSync(rPath).size < 100) {
+    if (validRendererContent) {
+      fs.mkdirSync(path.dirname(rPath), { recursive: true });
+      fs.writeFileSync(rPath, validRendererContent, 'utf8');
+      console.log(`[Patch] Restored missing/empty renderer.js in: ${rPath}`);
+    }
   }
 }
 
@@ -39,7 +88,6 @@ const engineDistReplacement = `import fs from "fs";
 import { createRequire } from "module";
 
 function resolveEngineDist(pkgRoot) {
-  // 1. Search upwards from pkgRoot
   let curr = pkgRoot;
   for (let i = 0; i < 6; i++) {
     const candidate = path.join(curr, "node_modules", "@openvideo", "engine-pixi", "dist");
@@ -49,7 +97,6 @@ function resolveEngineDist(pkgRoot) {
     curr = parent;
   }
 
-  // 2. Search upwards from process.cwd()
   curr = process.cwd();
   for (let i = 0; i < 6; i++) {
     const candidate = path.join(curr, "node_modules", "@openvideo", "engine-pixi", "dist");
@@ -59,11 +106,9 @@ function resolveEngineDist(pkgRoot) {
     curr = parent;
   }
 
-  // 3. Monorepo packages fallback
   const monorepo = path.resolve(process.cwd(), "..", "..", "packages", "engine-pixi", "dist");
   if (fs.existsSync(monorepo)) return monorepo;
 
-  // 4. Safe fallback with directory creation to prevent sirv ENOENT scandir crash
   const nested = path.join(pkgRoot, "node_modules", "@openvideo", "engine-pixi", "dist");
   if (!fs.existsSync(nested)) {
     try {
@@ -78,6 +123,11 @@ const ENGINE_DIST = resolveEngineDist(PKG_ROOT);`;
 
 for (const target of found) {
   let content = fs.readFileSync(target, 'utf8');
+  if (!content || content.length < 100) {
+    if (validRendererContent) {
+      content = validRendererContent;
+    }
+  }
   let changed = false;
 
   if (content.includes('function resolveEngineDist') || content.includes('const ENGINE_DIST = path.join(PKG_ROOT, "node_modules", "@openvideo", "engine-pixi", "dist");')) {
@@ -110,10 +160,103 @@ for (const target of found) {
     changed = true;
   }
 
+  if (!content.includes('__onProgressSafePatch')) {
+    content = content.replace(
+      'await page.exposeFunction("__onProgress__", (v) => onProgress(v));',
+      '/* __onProgressSafePatch */ await (page.__onProgressRegistered ? Promise.resolve() : page.exposeFunction("__onProgress__", (v) => { if (typeof page.__activeProgressCb === "function") page.__activeProgressCb(v); }).then(() => { page.__onProgressRegistered = true; })).then(() => { page.__activeProgressCb = onProgress; }).catch(() => {});'
+    );
+    if (!content.includes('__onProgressSafePatch')) {
+      content = content.replace(
+        'page.exposeFunction("__onProgress__",',
+        'page.__onProgressRegistered ? Promise.resolve() : page.exposeFunction("__onProgress__",'
+      );
+    }
+    changed = true;
+  }
+
   if (changed) {
     fs.writeFileSync(target, content, 'utf8');
     console.log(`[Patch] Successfully patched: ${target}`);
   } else {
     console.log(`[Patch] Up-to-date: ${target}`);
+  }
+}
+
+// ─── Patch AudioEncoder in @openvideo/engine-pixi ──────────────────────────────
+const engineCandidateDirs = [
+  path.join(workerRoot, 'node_modules', '@openvideo', 'engine-pixi', 'dist'),
+  path.join(workerRoot, 'node_modules', '@openvideo', 'video-renderer', 'node_modules', '@openvideo', 'engine-pixi', 'dist'),
+  path.join(process.cwd(), 'node_modules', '@openvideo', 'engine-pixi', 'dist'),
+  path.join(process.cwd(), 'node_modules', '@openvideo', 'video-renderer', 'node_modules', '@openvideo', 'engine-pixi', 'dist'),
+  path.resolve(workerRoot, '..', '..', 'packages', 'engine-pixi', 'dist'),
+  path.resolve(repoRoot, 'packages', 'engine-pixi', 'dist'),
+];
+
+for (const dir of engineCandidateDirs) {
+  if (!fs.existsSync(dir)) continue;
+  try {
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      if (!file.endsWith('.js') && !file.endsWith('.cjs')) continue;
+      const filePath = path.join(dir, file);
+      let content = fs.readFileSync(filePath, 'utf8');
+      let changed = false;
+
+      const audioEncoderRegex = /if\s*\(\s*!\s*\(\s*await\s+AudioEncoder\.isConfigSupported\(([a-zA-Z0-9_$]+)\)\s*\)\.supported\s*\)\s*throw\s+new\s+Error\s*\(\s*`This specific encoder configuration[\s\S]*?`\s*\);?/g;
+
+      if (audioEncoderRegex.test(content)) {
+        content = content.replace(audioEncoderRegex, (_match, varName) => {
+          return `let __audioSupp = false;
+        if (typeof AudioEncoder !== "undefined") {
+          try {
+            __audioSupp = (await AudioEncoder.isConfigSupported(${varName}))?.supported;
+            if (!__audioSupp && ${varName}.sampleRate !== 44100) {
+              const __alt = { ...${varName}, sampleRate: 44100 };
+              if ((await AudioEncoder.isConfigSupported(__alt))?.supported) {
+                ${varName} = __alt;
+                __audioSupp = true;
+              }
+            }
+            if (!__audioSupp) {
+              const __opusAlt = { ...${varName}, codec: "opus", sampleRate: 48000 };
+              if ((await AudioEncoder.isConfigSupported(__opusAlt))?.supported) {
+                console.warn("[AudioEncoder] WebCodecs AAC encoder not supported in this environment (" + ${varName}?.codec + "). Falling back to WebCodecs Opus encoder...");
+                ${varName} = __opusAlt;
+                this.encodingConfig.codec = "opus";
+                if (this.source) this.source._codec = "opus";
+                if (this.source?._connectedTrack?.source) this.source._connectedTrack.source._codec = "opus";
+                __audioSupp = true;
+              }
+            }
+          } catch (_) {}
+        }
+        if (!__audioSupp) {
+          console.warn("[AudioEncoder] WebCodecs encoder not supported for audio (" + ${varName}?.codec + "). Skipping audio encode...");
+          this.encoderInitialized = !0;
+          return;
+        }`;
+        });
+        changed = true;
+      }
+
+      // Patch Video.tick audio decode timeout from 3s to 60s with graceful PCM fallback
+      const audioTimeoutRegex = /if\s*\(\s*performance\.now\(\)\s*-\s*([a-zA-Z0-9_$]+)\.st\s*>\s*3e3\s*\)\s*throw\s+[a-zA-Z0-9_$]+\.abort\s*=\s*!0,\s*Error\(`Video\.tick audio timeout[\s\S]*?`\);?/g;
+      if (audioTimeoutRegex.test(content)) {
+        content = content.replace(audioTimeoutRegex, (_match, aborterVar) => {
+          return `if (performance.now() - ${aborterVar}.st > 60e3) {
+          console.warn("[Video.tick] Audio decode wait exceeded, using available PCM chunks without aborting...");
+          return (this.pcmData && this.pcmData.frameCnt > 0 && typeof SC === "function") ? SC(this.pcmData, this.pcmData.frameCnt) : [];
+        }`;
+        });
+        changed = true;
+      }
+
+      if (changed) {
+        fs.writeFileSync(filePath, content, 'utf8');
+        console.log(`[Patch] Successfully patched engine-pixi: ${filePath}`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[Patch] Notice during engine-pixi patching in ${dir}: ${err.message}`);
   }
 }

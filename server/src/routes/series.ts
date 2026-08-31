@@ -32,7 +32,25 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 
     const db = await getDatabaseProvider();
     const seriesList = await db.getSeriesList(userId, search, status);
-    ok(res, { series: seriesList, total: seriesList.length });
+    const enhancedSeries = await Promise.all(
+      seriesList.map(async (s) => {
+        try {
+          const episodes = await db.getEpisodesBySeriesId(s.id);
+          const publishedCount = Array.isArray(episodes) ? episodes.filter((e) => e.status === 'PUBLISHED').length : 0;
+          return {
+            ...s,
+            published_episode_count: publishedCount,
+            episode_count: (Array.isArray(episodes) && episodes.length > 0) ? episodes.length : (s.episode_count || 1),
+          };
+        } catch {
+          return {
+            ...s,
+            published_episode_count: 0,
+          };
+        }
+      })
+    );
+    ok(res, { series: enhancedSeries, total: enhancedSeries.length });
   } catch (err: any) {
     fail(res, 500, err.message || 'Internal server error');
   }
@@ -590,10 +608,10 @@ episodesRouter.put('/:episodeId/timeline', async (req: Request, res: Response): 
     const latestTimeline = await db.getLatestTimeline(episodeId);
 
     if (latestVersion && clientTimestamp) {
-      const serverTime = new Date(latestVersion.createdAt).getTime();
+      const serverTime = new Date(latestVersion.created_at).getTime();
       const clientTime = new Date(clientTimestamp).getTime();
       if (!isNaN(serverTime) && !isNaN(clientTime) && clientTime < serverTime) {
-        fail(res, 409, `Timeline version conflict: Your edit is based on an older version (${clientTimestamp}). Current server version was updated at ${latestVersion.createdAt}.`);
+        fail(res, 409, `Timeline version conflict: Your edit is based on an older version (${clientTimestamp}). Current server version was updated at ${latestVersion.created_at}.`);
         return;
       }
     }
@@ -629,10 +647,10 @@ episodesRouter.put('/:episodeId/timeline', async (req: Request, res: Response): 
       if (diffDetails.length === 0 && JSON.stringify(latestTimeline.settings) === JSON.stringify(timelineData.settings)) {
         ok(res, {
           success: true,
-          versionId: latestVersion?.versionId || 'ver_current',
-          versionNumber: latestVersion?.versionNumber || 1,
-          updatedAt: latestVersion?.createdAt || new Date().toISOString(),
-          noChanges: true,
+          version_id: latestVersion?.version_id || 'ver_current',
+          version_number: latestVersion?.version_number || 1,
+          updated_at: latestVersion?.created_at || new Date().toISOString(),
+          no_changes: true,
         }, 'Timeline data is already up to date');
         return;
       }

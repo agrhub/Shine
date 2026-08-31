@@ -45,6 +45,7 @@ export class PubSubService {
   private isInitialized = false;
 
   private constructor() {
+    this.eventEmitter.setMaxListeners(100);
     const pubsubConfig = EnvConfig.pubsub;
     this.jobTopicName = pubsubConfig.topicRender || 'shine-render-jobs';
     this.statusTopicName = process.env.PUBSUB_TOPIC_STATUS || 'shine-render-status';

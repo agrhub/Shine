@@ -11,8 +11,13 @@ import {
   WorkerHeartbeatEntity,
   WorkerJobEntity,
   ClusterMetricsSummary,
+  IProject,
+  TimelineSnapshotVersion,
+  TimelineSnapshotHistoryItem,
+  RestoreTimelineResult,
 } from './IDatabaseProvider.js';
 import { Logger } from '../utils/logger.js';
+import { normalizePureTimeline } from '../utils/timeline.js';
 
 function sanitizeForFirestore<T>(obj: T): T {
   if (obj === null || obj === undefined) return null as any;
@@ -294,7 +299,7 @@ export class FirestoreProvider implements IDatabaseProvider {
   // ==================== Timeline & Versions ====================
   public async saveTimeline(
     episode_id: string,
-    timeline_data: any,
+    timeline_data: IProject,
     author: { id: string; name: string; avatar?: string },
     change_summary?: string
   ): Promise<{ version_id: string; version_number: number; updated_at: string }> {
@@ -303,12 +308,13 @@ export class FirestoreProvider implements IDatabaseProvider {
 
     const historySnap = await this.db.collection('timeline_versions').where('episode_id', '==', episode_id).get();
     const version_number = historySnap.size + 1;
+    const pureTimeline = normalizePureTimeline(timeline_data);
 
     const versionDoc = {
       id: version_id,
       episode_id,
       version_number,
-      timeline_data,
+      timeline_data: pureTimeline,
       author,
       change_summary: change_summary || 'Timeline state update',
       created_at: now,
@@ -320,7 +326,7 @@ export class FirestoreProvider implements IDatabaseProvider {
       episode_id,
       version_id,
       version_number,
-      timeline_data,
+      timeline_data: pureTimeline,
       updated_at: now,
     }));
 
@@ -328,29 +334,48 @@ export class FirestoreProvider implements IDatabaseProvider {
     return { version_id, version_number, updated_at: now };
   }
 
-  public async getLatestTimeline(episode_id: string): Promise<any | null> {
+  public async getLatestTimeline(episode_id: string): Promise<IProject | null> {
     const doc = await this.db.collection('timelines').doc(episode_id).get();
     if (!doc.exists) return null;
-    return doc.data();
+    const data = doc.data();
+    return normalizePureTimeline(data?.timeline_data || data);
   }
 
-  public async getTimelineHistory(episode_id: string, limit = 20, offset = 0): Promise<{ total: number; history: any[] }> {
+  public async getTimelineHistory(episode_id: string, limit = 20, offset = 0): Promise<{ total: number; history: TimelineSnapshotHistoryItem[] }> {
     const query = this.db.collection('timeline_versions').where('episode_id', '==', episode_id);
     try {
       const snapshot = await query.get();
-      const list = snapshot.docs
-        .map(doc => doc.data())
-        .sort((a: any, b: any) => (b.version_number || 0) - (a.version_number || 0));
+      const list: TimelineSnapshotHistoryItem[] = snapshot.docs
+        .map(doc => {
+          const data = doc.data();
+          return {
+            version_id: data.id || doc.id,
+            version_number: data.version_number || 1,
+            label: data.label,
+            author: data.author,
+            change_summary: data.change_summary,
+            created_at: data.created_at,
+          };
+        })
+        .sort((a, b) => (b.version_number || 0) - (a.version_number || 0));
       return { total: list.length, history: list.slice(offset, offset + limit) };
     } catch {
       return { total: 0, history: [] };
     }
   }
 
-  public async getTimelineVersion(episode_id: string, version_id: string): Promise<any | null> {
+  public async getTimelineVersion(episode_id: string, version_id: string): Promise<TimelineSnapshotVersion | null> {
     const doc = await this.db.collection('timeline_versions').doc(version_id).get();
     if (!doc.exists) return null;
-    return doc.data();
+    const data = doc.data();
+    return {
+      version_id: data?.id || version_id,
+      version_number: data?.version_number || 1,
+      author: data?.author,
+      change_summary: data?.change_summary,
+      created_at: data?.created_at,
+      timeline_data: normalizePureTimeline(data?.timeline_data || data),
+    };
   }
 
   public async restoreTimelineVersion(
@@ -358,7 +383,7 @@ export class FirestoreProvider implements IDatabaseProvider {
     version_id: string,
     author: { id: string; name: string; avatar?: string },
     reason?: string
-  ): Promise<any> {
+  ): Promise<RestoreTimelineResult> {
     const version = await this.getTimelineVersion(episode_id, version_id);
     if (!version) throw new Error(`Version ${version_id} not found`);
 
@@ -368,7 +393,14 @@ export class FirestoreProvider implements IDatabaseProvider {
       author,
       `Restored from version ${version.version_number}: ${reason || ''}`
     );
-    return { ...result, timeline_data: version.timeline_data };
+    return {
+      success: true,
+      restored_from_version_id: version_id,
+      new_version_id: result.version_id,
+      new_version_number: result.version_number,
+      active_timeline: version.timeline_data,
+      created_at: result.updated_at,
+    };
   }
 
   // ==================== Flow Accounts ====================
@@ -621,6 +653,15 @@ export class FirestoreProvider implements IDatabaseProvider {
     });
     await docRef.set(updated, { merge: true });
     return updated;
+  }
+
+  public async deletePipelineJob(job_id: string): Promise<boolean> {
+    try {
+      await this.db.collection('pipeline_jobs').doc(job_id).delete();
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   public async findActivePipelineJob(series_id: string, episode_id: string, type?: string): Promise<any | null> {

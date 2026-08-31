@@ -4,6 +4,7 @@ import { flowAdapter } from '../flow/FlowAdapter.js';
 import { getDatabaseProvider, AIAccountStatus, AIAccountType } from '@/database/index.js';
 import { Logger } from '@/utils/logger.js';
 import { EnvConfig } from '@/config/env.js';
+import type { StudioSystemConfig } from '@/types.js';
 
 export interface RouteGenerationOptions {
   userTier?: 'FREE' | 'PRO' | 'ENTERPRISE';
@@ -18,6 +19,7 @@ export interface RouteGenerationOptions {
   imageInputs?: string[];
   imageStart?: string;
   imageEnd?: string;
+  extraOptions?: any;
 }
 
 export class AIProviderRouter {
@@ -248,7 +250,7 @@ export class AIProviderRouter {
       // 2. Fallback / Default to Gemini Native Audio catalog
       try {
         const geminiVoiceId = isGeminiVoice ? options.model : (GEMINI_SUPPORTED_VOICES[0]?.id || 'Puck');
-        const audioRes = await geminiClient.generateAudio(options.prompt, geminiVoiceId);
+        const audioRes = await geminiClient.generateAudio(options.prompt, geminiVoiceId, undefined, options.extraOptions || options);
         if (audioRes && audioRes.url) {
           return {
             provider: 'Gemini Native Audio',
@@ -361,7 +363,7 @@ export class AIProviderRouter {
 
   async generateText(prompt: string, options?: { model?: string; systemInstruction?: string }): Promise<string> {
     const db = await getDatabaseProvider();
-    const studioConfig: any = (await db.getSystemSetting('studio_config')) || {};
+    const studioConfig = (await db.getSystemSetting<StudioSystemConfig>('studio_config')) || {};
     const targetModel = options?.model || studioConfig?.gemini?.textModel || EnvConfig.geminiModelText;
     const res = await this.routeGeneration({
       prompt,
@@ -451,9 +453,56 @@ export class AIProviderRouter {
     return str;
   }
 
+  private parseJsonWithRepair<T>(rawStr: string): T {
+    const extracted = this.extractJsonString(rawStr);
+    
+    // 1. Direct parse attempt
+    try {
+      return JSON.parse(extracted) as T;
+    } catch {}
+
+    // 2. Progressive Sanitize and Repair markdown artifacts (e.g. "title":_ "...", "title": _"...", "title": **"..."**)
+    let repaired = extracted
+      .replace(/\/\/.*$/gm, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/:\s*[_*]+(?=\s*["{\[\d\-tfn])/g, ': ')
+      .replace(/:\s*[_*]+"/g, ': "')
+      .replace(/"[_*]+(?=[\s,\}\]])/g, '"')
+      .replace(/([0-9a-zA-Z\-_]+)[_*]+(?=[\s,\}\]])/g, '$1')
+      .replace(/,\s*([}\]])/g, '$1')
+      .trim();
+
+    try {
+      return JSON.parse(repaired) as T;
+    } catch {}
+
+    // 3. Try balancing unclosed brackets if truncated
+    let openBraces = (repaired.match(/\{/g) || []).length;
+    let closeBraces = (repaired.match(/\}/g) || []).length;
+    let openBrackets = (repaired.match(/\[/g) || []).length;
+    let closeBrackets = (repaired.match(/\]/g) || []).length;
+
+    let balanced = repaired;
+    while (closeBrackets < openBrackets) {
+      balanced += ']';
+      closeBrackets++;
+    }
+    while (closeBraces < openBraces) {
+      balanced += '}';
+      closeBraces++;
+    }
+
+    try {
+      return JSON.parse(balanced) as T;
+    } catch {}
+
+    // 4. Fallback: throw original JSON.parse error with extracted string for clear debugging
+    return JSON.parse(extracted) as T;
+  }
+
   async generateJSON<T>(prompt: string, fallbackData?: T, options?: { model?: string; systemInstruction?: string }): Promise<T> {
     const db = await getDatabaseProvider();
-    const studioConfig: any = (await db.getSystemSetting('studio_config')) || {};
+    const studioConfig = (await db.getSystemSetting<StudioSystemConfig>('studio_config')) || {};
     const targetModel = options?.model || studioConfig?.gemini?.textModel || EnvConfig.geminiModelText;
     try {
       const res = await this.routeGeneration({
@@ -464,8 +513,7 @@ export class AIProviderRouter {
         systemInstruction: options?.systemInstruction,
       });
       const rawText = String(res.data || '');
-      const jsonStr = this.extractJsonString(rawText);
-      return JSON.parse(jsonStr) as T;
+      return this.parseJsonWithRepair<T>(rawText);
     } catch (err: any) {
       Logger.error(`[AIProviderRouter] generateJSON error: ${err.message}`);
       if (fallbackData !== undefined) return fallbackData;
@@ -475,7 +523,7 @@ export class AIProviderRouter {
 
   async generateImage(prompt: string, options?: { aspectRatio?: '9:16' | '1:1' | '16:9' | '4:3'; model?: string; systemPrompt?: string; characterReferences?: string[]; imageInputs?: string[] }): Promise<{ url: string; mimeType: string; provider: string; buffer?: Buffer }> {
     const db = await getDatabaseProvider();
-    const studioConfig: any = (await db.getSystemSetting('studio_config')) || {};
+    const studioConfig = (await db.getSystemSetting<StudioSystemConfig>('studio_config')) || {};
     const targetModel = options?.model || studioConfig?.gemini?.imageModel || EnvConfig.geminiModelImage;
     const res: any = await this.routeGeneration({
       prompt,
@@ -496,7 +544,7 @@ export class AIProviderRouter {
 
   async generateVideo(prompt: string, options?: { aspectRatio?: '9:16' | '1:1' | '16:9'; model?: string; characterReferences?: string[]; imageInputs?: string[]; backgroundImageId?: string; startFrameUrl?: string; endFrameUrl?: string; imageStart?: string; imageEnd?: string }): Promise<{ url: string; provider: string }> {
     const db = await getDatabaseProvider();
-    const studioConfig: any = (await db.getSystemSetting('studio_config')) || {};
+    const studioConfig = (await db.getSystemSetting<StudioSystemConfig>('studio_config')) || {};
     const targetModel = options?.model || studioConfig?.gemini?.videoModel || EnvConfig.geminiModelVideo;
     const res: any = await this.routeGeneration({
       prompt,
@@ -526,11 +574,12 @@ export class AIProviderRouter {
     };
   }
 
-  async generateAudio(prompt: string, voiceId?: string): Promise<{ url: string; mimeType: string; provider: string }> {
+  async generateAudio(prompt: string, voiceId?: string, options?: any): Promise<{ url: string; mimeType: string; provider: string }> {
     const res: any = await this.routeGeneration({
       prompt,
       type: 'VOICE',
       model: voiceId,
+      extraOptions: options,
     });
     return {
       url: res.url || '',

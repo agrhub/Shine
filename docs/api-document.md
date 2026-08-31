@@ -855,6 +855,52 @@ Composite 3D sponsored product asset onto scene background layer (Proposal 10).
 #### `POST /collaboration/sync-offline-patches`
 Reconcile and apply bulk OpenVideo command patches queued during offline editing (Proposal 12).
 - **Request Body:** `{ "episodeId": "ep_01", "offlinePatches": [ ... ] }`
+#### `POST /jobs/start-pipeline`
+Starts or attaches to a background multi-agent production pipeline job for an episode.
+- **Request Body:**
+  ```json
+  {
+    "series_id": "ser_01",
+    "episode_id": "ep_01",
+    "type": "full_pipeline",
+    "force_regenerate": false
+  }
+  ```
+- **Response (200 OK):**
+  ```json
+  {
+    "code": 200,
+    "data": { "job": { "id": "job_123", "status": "running", "progress": 10, "current_step": "Generating Storyboards..." }, "is_new": true },
+    "message": "Pipeline background job started"
+  }
+  ```
+
+#### `POST /jobs/retry-step`
+Retries a failed pipeline step in the background.
+- **Request Body:** `{ "series_id": "ser_01", "episode_id": "ep_01", "step": "render" }`
+
+#### `POST /jobs/retry-asset`
+Smart retry for a single specific asset (character, location, prop, storyboard, video, voice, subtitle, bgm, or master render). Automatically transitions pipeline job state to `running` with real-time WebSocket broadcast. Master render tasks are dispatched non-blockingly to the Cloud Run `VideoRendererPool`.
+- **Request Body:**
+  ```json
+  {
+    "series_id": "ser_01",
+    "episode_id": "ep_01",
+    "asset_type": "render",
+    "asset_id": "asset_master_video",
+    "scene_index": 1,
+    "name": "Episode #1 Final Video"
+  }
+  ```
+- **Response (200 OK):**
+  ```json
+  {
+    "code": 200,
+    "data": { "job": { "id": "job_123", "status": "running" }, "status": "running", "type": "render" },
+    "message": "Render job launched in background. Monitoring progress via worker..."
+  }
+  ```
+
 #### `POST /publish/multi-platform`
 Publish rendered video to multiple social platforms (TikTok, YouTube Shorts, Instagram Reels, Facebook Reels, Douyin) with platform-specific captions, hashtags, and thumbnails.
 - **Request Body:**
@@ -932,7 +978,7 @@ Publish rendered video to multiple social platforms (TikTok, YouTube Shorts, Ins
 - `GET /analytics/paywall-recommendation`: Analyze retention curves to recommend optimal episode paywall coin unlock thresholds.
 
 ### Technical & Infrastructure Endpoints (Proposals 22–26)
-- `GET /api/v1/render/stream`: SSE / WebSocket stream for real-time batch render queue progress.
+- `GET /api/render/stream`: SSE / WebSocket stream for real-time batch render queue progress.
 - `POST /audio/copyright-verify`: Audio fingerprinting scan auto-swapping unsafe background audio tracks.
 - `POST /billing/revenue-splits`: Define and process automated revenue sharing contracts among team members.
 
@@ -1128,12 +1174,12 @@ runDramaGeneration();
 
 ---
 
-## 8. System, Cloud Run & Admin Operations Endpoints
+## 8. Microservices & Worker Integration
 
-### 8.1 System Health & Diagnostics
+### 8.1 Service Health Probing
 `GET /api/health`
 
-Returns live runtime diagnostics, database status, and microservice connectivity.
+Returns health status of the Shine API server and connected database provider.
 
 **Response (200 OK):**
 ```json
@@ -1149,7 +1195,7 @@ Returns live runtime diagnostics, database status, and microservice connectivity
 ---
 
 ### 8.2 Asynchronous Video Render Queue
-`POST /api/v1/render/submit`
+`POST /api/export` or `POST /api/jobs/retry-asset`
 
 Submits an OpenVideo timeline project payload to the headless Playwright WebCodecs compositor worker on Google Cloud Run via Pub/Sub event queue.
 
@@ -1183,7 +1229,7 @@ Submits an OpenVideo timeline project payload to the headless Playwright WebCode
 }
 ```
 
-`GET /api/v1/render/status/:jobId`
+`GET /api/jobs/:jobId`
 
 Queries real-time rendering progress (0–100%) and retrieves the final downloadable video URL.
 
@@ -1206,7 +1252,7 @@ Queries real-time rendering progress (0–100%) and retrieves the final download
 ---
 
 ### 8.3 Audio Stem Separation (Meta Demucs v4 AI)
-`POST /api/v1/audio/separate`
+`POST /api/audio/separate`
 
 Isolates vocal dialogue from background music and sound effects using Meta Demucs v4.
 

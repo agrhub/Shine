@@ -1,18 +1,16 @@
 import axios from 'axios';
 import { StorageFactory } from './storage/StorageFactory.js';
-import { DspAudioService, DspSeparationResult } from './DspAudioService.js';
 import { Logger } from '../utils/logger.js';
 
 export interface StemSeparationResult {
   bgmUrl: string;
   vocalsUrl?: string;
-  source: 'demucs-cloud-run' | 'dsp-fallback';
+  source: 'demucs-cloud-run';
 }
 
 export class DemucsAudioService {
   /**
-   * Separates Vocal and clean BGM using Google Cloud Run Demucs AI Worker.
-   * Gracefully falls back to local DSP if service is not configured or temporarily unreachable.
+   * Separates Vocal dialogue and extracts clean Background Music (BGM) stem using Meta Demucs v4 AI Cloud Run Worker.
    */
   public static async separateStem(
     sourceUrl: string,
@@ -21,17 +19,20 @@ export class DemucsAudioService {
       twoStems?: string;
     } = {}
   ): Promise<StemSeparationResult> {
-    const serviceUrl = (process.env.DEMUCS_SERVICE_URL || process.env.DEMUCS_API_URL || '').trim().replace(/\/+$/, '');
+    const defaultServiceUrl = 'https://demucs-worker-asmlum4txq-uc.a.run.app';
+    const serviceUrl = (process.env.DEMUCS_SERVICE_URL || process.env.DEMUCS_WORKER_URL || process.env.DEMUCS_API_URL || defaultServiceUrl).trim().replace(/\/+$/, '');
 
-    if (serviceUrl) {
-      try {
-        Logger.info(`[DemucsAudioService] Calling Demucs AI Stem Separator at ${serviceUrl} for: ${sourceUrl}`);
+    try {
+      Logger.info(`[DemucsAudioService] Calling Meta Demucs v4 AI Stem Separator at ${serviceUrl} for: ${sourceUrl}`);
 
-        // 1. Resolve absolute/public URL for the Cloud Run worker
-        const resolvedPublicUrl = await StorageFactory.resolvePublicUrl(sourceUrl);
+      const resolvedPublicUrl = await StorageFactory.resolvePublicUrl(sourceUrl);
+      const isLocalUrl = resolvedPublicUrl.includes('127.0.0.1') || resolvedPublicUrl.includes('localhost') || resolvedPublicUrl.startsWith('/');
 
-        // 2. Call Cloud Run /separate endpoint
-        const response = await axios.post(
+      let response: any;
+
+      if (!isLocalUrl && (resolvedPublicUrl.startsWith('http://') || resolvedPublicUrl.startsWith('https://'))) {
+        // 1. Direct URL separation for public cloud files
+        response = await axios.post(
           `${serviceUrl}/separate`,
           {
             audioUrl: resolvedPublicUrl,
@@ -39,52 +40,61 @@ export class DemucsAudioService {
             model: options.model || 'htdemucs',
           },
           {
-            timeout: 120_000, // 2 minutes timeout for serverless worker
+            timeout: 180_000,
             headers: { 'Content-Type': 'application/json' },
           }
         );
+      } else {
+        // 2. Direct multipart buffer upload for local storage files
+        Logger.info(`[DemucsAudioService] Streaming local media buffer to Demucs Worker (${serviceUrl}/separate/upload)...`);
+        const fileRes = await StorageFactory.getFileBuffer(sourceUrl);
+        const fileBuffer = fileRes.buffer;
 
-        if (response.data && response.data.success) {
-          let cleanBgmUrl = response.data.bgmUrl || '';
-          let cleanVocalsUrl = response.data.vocalsUrl || '';
+        const formData = new FormData();
+        const blob = new Blob([new Uint8Array(fileBuffer)], { type: 'video/mp4' });
+        formData.append('file', blob, 'input_media.mp4');
+        formData.append('twoStems', options.twoStems || 'vocals');
+        formData.append('model', options.model || 'htdemucs');
 
-          // 3. Upload separated BGM data to Cloud Storage
-          if (cleanBgmUrl.startsWith('data:')) {
-            const bgmUpload = await StorageFactory.uploadMedia(cleanBgmUrl, 'audio', 'wav', 'audio/wav');
-            cleanBgmUrl = `/api/assets/file/${bgmUpload.key}`;
+        response = await axios.post(
+          `${serviceUrl}/separate/upload`,
+          formData,
+          {
+            timeout: 180_000,
+            headers: { 'Content-Type': 'multipart/form-data' },
           }
-
-          if (cleanVocalsUrl.startsWith('data:')) {
-            const vocUpload = await StorageFactory.uploadMedia(cleanVocalsUrl, 'audio', 'wav', 'audio/wav');
-            cleanVocalsUrl = `/api/assets/file/${vocUpload.key}`;
-          }
-
-          Logger.info(`[DemucsAudioService] Successfully separated clean BGM stem via Cloud Run Demucs: ${cleanBgmUrl}`);
-          return {
-            bgmUrl: cleanBgmUrl,
-            vocalsUrl: cleanVocalsUrl,
-            source: 'demucs-cloud-run',
-          };
-        }
-      } catch (err: any) {
-        Logger.warn(`[DemucsAudioService] Demucs Cloud Run service call failed (${err.message}), falling back to DSP...`);
+        );
       }
-    } else {
-      Logger.info(`[DemucsAudioService] DEMUCS_SERVICE_URL not set, using DSP audio separation fallback.`);
-    }
 
-    // Fallback to DSP audio separation
-    try {
-      const dspResult = await DspAudioService.separateVocalAndBgm(sourceUrl);
-      return {
-        bgmUrl: dspResult?.bgmUrl || '',
-        source: 'dsp-fallback',
-      };
-    } catch (dspErr: any) {
-      Logger.warn(`[DemucsAudioService] DSP separation fallback notice: ${dspErr.message}`);
+      if (response?.data && response.data.success) {
+        let cleanBgmUrl = response.data.bgmUrl || '';
+        let cleanVocalsUrl = response.data.vocalsUrl || '';
+
+        // Upload separated BGM data to Storage
+        if (cleanBgmUrl.startsWith('data:')) {
+          const bgmUpload = await StorageFactory.uploadMedia(cleanBgmUrl, 'audio', 'wav', 'audio/wav');
+          cleanBgmUrl = `/api/assets/file/${bgmUpload.key}`;
+        }
+
+        if (cleanVocalsUrl.startsWith('data:')) {
+          const vocUpload = await StorageFactory.uploadMedia(cleanVocalsUrl, 'audio', 'wav', 'audio/wav');
+          cleanVocalsUrl = `/api/assets/file/${vocUpload.key}`;
+        }
+
+        Logger.info(`[DemucsAudioService] Successfully separated clean BGM stem via Meta Demucs v4 AI: ${cleanBgmUrl}`);
+        return {
+          bgmUrl: cleanBgmUrl,
+          vocalsUrl: cleanVocalsUrl,
+          source: 'demucs-cloud-run',
+        };
+      } else {
+        throw new Error(response?.data?.message || 'Demucs worker returned failure');
+      }
+    } catch (err: any) {
+      Logger.warn(`[DemucsAudioService] Demucs AI worker notice: ${err.message}`);
       return {
         bgmUrl: '',
-        source: 'dsp-fallback',
+        source: 'demucs-cloud-run',
       };
     }
   }

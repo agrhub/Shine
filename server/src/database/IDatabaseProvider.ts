@@ -26,6 +26,10 @@ import type {
   WorkerJobEntity,
   ClusterMetricsSummary,
   PipelineJobEntity,
+  IProject,
+  TimelineSnapshotVersion,
+  TimelineSnapshotHistoryItem,
+  RestoreTimelineResult,
 } from '@/types.js';
 
 // Re-export all centralized types for backwards-compatibility
@@ -61,11 +65,11 @@ export interface IDatabaseProvider {
   updateEpisode(id: string, updates: Partial<EpisodeEntity>): Promise<EpisodeEntity | null>;
 
   // Timeline & History Snapshots (Zero-Render Preview & Restore)
-  saveTimeline(episode_id: string, timeline_data: any, author: { id: string; name: string; avatar?: string }, change_summary?: string): Promise<{ version_id: string; version_number: number; updated_at: string }>;
-  getLatestTimeline(episode_id: string): Promise<any | null>;
-  getTimelineHistory(episode_id: string, limit?: number, offset?: number): Promise<{ total: number; history: any[] }>;
-  getTimelineVersion(episode_id: string, version_id: string): Promise<any | null>;
-  restoreTimelineVersion(episode_id: string, version_id: string, author: { id: string; name: string; avatar?: string }, reason?: string): Promise<any>;
+  saveTimeline(episode_id: string, timeline_data: IProject, author: { id: string; name: string; avatar?: string }, change_summary?: string): Promise<{ version_id: string; version_number: number; updated_at: string }>;
+  getLatestTimeline(episode_id: string): Promise<IProject | null>;
+  getTimelineHistory(episode_id: string, limit?: number, offset?: number): Promise<{ total: number; history: TimelineSnapshotHistoryItem[] }>;
+  getTimelineVersion(episode_id: string, version_id: string): Promise<TimelineSnapshotVersion | null>;
+  restoreTimelineVersion(episode_id: string, version_id: string, author: { id: string; name: string; avatar?: string }, reason?: string): Promise<RestoreTimelineResult>;
 
   // Flow Accounts
   getFlowAccounts(status?: string): Promise<FlowAccountEntity[]>;
@@ -82,11 +86,12 @@ export interface IDatabaseProvider {
   getPipelineJobById(job_id: string): Promise<PipelineJobEntity | null>;
   getPipelineJobs(filter?: { user_id?: string; series_id?: string; episode_id?: string; status?: string; limit?: number }): Promise<PipelineJobEntity[]>;
   updatePipelineJob(job_id: string, patch: Partial<PipelineJobEntity>): Promise<PipelineJobEntity | null>;
+  deletePipelineJob(job_id: string): Promise<boolean>;
   findActivePipelineJob(series_id: string, episode_id: string, type?: string): Promise<PipelineJobEntity | null>;
 
   // System Settings
-  getSystemSetting<T = any>(key: string): Promise<T | null>;
-  saveSystemSetting<T = any>(key: string, value: T): Promise<void>;
+  getSystemSetting<T = unknown>(key: string): Promise<T | null>;
+  saveSystemSetting<T = unknown>(key: string, value: T): Promise<void>;
 
   // Worker Telemetry & Cluster Monitoring
   recordWorkerHeartbeat(heartbeat: WorkerHeartbeatEntity): Promise<void>;

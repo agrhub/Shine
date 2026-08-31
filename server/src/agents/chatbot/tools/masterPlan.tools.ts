@@ -85,6 +85,16 @@ export class MasterPlanToolExecutors {
         characters: normalizedChars,
       };
       
+      const ctx = getActiveChatContext();
+      if (ctx?.contextData) {
+        ctx.contextData.currentPlan = masterPlanData;
+        ctx.contextData.masterPlan = masterPlanData;
+        if (ctx.contextData.session) {
+          ctx.contextData.session.currentPlan = masterPlanData;
+          ctx.contextData.session.masterPlan = masterPlanData;
+        }
+      }
+
       return {
         success: true,
         message: `Successfully generated Master Plan for "${masterPlanData.title}" (${normalizedChars.length} characters, ${rawPlan.episodes?.length || totalEpisodes} episodes).`,
@@ -192,7 +202,7 @@ export class MasterPlanToolExecutors {
       const ctx = getActiveChatContext();
       const contextData = ctx?.contextData;
 
-      let masterPlanObj = params.masterPlan || contextData?.currentPlan || contextData?.masterPlan;
+      let masterPlanObj = params.masterPlan || contextData?.currentPlan || contextData?.masterPlan || contextData?.session?.currentPlan || contextData?.session?.masterPlan;
       if (typeof masterPlanObj === 'string') {
         try {
           masterPlanObj = JSON.parse(masterPlanObj);

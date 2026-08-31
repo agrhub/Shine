@@ -40,9 +40,13 @@ if (-not $Memory) { $Memory = if ($env:MEMORY) { $env:MEMORY } elseif ($EnvMap["
 if (-not $CPU) { $CPU = if ($env:CPU) { $env:CPU } elseif ($EnvMap["RENDER_WORKER_CPU"]) { $EnvMap["RENDER_WORKER_CPU"] } else { "2" } }
 if (-not $Timeout) { $Timeout = if ($env:TIMEOUT) { $env:TIMEOUT } elseif ($EnvMap["RENDER_WORKER_TIMEOUT"]) { $EnvMap["RENDER_WORKER_TIMEOUT"] } else { "600" } }
 if (-not $MinInstances) { $MinInstances = if ($env:MIN_INSTANCES) { $env:MIN_INSTANCES } elseif ($EnvMap["RENDER_WORKER_MIN_INSTANCES"]) { $EnvMap["RENDER_WORKER_MIN_INSTANCES"] } else { "0" } }
-if (-not $MaxInstances) { $MaxInstances = if ($env:MAX_INSTANCES) { $env:MAX_INSTANCES } elseif ($EnvMap["RENDER_WORKER_MAX_INSTANCES"]) { $EnvMap["RENDER_WORKER_MAX_INSTANCES"] } else { "3" } }
-if (-not $Concurrency) { $Concurrency = if ($env:CONCURRENCY) { $env:CONCURRENCY } elseif ($EnvMap["RENDER_WORKER_CONCURRENCY"]) { $EnvMap["RENDER_WORKER_CONCURRENCY"] } else { "1" } }
+if (-not $MaxInstances) { $MaxInstances = if ($env:MAX_INSTANCES) { $env:MAX_INSTANCES } elseif ($EnvMap["RENDER_WORKER_MAX_INSTANCES"]) { $EnvMap["RENDER_WORKER_MAX_INSTANCES"] } else { "5" } }
+if (-not $Concurrency) { $Concurrency = if ($env:CONCURRENCY) { $env:CONCURRENCY } elseif ($EnvMap["RENDER_WORKER_CONCURRENCY"]) { $EnvMap["RENDER_WORKER_CONCURRENCY"] } else { "10" } }
 if (-not $GcsBucket) { $GcsBucket = if ($env:GCS_BUCKET) { $env:GCS_BUCKET } elseif ($EnvMap["GCS_BUCKET_NAME"]) { $EnvMap["GCS_BUCKET_NAME"] } else { "shine-studio-media" } }
+
+$PoolSize = if ($env:RENDER_POOL_SIZE) { $env:RENDER_POOL_SIZE } elseif ($EnvMap["RENDER_POOL_SIZE"]) { $EnvMap["RENDER_POOL_SIZE"] } else { "4" }
+$PoolMin = if ($env:RENDER_POOL_MIN) { $env:RENDER_POOL_MIN } elseif ($EnvMap["RENDER_POOL_MIN"]) { $EnvMap["RENDER_POOL_MIN"] } else { "1" }
+$MaxPerInstance = if ($env:RENDER_MAX_PER_INSTANCE) { $env:RENDER_MAX_PER_INSTANCE } elseif ($EnvMap["RENDER_MAX_PER_INSTANCE"]) { $EnvMap["RENDER_MAX_PER_INSTANCE"] } else { "25" }
 
 Write-Host "=========================================================" -ForegroundColor Cyan
 Write-Host " Deploying Video Render Worker to Google Cloud Run" -ForegroundColor Cyan
@@ -51,6 +55,8 @@ Write-Host " Region:        $Region"
 Write-Host " Memory / CPU:  $Memory / $CPU CPU"
 Write-Host " Timeout:       $Timeout seconds"
 Write-Host " Min / Max:     $MinInstances / $MaxInstances instances"
+Write-Host " Concurrency:   $Concurrency requests"
+Write-Host " Render Pool:   Min $PoolMin / Max $PoolSize instances"
 Write-Host " GCS Bucket:    $GcsBucket"
 Write-Host "=========================================================" -ForegroundColor Cyan
 
@@ -95,7 +101,7 @@ gcloud run deploy $ServiceName `
   --concurrency $Concurrency `
   --min-instances $MinInstances `
   --max-instances $MaxInstances `
-  --set-env-vars "GCS_BUCKET=$GcsBucket,PUBSUB_TOPIC_STATUS=shine-render-status" `
+  --set-env-vars "GCS_BUCKET=$GcsBucket,PUBSUB_TOPIC_STATUS=shine-render-status,RENDER_POOL_SIZE=$PoolSize,RENDER_POOL_MIN=$PoolMin,RENDER_MAX_PER_INSTANCE=$MaxPerInstance,GOOGLE_CLOUD_PROJECT=$ProjectId,GCP_REGION=$Region" `
   --allow-unauthenticated
 
 if ($LASTEXITCODE -ne 0) {

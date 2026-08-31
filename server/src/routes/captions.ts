@@ -1,8 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { geminiClient } from '../integrations/ai/gemini/GeminiClient.js';
 import { PromptLoader } from '../utils/PromptLoader.js';
-import { getDatabaseProvider } from '../database/index.js';
+import { CharacterSeriesEntity, EpisodeEntity, SceneDialogue, SceneEntity, getDatabaseProvider } from '../database/index.js';
 import { StorageFactory } from '../services/storage/StorageFactory.js';
+import { TimelineService } from '../services/TimelineService.js';
+import { PatchSyncService } from '../realtime/PatchSyncService.js';
+import { buildWordLevelCaptionsFromDialogue, cleanDialogueLine } from '../utils/captionAlignment.js';
+import { EpisodeChatSession } from '~/agents/ChatbotAgent.js';
 
 export const captionsRouter = Router();
 
@@ -245,19 +249,55 @@ captionsRouter.post('/kinetic-style', (req: Request, res: Response) => {
 
 // POST /api/captions/batch-translate
 captionsRouter.post('/batch-translate', async (req: Request, res: Response) => {
-  const { episode_id, target_language = 'en-US', scenes = [] } = req.body;
-  const targetEpisodeId = episode_id;
-  const reqTargetLang = target_language;
+  const {
+    series_id,
+    seriesId,
+    episode_id,
+    episodeId,
+    target_language,
+    targetLanguage = 'en-US',
+    scenes = [],
+  }: {
+    series_id?: string;
+    seriesId?: string;
+    episode_id?: string;
+    episodeId?: string;
+    target_language?: string;
+    targetLanguage?: string;
+    scenes?: SceneEntity[];
+  } = req.body;
+  const targetSeriesId = series_id || seriesId;
+  const targetEpisodeId = episode_id || episodeId;
+  const reqTargetLang = target_language || targetLanguage;
 
   if (!Array.isArray(scenes) || scenes.length === 0) {
     return res.status(400).json({ code: 400, message: 'Scenes array is required and must not be empty' });
   }
 
   try {
-    const inputItems = scenes.map((s: any) => ({
-      scene_index: s.scene_index || s.index,
-      dialogue: s.dialogue || s.text || '',
-    })).filter((item: any) => (item.dialogue || '').trim().length > 0);
+    const db = await getDatabaseProvider();
+    let episode: EpisodeEntity | null = null;
+    let series = null;
+    if (targetEpisodeId) {
+      episode = await db.getEpisodeById(targetEpisodeId);
+      if (episode?.series_id) {
+        series = await db.getSeriesById(episode.series_id);
+      }
+    }
+
+    const inputItems = scenes
+      .map((s: SceneEntity) => {
+        const speaker = Array.isArray(s.dialogue) && s.dialogue[0]?.character ? s.dialogue[0].character : 'Character';
+        const line = Array.isArray(s.dialogue)
+          ? s.dialogue.map((d: SceneDialogue) => d.line).filter(Boolean).join(' ')
+          : (typeof s.dialogue === 'string' ? s.dialogue : '');
+        return {
+          scene_index: s.index,
+          character: speaker,
+          dialogue: cleanDialogueLine(line, speaker),
+        };
+      })
+      .filter((item) => item.dialogue.trim().length > 0);
 
     if (inputItems.length === 0) {
       return res.json({
@@ -269,6 +309,7 @@ captionsRouter.post('/batch-translate', async (req: Request, res: Response) => {
 
     const promptText = `Translate the following dialogue lines from a micro-drama series into language: ${reqTargetLang}.
 Context: Keep high dramatic tension, character emotions, punchy delivery, and match the target culture's phrasing.
+Ensure the translated text is strictly in ${reqTargetLang} without retaining any source language words.
 
 Input JSON:
 ${JSON.stringify(inputItems, null, 2)}
@@ -278,14 +319,15 @@ Respond with ONLY valid JSON adhering strictly to this schema:
   "translated_scenes": [
     {
       "scene_index": 1,
-      "translated_dialogue": "Translated line here"
+      "character": "Speaker Name",
+      "translated_dialogue": "Translated line in ${reqTargetLang}"
     }
   ]
 }`;
 
     const raw = await geminiClient.generateText({
       prompt: promptText,
-      systemInstruction: 'You are a master micro-drama subtitle & dubbing translator. You translate lines while preserving raw emotion, dramatic pacing, and natural spoken flow.',
+      systemInstruction: `You are a master micro-drama subtitle & dubbing translator. You translate lines into ${reqTargetLang} while preserving raw emotion, dramatic pacing, and natural spoken flow. Return valid JSON only.`,
       jsonMode: true,
     });
 
@@ -293,8 +335,56 @@ Respond with ONLY valid JSON adhering strictly to this schema:
     const rawTranslated = parsed.translated_scenes || [];
     const translatedScenes = rawTranslated.map((t: any) => ({
       scene_index: t.scene_index,
-      translated_dialogue: t.translated_dialogue,
+      character: t.character,
+      translated_dialogue: cleanDialogueLine(t.translated_dialogue || t.line || '', t.character),
     }));
+
+    // Persist translations directly into the database episode entity
+    if (episode && targetEpisodeId) {
+      const epScenes = episode.scenes || [];
+      for (const t of translatedScenes) {
+        const sc = epScenes.find((s: SceneEntity) => s.index === t.scene_index || s.id === `scene_${t.scene_index}`);
+        if (sc) {
+          if (!sc.translations) sc.translations = {};
+          const speaker = t.character || (Array.isArray(sc.dialogue) && sc.dialogue[0]?.character) || 'Character';
+          const sceneDur = Number(sc.duration_seconds) || 6;
+          const transDialogues: SceneDialogue[] = [
+            {
+              character: speaker,
+              line: t.translated_dialogue,
+            },
+          ];
+          const { captions_data, words } = buildWordLevelCaptionsFromDialogue(transDialogues, sceneDur, 0.5);
+          sc.translations[reqTargetLang] = {
+            ...(sc.translations[reqTargetLang] || {}),
+            dialogue: transDialogues,
+            translated_dialogue: t.translated_dialogue,
+            captions_data,
+            words,
+          };
+        }
+      }
+
+      if (!episode.caption_languages?.includes(reqTargetLang)) {
+        if (!episode.caption_languages) episode.caption_languages = [];
+        episode.caption_languages.push(reqTargetLang);
+      }
+
+      await db.updateEpisode(targetEpisodeId, {
+        scenes: epScenes,
+        caption_languages: episode.caption_languages,
+      });
+
+      const currentTimeline = await db.getLatestTimeline(targetEpisodeId);
+      if (currentTimeline) {
+        const syncedTimeline = TimelineService.syncTimelineWithScenes(episode, currentTimeline, series);
+        await db.saveTimeline(targetEpisodeId, syncedTimeline, { id: 'system', name: 'Studio Pipeline' }, `Synced ${reqTargetLang} translated captions`);
+      }
+
+      if (targetSeriesId || episode.series_id) {
+        PatchSyncService.broadcast(targetSeriesId || episode.series_id, 'episode:updated', episode);
+      }
+    }
 
     return res.json({
       code: 200,
@@ -317,7 +407,27 @@ Respond with ONLY valid JSON adhering strictly to this schema:
 
 // POST /api/captions/batch-dubbing
 captionsRouter.post('/batch-dubbing', async (req: Request, res: Response) => {
-  const { series_id, seriesId, episode_id, episodeId, target_language, targetLanguage = 'en-US', voice_id, voiceId = 'Puck', scenes = [] } = req.body;
+  const {
+    series_id,
+    seriesId,
+    episode_id,
+    episodeId,
+    target_language,
+    targetLanguage = 'en-US',
+    voice_id,
+    voiceId = 'Puck',
+    scenes = [],
+  }: {
+    series_id?: string;
+    seriesId?: string;
+    episode_id?: string;
+    episodeId?: string;
+    target_language?: string;
+    targetLanguage?: string;
+    voice_id?: string;
+    voiceId?: string;
+    scenes?: SceneEntity[];
+  } = req.body;
   const targetSeriesId = series_id || seriesId;
   const targetEpisodeId = episode_id || episodeId;
   const reqTargetLang = target_language || targetLanguage;
@@ -329,46 +439,147 @@ captionsRouter.post('/batch-dubbing', async (req: Request, res: Response) => {
 
   try {
     const db = await getDatabaseProvider();
-    let seriesChars: any[] = [];
-    if (targetSeriesId) {
-      const srs = await db.getSeriesById(targetSeriesId);
-      seriesChars = srs?.characters || [];
-    } else if (targetEpisodeId) {
-      const ep = await db.getEpisodeById(targetEpisodeId);
-      if (ep?.series_id) {
-        const srs = await db.getSeriesById(ep.series_id);
-        seriesChars = srs?.characters || [];
+    let seriesChars: CharacterSeriesEntity[] = [];
+    let episode: EpisodeEntity | null = null;
+    let series = null;
+
+    if (targetEpisodeId) {
+      episode = await db.getEpisodeById(targetEpisodeId);
+      if (episode?.series_id) {
+        series = await db.getSeriesById(episode.series_id);
+        seriesChars = series?.characters || [];
       }
+    } else if (targetSeriesId) {
+      series = await db.getSeriesById(targetSeriesId);
+      seriesChars = series?.characters || [];
     }
 
-    const results: Record<number, { audio_url: string; duration_seconds: number; dialogue: string }> = {};
+    const results: Record<number, { audio_url: string; duration_seconds: number; dialogue: string; captions_data: any[]; words: any[] }> = {};
+    const epScenes = episode?.scenes || [];
 
     for (const sc of scenes) {
-      const idx = sc.scene_index || sc.sceneIndex || sc.index;
-      const textToVoice = sc.translated_dialogue || sc.translatedDialogue || sc.dialogue || sc.text || '';
+      const idx = sc.index;
+      const matchedEpScene = epScenes.find((s: SceneEntity) => s.index === idx || s.id === `scene_${idx}`);
+      
+      // Determine what dialogue to dub:
+      // If target language is NOT main language, check if translated line exists in matchedEpScene or sc
+      let targetDialogueList: SceneDialogue[] = [];
+      const trans = matchedEpScene?.translations?.[reqTargetLang] || sc.translations?.[reqTargetLang];
+      
+      if (trans?.dialogue && Array.isArray(trans.dialogue) && trans.dialogue.length > 0) {
+        targetDialogueList = trans.dialogue;
+      } else if (typeof trans?.translated_dialogue === 'string' && trans.translated_dialogue.trim()) {
+        const speaker = (Array.isArray(sc.dialogue) && sc.dialogue[0]?.character) || 'Character';
+        targetDialogueList = [{ character: speaker, line: trans.translated_dialogue }];
+      } else if (typeof trans?.dialogue === 'string' && trans.dialogue.trim()) {
+        const speaker = (Array.isArray(sc.dialogue) && sc.dialogue[0]?.character) || 'Character';
+        targetDialogueList = [{ character: speaker, line: trans.dialogue }];
+      } else {
+        // Translate dialogue to target language if not yet translated
+        const sourceDialogues: SceneDialogue[] = Array.isArray(sc.dialogue) && sc.dialogue.length > 0
+          ? sc.dialogue
+          : (matchedEpScene?.dialogue || []);
+        
+        if (sourceDialogues.length > 0) {
+          targetDialogueList = await translateDialogueList(sourceDialogues, reqTargetLang);
+        }
+      }
+
+      if (targetDialogueList.length === 0) continue;
+
+      const primaryDialogue = targetDialogueList[0];
+      const speakerName = primaryDialogue.character || 'Character';
+      const textToVoice = cleanDialogueLine(primaryDialogue.line, speakerName);
       if (!textToVoice.trim()) continue;
 
-      // Match voice to the character speaking this scene's dialogue
-      const speakerName = sc.character || (Array.isArray(sc.rawDialogue) ? sc.rawDialogue[0]?.character : '');
-      const matchedChar = seriesChars.find((c: any) => (c.name || '').toLowerCase() === (speakerName || '').toLowerCase());
-      const resolvedVoiceId = matchedChar?.voice_id || matchedChar?.voiceId || sc.voice_id || sc.voiceId || defaultVoiceId || 'Puck';
+      const emotion = primaryDialogue.emotion || 'dramatic';
+      const speechTone = primaryDialogue.speech_tone || 'expressive';
+      const speechSpeed = (typeof primaryDialogue.speed === 'number' && primaryDialogue.speed > 0) ? primaryDialogue.speed : 1.0;
+      const matchedChar = seriesChars.find((c: CharacterSeriesEntity) => c.name.toLowerCase() === speakerName.toLowerCase());
+      const resolvedVoiceId = matchedChar?.voice_id || defaultVoiceId || 'Puck';
 
       try {
-        const audioRes = await geminiClient.generateAudio(textToVoice, resolvedVoiceId);
+        const audioRes = await geminiClient.generateAudio(textToVoice, resolvedVoiceId, undefined, {
+          emotion,
+          speech_tone: speechTone,
+          speed: speechSpeed,
+        });
         if (audioRes?.url) {
           let audioUrl = audioRes.url;
           if (audioUrl.startsWith('data:')) {
             const s3Result = await StorageFactory.uploadMedia(audioUrl, 'audio', 'wav', audioRes.mimeType || 'audio/wav');
             audioUrl = `/api/assets/file/${s3Result.key}`;
           }
+
+          const sceneDur = audioRes.durationSeconds || Number(sc.duration_seconds) || 6;
+          const translatedDialogues: SceneDialogue[] = [
+            {
+              character: speakerName,
+              line: textToVoice,
+              emotion,
+              speech_tone: speechTone,
+              speed: speechSpeed,
+            },
+          ];
+
+          const { captions_data, words } = buildWordLevelCaptionsFromDialogue(
+            translatedDialogues,
+            sceneDur,
+            0.5
+          );
+
           results[idx] = {
             audio_url: audioUrl,
-            duration_seconds: audioRes.durationSeconds || 4,
+            duration_seconds: sceneDur,
             dialogue: textToVoice,
+            captions_data,
+            words,
           };
+
+          // Update scene translation in database entity
+          if (matchedEpScene) {
+            if (!matchedEpScene.translations) matchedEpScene.translations = {};
+            matchedEpScene.translations[reqTargetLang] = {
+              dialogue: translatedDialogues,
+              translated_dialogue: textToVoice,
+              voiceover_url: audioUrl,
+              voice_duration_us: Math.round(sceneDur * 1_000_000),
+              voice_start_us: 500_000,
+              captions_data,
+              words,
+            };
+          }
         }
       } catch (voiceErr: any) {
         console.warn(`[BatchDubbing] Failed for Scene #${idx}:`, voiceErr.message);
+      }
+    }
+
+    // Persist updated episode and synchronize timeline
+    if (episode && targetEpisodeId) {
+      if (!episode.dubbing_languages?.includes(reqTargetLang)) {
+        if (!episode.dubbing_languages) episode.dubbing_languages = [];
+        episode.dubbing_languages.push(reqTargetLang);
+      }
+      if (!episode.caption_languages?.includes(reqTargetLang)) {
+        if (!episode.caption_languages) episode.caption_languages = [];
+        episode.caption_languages.push(reqTargetLang);
+      }
+
+      await db.updateEpisode(targetEpisodeId, {
+        scenes: epScenes,
+        dubbing_languages: episode.dubbing_languages,
+        caption_languages: episode.caption_languages,
+      });
+
+      const currentTimeline = await db.getLatestTimeline(targetEpisodeId);
+      if (currentTimeline) {
+        const syncedTimeline = TimelineService.syncTimelineWithScenes(episode, currentTimeline, series);
+        await db.saveTimeline(targetEpisodeId, syncedTimeline, { id: 'system', name: 'Studio Pipeline' }, `Synced ${reqTargetLang} audio and word-by-word captions`);
+      }
+
+      if (targetSeriesId || episode.series_id) {
+        PatchSyncService.broadcast(targetSeriesId || episode.series_id, 'episode:updated', episode);
       }
     }
 
@@ -381,7 +592,7 @@ captionsRouter.post('/batch-dubbing', async (req: Request, res: Response) => {
         voice_id: defaultVoiceId,
         voiceovers: results,
       },
-      message: `Successfully generated ${Object.keys(results).length} dubbing voiceovers in ${reqTargetLang}`,
+      message: `Successfully generated ${Object.keys(results).length} dubbing voiceovers and word-level captions in ${reqTargetLang}`,
       error: null,
     });
   } catch (err: any) {

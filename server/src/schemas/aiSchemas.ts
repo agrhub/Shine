@@ -64,6 +64,7 @@ export const SceneDialogueSchema = z.object({
   line: z.string(),
   speech_tone: z.string().optional(),
   emotion: z.string().optional(),
+  speed: z.number().optional(),
   speech_start_sec: z.number().optional(),
   speech_duration_sec: z.number().optional(),
   voice_id: z.string().optional(),

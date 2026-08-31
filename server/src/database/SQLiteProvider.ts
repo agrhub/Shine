@@ -2,10 +2,27 @@ import path from 'path';
 import fs from 'fs';
 import Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
-import { IDatabaseProvider, UserEntity, SeriesEntity, EpisodeEntity, FlowAccountEntity, CreditTransactionEntity, WorkerHeartbeatEntity, WorkerJobEntity, ClusterMetricsSummary } from './IDatabaseProvider.js';
+import {
+  IDatabaseProvider,
+  UserEntity,
+  SeriesEntity,
+  EpisodeEntity,
+  FlowAccountEntity,
+  CreditTransactionEntity,
+  WorkerHeartbeatEntity,
+  WorkerJobEntity,
+  ClusterMetricsSummary,
+  TimelineSnapshotVersion,
+  TimelineSnapshotHistoryItem,
+  RestoreTimelineResult,
+  AssetEntity,
+  PipelineJobEntity,
+  IProject,
+} from './IDatabaseProvider.js';
+import { normalizePureTimeline } from '../utils/timeline.js';
 
 export class SQLiteProvider implements IDatabaseProvider {
-  private db: any = null;
+  private db!: Database.Database;
   private isFallback = false;
 
   // In-memory fallback stores if native bindings are unavailable
@@ -815,7 +832,7 @@ export class SQLiteProvider implements IDatabaseProvider {
 
   async saveTimeline(
     episode_id: string,
-    timeline_data: any,
+    timeline_data: IProject,
     author: { id: string; name: string; avatar?: string },
     change_summary = 'Timeline updated'
   ): Promise<{ version_id: string; version_number: number; updated_at: string }> {
@@ -824,7 +841,8 @@ export class SQLiteProvider implements IDatabaseProvider {
     const history = await this.getTimelineHistory(episode_id, 1, 0);
     const version_number = history.total + 1;
     const label = `v1.${version_number} - ${change_summary}`;
-    const serializedData = typeof timeline_data === 'string' ? timeline_data : JSON.stringify(timeline_data);
+    const pureTimeline = normalizePureTimeline(timeline_data);
+    const serializedData = JSON.stringify(pureTimeline);
 
     if (this.isFallback) {
       this.timelineSnapshotsStore.unshift({
@@ -861,15 +879,11 @@ export class SQLiteProvider implements IDatabaseProvider {
     return { version_id, version_number, updated_at: now };
   }
 
-  async getLatestTimeline(episodeId: string): Promise<any | null> {
+  async getLatestTimeline(episodeId: string): Promise<IProject | null> {
     if (this.isFallback) {
       const snap = this.timelineSnapshotsStore.find((s) => s.episode_id === episodeId);
       if (!snap) return null;
-      try {
-        return JSON.parse(snap.timeline_data);
-      } catch {
-        return snap.timeline_data;
-      }
+      return normalizePureTimeline(snap.timeline_data);
     }
 
     const row = this.db.prepare(
@@ -877,81 +891,90 @@ export class SQLiteProvider implements IDatabaseProvider {
     ).get(episodeId) as any;
 
     if (!row) return null;
-    try {
-      return JSON.parse(row.timeline_data);
-    } catch {
-      return row.timeline_data;
-    }
+    return normalizePureTimeline(row.timeline_data);
   }
 
-  async getTimelineHistory(episodeId: string, limit = 20, offset = 0): Promise<{ total: number; history: any[] }> {
+  async getTimelineHistory(episodeId: string, limit = 20, offset = 0): Promise<{ total: number; history: TimelineSnapshotHistoryItem[] }> {
     if (this.isFallback) {
       const snaps = this.timelineSnapshotsStore.filter((s) => s.episode_id === episodeId);
       const paged = snaps.slice(offset, offset + limit).map((s) => ({
-        versionId: s.id,
-        versionNumber: s.version_number,
+        version_id: s.id,
+        version_number: s.version_number,
         label: s.label,
         author: {
           userId: s.author_id,
           name: s.author_name,
           avatar: s.author_avatar,
         },
-        changeSummary: s.change_summary,
-        createdAt: s.created_at,
+        change_summary: s.change_summary,
+        created_at: s.created_at,
       }));
       return { total: snaps.length, history: paged };
     }
 
-    const totalRow = this.db.prepare('SELECT COUNT(*) as count FROM timeline_snapshots WHERE episode_id = ?').get(episodeId) as any;
+    const totalRow = this.db!.prepare('SELECT COUNT(*) as count FROM timeline_snapshots WHERE episode_id = ?').get(episodeId) as { count?: number };
     const total = totalRow?.count || 0;
 
-    const rows = this.db.prepare(
+    const rows = this.db!.prepare(
       'SELECT * FROM timeline_snapshots WHERE episode_id = ? ORDER BY version_number DESC LIMIT ? OFFSET ?'
-    ).all(episodeId, limit, offset) as any[];
+    ).all(episodeId, limit, offset) as Array<{
+      id: string;
+      version_number: number;
+      label?: string;
+      author_id?: string;
+      author_name?: string;
+      author_avatar?: string;
+      change_summary?: string;
+      created_at: string;
+    }>;
 
-    const history = rows.map((r) => ({
-      versionId: r.id,
-      versionNumber: r.version_number,
+    const history: TimelineSnapshotHistoryItem[] = rows.map((r) => ({
+      version_id: r.id,
+      version_number: r.version_number,
       label: r.label,
       author: {
         userId: r.author_id,
         name: r.author_name,
         avatar: r.author_avatar,
       },
-      changeSummary: r.change_summary,
-      createdAt: r.created_at,
+      change_summary: r.change_summary,
+      created_at: r.created_at,
     }));
 
     return { total, history };
   }
 
-  async getTimelineVersion(episodeId: string, versionId: string): Promise<any | null> {
+  async getTimelineVersion(episodeId: string, versionId: string): Promise<TimelineSnapshotVersion | null> {
     if (this.isFallback) {
       const snap = this.timelineSnapshotsStore.find((s) => s.episode_id === episodeId && s.id === versionId);
       if (!snap) return null;
-      let data = {};
-      try { data = JSON.parse(snap.timeline_data); } catch { data = snap.timeline_data; }
       return {
-        versionId: snap.id,
-        versionNumber: snap.version_number,
+        version_id: snap.id,
+        version_number: snap.version_number,
         author: { userId: snap.author_id, name: snap.author_name },
-        changeSummary: snap.change_summary,
-        createdAt: snap.created_at,
-        timelineData: data,
+        change_summary: snap.change_summary,
+        created_at: snap.created_at,
+        timeline_data: normalizePureTimeline(snap.timeline_data),
       };
     }
 
-    const row = this.db.prepare('SELECT * FROM timeline_snapshots WHERE episode_id = ? AND id = ?').get(episodeId, versionId) as any;
+    const row = this.db!.prepare('SELECT * FROM timeline_snapshots WHERE episode_id = ? AND id = ?').get(episodeId, versionId) as {
+      id: string;
+      version_number: number;
+      author_id?: string;
+      author_name?: string;
+      change_summary?: string;
+      created_at: string;
+      timeline_data: string;
+    } | undefined;
     if (!row) return null;
-    let data = {};
-    try { data = JSON.parse(row.timeline_data); } catch { data = row.timeline_data; }
     return {
-      versionId: row.id,
-      versionNumber: row.version_number,
+      version_id: row.id,
+      version_number: row.version_number,
       author: { userId: row.author_id, name: row.author_name },
-      changeSummary: row.change_summary,
-      createdAt: row.created_at,
-      timelineData: data,
+      change_summary: row.change_summary,
+      created_at: row.created_at,
+      timeline_data: normalizePureTimeline(row.timeline_data),
     };
   }
 
@@ -960,7 +983,7 @@ export class SQLiteProvider implements IDatabaseProvider {
     version_id: string,
     author: { id: string; name: string; avatar?: string },
     reason = 'Restored version'
-  ): Promise<any> {
+  ): Promise<RestoreTimelineResult> {
     const version = await this.getTimelineVersion(episode_id, version_id);
     if (!version) throw new Error('Version snapshot not found');
 
@@ -1170,7 +1193,7 @@ export class SQLiteProvider implements IDatabaseProvider {
     }
 
     try {
-      const row = this.db.prepare('SELECT * FROM pipeline_jobs WHERE id = ?').get(jobId);
+      const row = this.db.prepare('SELECT * FROM pipeline_jobs WHERE id = ?').get(jobId) as Record<string, any> | undefined;
       if (!row) return this.pipelineJobsStore.get(jobId) || null;
       return {
         ...row,
@@ -1229,6 +1252,17 @@ export class SQLiteProvider implements IDatabaseProvider {
     };
 
     return await this.savePipelineJob(updated);
+  }
+
+  async deletePipelineJob(jobId: string): Promise<boolean> {
+    this.pipelineJobsStore.delete(jobId);
+    if (!this.db) return true;
+    try {
+      this.db.prepare('DELETE FROM pipeline_jobs WHERE id = ?').run(jobId);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async findActivePipelineJob(seriesId: string, episodeId: string, type?: string): Promise<any | null> {

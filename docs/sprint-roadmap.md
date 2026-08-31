@@ -151,7 +151,7 @@ Implement multi-platform publishing, AI viral cover poster generator, growth A/B
 - **AI Virtual Actor Royalty Marketplace (Proposal 19, FR-117):** Actor hub (`/marketplace/actors`) for licensing 8-anchor Personas & passive credit royalty distribution.
 - **Cultural Geo-Localization & Idiom Adaptation Engine (Proposal 20, FR-118):** Cultural adaptation agent (`POST /ai/cultural-adapt`) re-writing slang, wardrobe, signs & regional TTS accents.
 - **Predictive Paywall Placement & Monetization Doctor (Proposal 21, FR-119):** ML retention curve analyzer recommending paywall thresholds, coin pricing, and 30-day MRR.
-- **Async Render Event Stream & Pub/Sub Queue (Proposal 22, FR-120):** SSE / WebSocket progress stream (`GET /api/v1/render/stream`) preventing HTTP 504 timeouts.
+- **Async Render Event Stream & Pub/Sub Queue (Proposal 22, FR-120):** SSE / WebSocket progress stream (`GET /api/render/stream`) preventing HTTP 504 timeouts.
 - **AI Copyright Safety & Audio Fingerprinting (Proposal 23, FR-121):** Audio fingerprinting scan (`POST /audio/copyright-verify`) auto-swapping unsafe background audio.
 - **Virtual Canvas Viewport & Lazy Asset Streaming (Proposal 24, FR-122):** WebGL texture windowing loading 5 clips nearest to playhead to prevent browser memory crashes.
 - **Tablet & Foldable Device Touch Gesture Studio (Proposal 25, FR-123):** Touch-optimized pinch-to-zoom timeline scaling & swipe gesture handles.

@@ -6,7 +6,7 @@ import { DspAudioService } from '@/services/DspAudioService.js';
 import { CaptionService } from '@/services/CaptionService.js';
 import { SynthIDService } from '@/services/SynthIDService.js';
 import { CreditService } from '@/services/CreditService.js';
-import { getDatabaseProvider } from '@/database/index.js';
+import { CharacterSeriesEntity, getDatabaseProvider, SceneDialogue, SceneEntity } from '@/database/index.js';
 import { getUserId } from '@/utils/auth.js';
 import { Logger } from '@/utils/logger.js';
 
@@ -32,7 +32,7 @@ router.get('/presets', async (req: Request, res: Response) => {
 
 // Shared Helper for Neural TTS Dialogue Synthesis with MultiSpeaker and Timestamps
 export async function generateDialogueVoiceSynthesis(params: {
-  dialogue?: any[];
+  dialogue?: SceneDialogue[];
   text?: string;
   voice_id?: string;
   emotion?: string;
@@ -45,12 +45,12 @@ export async function generateDialogueVoiceSynthesis(params: {
   multi_speaker?: any;
 }) {
   const { dialogue, text: rawText, voice_id, emotion: reqEmotion, intensity, language, speed, pitch, episode_id, multi_speaker } = params;
-  const emotion = reqEmotion || (Array.isArray(dialogue) && dialogue.length > 0 ? (dialogue[0]?.speech_tone || dialogue[0]?.tone || dialogue[0]?.emotion) : undefined);
+  const emotion = reqEmotion || (Array.isArray(dialogue) && dialogue.length > 0 ? (dialogue[0]?.speech_tone || dialogue[0]?.emotion) : undefined);
 
   let multiSpeaker = multi_speaker;
   let text = rawText;
   if (!text && Array.isArray(dialogue) && dialogue.length > 0) {
-    text = dialogue.map((d: any) => `${d.line || ''}`).join('\n');
+    text = dialogue.map((d: SceneDialogue) => d.line).filter(Boolean).join('\n');
   }
   if (!text || text.trim() === '') {
     text = '...';
@@ -60,7 +60,7 @@ export async function generateDialogueVoiceSynthesis(params: {
   if (Array.isArray(dialogue) && dialogue.length > 0) {
     try {
       const db = await getDatabaseProvider();
-      let seriesChars: any[] = [];
+      let seriesChars: CharacterSeriesEntity[] = [];
       if (episode_id) {
         const ep = await db.getEpisodeById(episode_id);
         if (ep) {
@@ -71,11 +71,11 @@ export async function generateDialogueVoiceSynthesis(params: {
         }
       }
 
-      const distinctNames = Array.from(new Set(dialogue.map((d: any) => String(d.character || '').trim()).filter(Boolean)));
+      const distinctNames = Array.from(new Set(dialogue.map((d: SceneDialogue) => String(d.character || '').trim()).filter(Boolean)));
       if (distinctNames.length === 0 && params.scene_id && episode_id) {
         const ep = await db.getEpisodeById(episode_id);
-        const scenes: any[] = ep?.scenes || [];
-        const sc = scenes.find((s: any) => s.id === params.scene_id || s.index === (params as any).scene_index);
+        const scenes: SceneEntity[] = ep?.scenes || [];
+        const sc = scenes.find((s: SceneEntity) => s.id === params.scene_id || s.index === (params as any).scene_index);
         const charCostumeName = sc?.character_costumes?.[0]?.character;
         if (charCostumeName) {
           distinctNames.push(charCostumeName);
@@ -84,7 +84,7 @@ export async function generateDialogueVoiceSynthesis(params: {
 
       if (distinctNames.length > 1) {
         const speakers = distinctNames.map((name) => {
-          const matched = seriesChars.find(c => (c.name || '').toLowerCase() === name.toLowerCase());
+          const matched = seriesChars.find((c: CharacterSeriesEntity) => c.name.toLowerCase() === name.toLowerCase());
           return {
             name,
             voice_id: matched?.voice_id || (matched?.gender === 'female' ? 'Aoede' : 'Puck'),
@@ -95,7 +95,7 @@ export async function generateDialogueVoiceSynthesis(params: {
           speakers,
         };
       } else if (distinctNames.length === 1) {
-        const matched = seriesChars.find(c => (c.name || '').toLowerCase() === distinctNames[0].toLowerCase());
+        const matched = seriesChars.find((c: CharacterSeriesEntity) => c.name.toLowerCase() === distinctNames[0].toLowerCase());
         targetVoiceId = matched?.voice_id || (matched?.gender === 'female' ? 'Aoede' : 'Puck');
         multiSpeaker = { enabled: false };
       }
@@ -105,7 +105,10 @@ export async function generateDialogueVoiceSynthesis(params: {
   }
 
   const selectedVoiceId = targetVoiceId || 'Puck';
-  const calculatedSpeed = speed || (intensity ? 1.0 + (intensity - 50) * 0.004 : 1.0);
+  const dialogueSpeed = Array.isArray(dialogue)
+    ? dialogue.find((d: SceneDialogue) => typeof d.speed === 'number' && d.speed > 0)?.speed
+    : undefined;
+  const calculatedSpeed = speed ?? dialogueSpeed ?? (intensity ? 1.0 + (intensity - 50) * 0.004 : 1.0);
   const calculatedPitch = pitch || (intensity ? (intensity - 50) * 0.005 : 0);
 
   let internalUrl = '';
@@ -113,13 +116,17 @@ export async function generateDialogueVoiceSynthesis(params: {
   let audioSizeBytes = 1024 * 128;
   let audioMimeType = 'audio/wav';
 
+  const extractedEmotion = emotion || (Array.isArray(dialogue) ? dialogue.map((d: SceneDialogue) => d.emotion).filter(Boolean).join(', ') : '');
+  const extractedSpeechTone = (Array.isArray(dialogue) ? dialogue.map((d: SceneDialogue) => d.speech_tone).filter(Boolean).join(', ') : '');
+
   // First attempt TTSService (e.g. ElevenLabs / Custom TTS)
   const ttsRes = await ttsService.generateVoice({
     text,
     voiceId: selectedVoiceId,
     language: language || 'en',
     speed: calculatedSpeed,
-    tone: emotion
+    emotion: extractedEmotion || undefined,
+    speech_tone: extractedSpeechTone || undefined,
   });
 
   if (ttsRes?.audioUrl && !ttsRes.audioUrl.includes('default')) {
@@ -131,7 +138,8 @@ export async function generateDialogueVoiceSynthesis(params: {
     const generatedAudio = await geminiClient.generateAudio(text, selectedVoiceId, undefined, {
       speed: calculatedSpeed,
       pitch: calculatedPitch,
-      emotion,
+      emotion: extractedEmotion || undefined,
+      speech_tone: extractedSpeechTone || undefined,
       multiSpeaker,
     });
 

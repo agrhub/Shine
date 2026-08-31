@@ -1,4 +1,5 @@
 import { Storage, Bucket } from '@google-cloud/storage';
+import axios from 'axios';
 import { IStorageAdapter } from './StorageAdapter.js';
 import { EnvConfig } from '@/config/env.js';
 import { Logger } from '@/utils/logger.js';
@@ -33,7 +34,7 @@ export class GCSStorageAdapter implements IStorageAdapter {
   }
 
   public static getInstance(customConfig?: any): GCSStorageAdapter {
-    if (!GCSStorageAdapter.instance || customConfig) {
+    if (!GCSStorageAdapter.instance) {
       GCSStorageAdapter.instance = new GCSStorageAdapter(customConfig);
     }
     return GCSStorageAdapter.instance;
@@ -162,12 +163,82 @@ export class GCSStorageAdapter implements IStorageAdapter {
   }
 
   /**
-   * Retrieves readable stream for streaming media files.
+   * Retrieves a readable stream for media files, transparently proxying the
+   * client's Range header directly to GCS.
+   *
+   * Returns { stream, status, headers } so the caller can forward GCS's
+   * Content-Range / Content-Length headers without an extra metadata fetch.
+   *
+   * Falls back to the GCS SDK createReadStream if auth token retrieval fails.
    */
-  async getFileStream(key: string): Promise<any> {
+  async getFileStream(
+    key: string,
+    options?: { start?: number; end?: number } | string
+  ): Promise<any> {
     const normalizedKey = key.replace(/^\/+/, '');
-    const file = this.bucket.file(normalizedKey);
-    return file.createReadStream();
+
+    // Build the direct GCS media download URL
+    const encodedKey = encodeURIComponent(normalizedKey);
+    const downloadUrl = `https://storage.googleapis.com/storage/v1/b/${this.bucketName}/o/${encodedKey}?alt=media`;
+
+    const requestHeaders: Record<string, string> = {};
+
+    // Obtain OAuth2 Bearer token
+    try {
+      const token = await this.storage.authClient.getAccessToken();
+      if (token) {
+        requestHeaders['Authorization'] = `Bearer ${token}`;
+      }
+    } catch {
+      // Fall back to GCS SDK stream on auth failure
+      const file = this.bucket.file(normalizedKey);
+      const sdkOptions = typeof options === 'object' && options !== null ? options : {};
+      return file.createReadStream(sdkOptions as { start?: number; end?: number });
+    }
+
+    // Forward the Range header: accept either a raw string or a { start, end } object
+    if (typeof options === 'string') {
+      // Raw Range header forwarded from the client request (e.g. "bytes=0-1048575")
+      if (options) requestHeaders['Range'] = options;
+    } else if (typeof options === 'object' && options !== null && options.start !== undefined) {
+      const end = options.end !== undefined ? options.end : '';
+      requestHeaders['Range'] = `bytes=${options.start}-${end}`;
+    }
+
+    const response = await axios.get(downloadUrl, {
+      responseType: 'stream',
+      headers: requestHeaders,
+      timeout: 60_000,
+      validateStatus: (s) => s >= 200 && s < 400,
+    });
+
+    // Return full response info so callers can proxy status + headers
+    return {
+      stream: response.data,
+      status: response.status,
+      headers: {
+        'content-range': response.headers['content-range'],
+        'content-length': response.headers['content-length'],
+        'content-type': response.headers['content-type'],
+        'accept-ranges': 'bytes',
+      },
+    };
+  }
+
+  /**
+   * Retrieves file metadata (size, contentType, etc.)
+   */
+  async getFileMetadata(key: string): Promise<{ size?: number; contentType?: string } | null> {
+    try {
+      const normalizedKey = key.replace(/^\/+/, '');
+      const [metadata] = await this.bucket.file(normalizedKey).getMetadata();
+      return {
+        size: Number(metadata.size || 0),
+        contentType: metadata.contentType,
+      };
+    } catch {
+      return null;
+    }
   }
 
   /**

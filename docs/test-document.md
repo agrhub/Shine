@@ -383,23 +383,23 @@ A hybrid testing approach will be utilized, combining automated testing (Unit, I
 
 | APIT-ID | Endpoint | Method | Request Body / Params | Expected Status | Expected Response | Type |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| API-001 | `/api/v1/projects` | POST | `{ "name": "Test", "type": "drama" }` | 201 Created | `{ id: "...", name: "Test" }` | Happy Path |
-| API-002 | `/api/v1/projects` | GET | `limit=10&page=1` | 200 OK | `[{...}], total: 1` | Happy Path |
-| API-003 | `/api/v1/ai/script` | POST | `{ "prompt": "Scary story" }` | 200 OK | `{ "script": "..." }` | Happy Path |
-| API-004 | `/api/v1/ai/script` | POST | `{ "prompt": "" }` | 400 Bad Req | `{"error": "Prompt required"}` | Error |
-| API-005 | `/api/v1/export` | POST | `{ "projectId": "123" }` | 202 Accepted | `{ "jobId": "..." }` | Async Job |
-| API-006 | `/api/v1/projects` | POST | (No Auth Header) | 401 Unauth | `{"error": "Unauthorized"}` | Auth |
-| API-007 | `/api/v1/users/me` | GET | Valid JWT | 200 OK | User profile data | Happy Path |
-| API-008 | `/api/v1/episodes/:id/timeline/history` | GET | `limit=10` | 200 OK | `{ total: 3, history: [...] }` | Happy Path |
-| API-009 | `/api/v1/episodes/:id/timeline/history/:verId` | GET | Valid versionId | 200 OK | `{ versionId, timelineData: {...} }` | Zero-Render Preview |
-| API-010 | `/api/v1/episodes/:id/timeline/restore` | POST | `{ versionId: "ver_1a2b" }` | 200 OK | `{ success: true, newVersionId: "..." }` | Restore |
-| API-011 | `/api/v1/ai/trends/viral-topics` | GET | `genre=suspense&region=global` | 200 OK | `{ topics: [{ title: "...", viralScore: 96 }] }` | Parallel MCP Trend |
-| API-012 | `/api/v1/ai/compliance/check` | POST | `{ "seriesId": "s1", "targetRegions": ["US"] }` | 200 OK | `{ passed: true, safetyRating: "PG-13" }` | Compliance Audit |
-| API-013 | `/api/v1/analytics/comments/ep1` | GET | `limit=20` | 200 OK | `{ total: 1250, comments: [...] }` | Comments Aggregation |
-| API-014 | `/api/v1/analytics/comments/c1/reply` | POST | `{ "customInstruction": "Tease cliffhanger" }` | 200 OK | `{ replyText: "...", posted: true }` | AI Auto-Reply |
-| API-015 | `/api/v1/ai/script/adapt-from-feedback` | POST | `{ "seriesId": "s1", "targetEpisodeNumber": 6 }` | 200 OK | `{ adaptationSummary: "...", revisedScript: {} }` | Script Feedback Loop |
-| API-016 | `/api/v1/admin/flow-accounts/status` | GET | Admin JWT | 200 OK | `{ poolSize: 5, activeAccounts: 5, captchaHealth: "ok" }` | Google Flow Pool |
-| API-017 | `/api/v1/health` | GET | None | 200 OK | `{ status: "ok", primaryDatabase: "sqlite" }` | DB Provider Check |
+| API-001 | `/api/series` | POST | `{ "title": "Test Drama", "targetAudience": "global" }` | 201 Created | `{ id: "...", title: "Test Drama" }` | Happy Path |
+| API-002 | `/api/series` | GET | `limit=10&page=1` | 200 OK | `[{...}], total: 1` | Happy Path |
+| API-003 | `/api/ai/agentic/generate` | POST | `{ "prompt": "Scary story" }` | 200 OK | `{ "script": "..." }` | Happy Path |
+| API-004 | `/api/ai/agentic/generate` | POST | `{ "prompt": "" }` | 400 Bad Req | `{"error": "Prompt required"}` | Error |
+| API-005 | `/api/export` | POST | `{ "projectId": "123" }` | 202 Accepted | `{ "jobId": "..." }` | Async Job |
+| API-006 | `/api/series` | POST | (No Auth Header) | 401 Unauth | `{"error": "Unauthorized"}` | Auth |
+| API-007 | `/api/auth/me` | GET | Valid JWT | 200 OK | User profile data | Happy Path |
+| API-008 | `/api/episodes/:id/timeline/history` | GET | `limit=10` | 200 OK | `{ total: 3, history: [...] }` | Happy Path |
+| API-009 | `/api/episodes/:id/timeline/history/:verId` | GET | Valid versionId | 200 OK | `{ versionId, timelineData: {...} }` | Zero-Render Preview |
+| API-010 | `/api/episodes/:id/timeline/restore` | POST | `{ versionId: "ver_1a2b" }` | 200 OK | `{ success: true, newVersionId: "..." }` | Restore |
+| API-011 | `/api/ai/assistant/trend-hunt` | GET | `genre=suspense&region=global` | 200 OK | `{ topics: [{ title: "...", viralScore: 96 }] }` | Parallel MCP Trend |
+| API-012 | `/api/ai/agentic/compliance/check` | POST | `{ "seriesId": "s1", "targetRegions": ["US"] }` | 200 OK | `{ passed: true, safetyRating: "PG-13" }` | Compliance Audit |
+| API-013 | `/api/analytics/comments/ep1` | GET | `limit=20` | 200 OK | `{ total: 1250, comments: [...] }` | Comments Aggregation |
+| API-014 | `/api/analytics/comments/c1/reply` | POST | `{ "customInstruction": "Tease cliffhanger" }` | 200 OK | `{ replyText: "...", posted: true }` | AI Auto-Reply |
+| API-015 | `/api/ai/agentic/adapt-from-feedback` | POST | `{ "seriesId": "s1", "targetEpisodeNumber": 6 }` | 200 OK | `{ adaptationSummary: "...", revisedScript: {} }` | Script Feedback Loop |
+| API-016 | `/api/admin/flow-accounts/status` | GET | Admin JWT | 200 OK | `{ poolSize: 5, activeAccounts: 5, captchaHealth: "ok" }` | Google Flow Pool |
+| API-017 | `/api/health` | GET | None | 200 OK | `{ status: "ok", primaryDatabase: "sqlite" }` | DB Provider Check |
 
 
 

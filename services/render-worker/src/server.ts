@@ -2,10 +2,12 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import os from 'os';
+import fs from 'fs';
+import path from 'path';
 import { nanoid } from 'nanoid';
 import { PubSub, Topic } from '@google-cloud/pubsub';
 import { Storage } from '@google-cloud/storage';
-import { renderVideo } from '@openvideo/video-renderer';
+import { videoRendererPool } from './VideoRendererPool.js';
 
 dotenv.config();
 
@@ -21,6 +23,7 @@ interface RenderJob {
   completedAt?: number;
   gcsSignedUrl?: string;
   gcsUri?: string;
+  localFilePath?: string;
   fileSize?: number;
   error?: string;
   renderTimeMs?: number;
@@ -60,23 +63,77 @@ if (gcsBucketName) {
     console.warn(`[RenderWorker] GCS Storage initialization notice: ${e.message}`);
   }
 } else {
-  console.log(`[RenderWorker] Notice: GCS_BUCKET not set. Set GCS_BUCKET to enable direct memory-to-GCS upload.`);
+  console.log(`[RenderWorker] Notice: GCS_BUCKET not set. Temporary disk streaming active in ${os.tmpdir()}`);
 }
 
 const WORKER_ID = process.env.K_REVISION || `worker-${os.hostname()}`;
 const WORKER_NAME = `Playwright WebCodecs Node (${os.hostname()})`;
 const SERVICE_NAME = 'shine-render-worker';
 const REGION = process.env.GCP_REGION || 'us-central1';
-const SHINE_APP_URL = process.env.SHINE_APP_URL || process.env.APP_URL || 'https://shine-app-asmlum4txq-uc.a.run.app';
+const SHINE_APP_URL = (process.env.SHINE_APP_URL || process.env.APP_URL || 'https://shine-app-asmlum4txq-uc.a.run.app').replace(/\/+$/, '');
 
 let completedJobsCount = 0;
 let failedJobsCount = 0;
+
+/**
+ * Normalizes and sanitizes project timeline data:
+ * 1. Automatically resolves relative URLs (/api/...) by prefixing with SHINE_APP_URL
+ * 2. Prunes dead clip references from tracks
+ */
+function sanitizeProjectData(projectData: any, baseUrl: string): any {
+  if (!projectData || typeof projectData !== 'object') return projectData;
+  const base = baseUrl.replace(/\/+$/, '');
+  const cloned = JSON.parse(JSON.stringify(projectData));
+
+  if (cloned.clips && typeof cloned.clips === 'object') {
+    const existingClipIds = new Set(Object.keys(cloned.clips));
+
+    for (const clipId of existingClipIds) {
+      const clip = cloned.clips[clipId];
+      if (!clip) continue;
+
+      for (const prop of ['src', 'videoUrl', 'audioUrl', 'imageUrl', 'fontUrl']) {
+        if (typeof clip[prop] === 'string' && clip[prop].startsWith('/')) {
+          clip[prop] = base ? `${base}${clip[prop]}` : clip[prop];
+        }
+      }
+    }
+
+    // Clean up tracks clipIds
+    if (Array.isArray(cloned.tracks)) {
+      for (const track of cloned.tracks) {
+        if (Array.isArray(track.clipIds)) {
+          track.clipIds = track.clipIds.filter((cid: string) => existingClipIds.has(cid));
+        }
+      }
+    }
+  }
+
+  return cloned;
+}
+
+// Periodic cleanup of temporary render files older than 30 minutes
+setInterval(() => {
+  const cutoff = Date.now() - 30 * 60 * 1000;
+  for (const [jobId, job] of jobs.entries()) {
+    if (job.createdAt < cutoff) {
+      if (job.localFilePath && fs.existsSync(job.localFilePath)) {
+        try {
+          fs.unlinkSync(job.localFilePath);
+          console.log(`[RenderWorker] Cleaned up temporary video file: ${job.localFilePath}`);
+        } catch {}
+      }
+      jobs.delete(jobId);
+    }
+  }
+}, 10 * 60 * 1000);
 
 async function publishHeartbeat(): Promise<void> {
   const activeJobsCount = Array.from(jobs.values()).filter(j => j.status === 'rendering' || j.status === 'queued').length;
   const memUsage = Math.round(process.memoryUsage().rss / (1024 * 1024));
   const cpus = os.cpus();
   const cpuCount = cpus.length || 4;
+  const poolStats = videoRendererPool.getStats();
 
   const heartbeat = {
     workerId: WORKER_ID,
@@ -95,6 +152,7 @@ async function publishHeartbeat(): Promise<void> {
       totalJobsProcessed: completedJobsCount + failedJobsCount,
       gcsDirectUpload: !!storage,
       bucket: gcsBucketName || 'none',
+      pool: poolStats.pool,
     }
   };
 
@@ -177,7 +235,8 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     service: 'shine-render-worker',
-    engine: '@openvideo/video-renderer (Playwright Chromium + WebCodecs)',
+    engine: '@openvideo/video-renderer (Playwright Chromium Instance Pool + WebCodecs)',
+    pool: videoRendererPool.getStats(),
     pubsubConnected: !!statusTopic,
     gcsConnected: !!storage,
     bucket: gcsBucketName || null,
@@ -186,7 +245,57 @@ app.get('/health', (_req: Request, res: Response) => {
   });
 });
 
-// ─── 1. Submit Render Job (Async non-blocking, Direct-to-GCS) ─────────────────
+// ─── GCS Asset Proxy Endpoint (Streams media with HTTP Range support) ────────
+app.get('/api/assets/file/*', async (req: Request, res: Response) => {
+  const match = req.url.match(/\/api\/assets\/file\/(.+)$/);
+  const rawKey = match ? match[1] : '';
+  const storageKey = decodeURIComponent(rawKey.split('?')[0]);
+
+  if (!storageKey) {
+    return res.status(400).send('Missing storage key');
+  }
+
+  if (!storage || !gcsBucketName) {
+    return res.status(503).send('GCS storage not configured on worker');
+  }
+
+  try {
+    const file = storage.bucket(gcsBucketName).file(storageKey);
+    const [exists] = await file.exists();
+    if (!exists) {
+      console.warn(`[AssetProxy] GCS file not found: ${storageKey}`);
+      return res.status(404).send(`Asset not found in bucket: ${storageKey}`);
+    }
+
+    const [metadata] = await file.getMetadata();
+    if (metadata.contentType) res.setHeader('Content-Type', metadata.contentType);
+    if (metadata.size) res.setHeader('Content-Length', metadata.size);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    const range = req.headers.range;
+    if (range && metadata.size) {
+      const total = Number(metadata.size);
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : total - 1;
+      const chunksize = end - start + 1;
+
+      res.status(206);
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${total}`);
+      res.setHeader('Content-Length', chunksize);
+
+      file.createReadStream({ start, end }).pipe(res);
+    } else {
+      file.createReadStream().pipe(res);
+    }
+  } catch (err: any) {
+    console.error(`[AssetProxy] Error streaming GCS asset ${storageKey}:`, err.message);
+    res.status(500).send(`Error streaming asset: ${err.message}`);
+  }
+});
+
+// ─── 1. Submit Render Job (Async non-blocking, Direct-to-GCS + Local Temp Fallback) ──
 app.post('/render', async (req: Request, res: Response) => {
   const { projectData, options } = req.body;
 
@@ -194,6 +303,8 @@ app.post('/render', async (req: Request, res: Response) => {
     return res.status(400).json({ success: false, error: 'Missing or invalid projectData payload' });
   }
 
+  const effectiveBaseUrl = SHINE_APP_URL || `http://127.0.0.1:${PORT}`;
+  const sanitizedProject = sanitizeProjectData(projectData, effectiveBaseUrl);
   const jobId = `rnd_${nanoid(10)}`;
   const job: RenderJob = {
     id: jobId,
@@ -203,7 +314,8 @@ app.post('/render', async (req: Request, res: Response) => {
   };
   jobs.set(jobId, job);
 
-  console.log(`[RenderWorker] [${jobId}] Accepted render task (${projectData.settings?.width}x${projectData.settings?.height}, duration: ${(projectData.settings?.duration / 1_000_000).toFixed(1)}s)`);
+
+  console.log(`[RenderWorker] [${jobId}] Accepted render task (${sanitizedProject.settings?.width}x${sanitizedProject.settings?.height}, duration: ${((sanitizedProject.settings?.duration || 0) / 1_000_000).toFixed(1)}s)`);
 
   // Broadcast initial status via Pub/Sub
   publishStatusEvent({
@@ -220,21 +332,25 @@ app.post('/render', async (req: Request, res: Response) => {
     message: 'Render job initiated successfully',
   });
 
-  // Execute rendering in background
+  // Execute rendering in background using the Managed Instance Pool
   (async () => {
     const startTime = Date.now();
     let lastBroadcastProgress = 0;
 
     try {
       const renderOpts = {
-        width: options?.width || projectData.settings?.width || 1080,
-        height: options?.height || projectData.settings?.height || 1920,
-        fps: options?.fps || projectData.settings?.fps || 30,
+        width: options?.width || sanitizedProject.settings?.width || 1080,
+        height: options?.height || sanitizedProject.settings?.height || 1920,
+        fps: options?.fps || sanitizedProject.settings?.fps || 30,
         format: options?.format || 'mp4',
         bitrate: options?.bitrate || 12_000_000,
         audio: options?.audio !== undefined ? options.audio : true,
         prioritizeSpeed: options?.prioritizeSpeed !== undefined ? options.prioritizeSpeed : false,
         timeout: options?.timeout || 600_000, // 10 minutes
+        backgroundColor: options?.backgroundColor || "#111111",
+        videoCodec: options?.videoCodec || (options?.format === "webm" ? "vp09.00.51.08" : "avc1.640033"),
+        audioCodec: options?.audioCodec || (options?.format === "webm" ? "opus" : "aac"),
+        audioSampleRate: options?.audioSampleRate || 48000,
         onProgress: (progress: number) => {
           const currentJob = jobs.get(jobId);
           const currentPct = Math.round(progress * 100);
@@ -254,49 +370,61 @@ app.post('/render', async (req: Request, res: Response) => {
         },
       };
 
-      // 1. Render directly to Buffer in memory (Zero disk write)
-      const videoBuffer = await renderVideo(projectData, renderOpts);
+      // 1. Render using Managed VideoRenderer Pool (Guaranteed Memory-Safe Instance Limit)
+      const videoBuffer = await videoRendererPool.render(sanitizedProject, renderOpts);
       const renderTimeMs = Date.now() - startTime;
+
+      if (!videoBuffer || videoBuffer.length < 10_000) {
+        throw new Error(`Video rendering produced an empty or corrupted file (${videoBuffer?.length || 0} bytes). Audio/Video encoder may have failed.`);
+      }
+
+      // Always save to local temporary file to guarantee reliable streaming fallback
+      const localFilePath = path.join(os.tmpdir(), `shine_render_${jobId}.mp4`);
+      await fs.promises.writeFile(localFilePath, videoBuffer);
+      job.localFilePath = localFilePath;
 
       let gcsSignedUrl: string | undefined;
       let gcsUri: string | undefined;
 
-      // 2. Direct upload to Google Cloud Storage (Bucket Lifecycle handles deletion)
+      // 2. Direct upload to Google Cloud Storage (if configured)
       if (storage && gcsBucketName) {
-        const objectPath = `temp-renders/${jobId}.mp4`;
-        const gcsFile = storage.bucket(gcsBucketName).file(objectPath);
-
-        await gcsFile.save(videoBuffer, {
-          contentType: 'video/mp4',
-          resumable: false,
-          metadata: {
-            cacheControl: 'public, max-age=1800',
-            customTime: new Date().toISOString(),
-            metadata: {
-              jobId,
-              renderedBy: WORKER_ID,
-              createdAt: new Date().toISOString(),
-            },
-          },
-        });
-
-        // 3. Try Generate 30-Minute V4 Signed URL for direct download
         try {
-          const [signedUrl] = await gcsFile.getSignedUrl({
-            version: 'v4',
-            action: 'read',
-            expires: Date.now() + 30 * 60 * 1000, // 30 minutes expiration
+          const objectPath = `temp-renders/${jobId}.mp4`;
+          const gcsFile = storage.bucket(gcsBucketName).file(objectPath);
+
+          await gcsFile.save(videoBuffer, {
+            contentType: 'video/mp4',
+            resumable: false,
+            metadata: {
+              cacheControl: 'public, max-age=1800',
+              customTime: new Date().toISOString(),
+              metadata: {
+                jobId,
+                renderedBy: WORKER_ID,
+                createdAt: new Date().toISOString(),
+              },
+            },
           });
-          gcsSignedUrl = signedUrl;
-        } catch (signErr: any) {
-          console.warn(`[RenderWorker] [${jobId}] Notice: Could not generate V4 Signed URL (${signErr.message}). Using streaming endpoint fallback.`);
+
+          // 3. Try Generate 30-Minute V4 Signed URL for direct download
+          try {
+            const [signedUrl] = await gcsFile.getSignedUrl({
+              version: 'v4',
+              action: 'read',
+              expires: Date.now() + 30 * 60 * 1000, // 30 minutes expiration
+            });
+            gcsSignedUrl = signedUrl;
+          } catch (signErr: any) {
+            console.warn(`[RenderWorker] [${jobId}] Notice: Could not generate V4 Signed URL (${signErr.message}). Using local streaming endpoint.`);
+          }
+
+          gcsUri = `gs://${gcsBucketName}/${objectPath}`;
+          console.log(`[RenderWorker] [${jobId}] Uploaded to GCS in ${(renderTimeMs / 1000).toFixed(2)}s (${(videoBuffer.length / (1024 * 1024)).toFixed(2)} MB) -> ${gcsUri}`);
+        } catch (gcsErr: any) {
+          console.warn(`[RenderWorker] [${jobId}] GCS upload warning (${gcsErr.message}). Video is available via local worker download stream.`);
         }
-
-        gcsUri = `gs://${gcsBucketName}/${objectPath}`;
-
-        console.log(`[RenderWorker] [${jobId}] Uploaded to GCS in ${(renderTimeMs / 1000).toFixed(2)}s (${(videoBuffer.length / (1024 * 1024)).toFixed(2)} MB) -> ${gcsUri}`);
       } else {
-        console.log(`[RenderWorker] [${jobId}] Completed in-memory in ${(renderTimeMs / 1000).toFixed(2)}s (${(videoBuffer.length / (1024 * 1024)).toFixed(2)} MB)`);
+        console.log(`[RenderWorker] [${jobId}] Completed in local temp file in ${(renderTimeMs / 1000).toFixed(2)}s (${(videoBuffer.length / (1024 * 1024)).toFixed(2)} MB)`);
       }
 
       job.status = 'completed';
@@ -357,7 +485,7 @@ app.get('/jobs/:jobId', (req: Request, res: Response) => {
   });
 });
 
-// ─── 3. Direct Download with 302 Redirect to GCS or Direct GCS Stream ─────────
+// ─── 3. Direct Download with Range Stream & GCS 302 Redirect Fallback ──────────
 app.get('/download/:jobId', async (req: Request, res: Response) => {
   const { jobId } = req.params;
   const job = jobs.get(jobId);
@@ -366,18 +494,52 @@ app.get('/download/:jobId', async (req: Request, res: Response) => {
     return res.status(404).json({ success: false, error: 'File not available or expired' });
   }
 
-  // If GCS Signed URL is available, 302 Redirect directly to GCS
+  // 1. If GCS Signed URL is available, 302 Redirect directly to GCS
   if (job.gcsSignedUrl) {
     return res.redirect(302, job.gcsSignedUrl);
   }
 
-  // Stream directly from GCS bucket if signed URL is unavailable
+  // 2. Stream from local temporary file if available (guaranteed reliable)
+  if (job.localFilePath && fs.existsSync(job.localFilePath)) {
+    try {
+      const stats = await fs.promises.stat(job.localFilePath);
+      const totalSize = stats.size;
+      const range = req.headers.range;
+
+      if (range) {
+        const parts = range.replace(/bytes=/, '').split('-');
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+        const chunksize = end - start + 1;
+
+        res.writeHead(206, {
+          'Content-Range': `bytes ${start}-${end}/${totalSize}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunksize,
+          'Content-Type': 'video/mp4',
+        });
+        return fs.createReadStream(job.localFilePath, { start, end }).pipe(res);
+      } else {
+        res.writeHead(200, {
+          'Content-Length': totalSize,
+          'Content-Type': 'video/mp4',
+          'Accept-Ranges': 'bytes',
+        });
+        return fs.createReadStream(job.localFilePath).pipe(res);
+      }
+    } catch (localErr: any) {
+      console.warn(`[RenderWorker] Local streaming notice for ${jobId}: ${localErr.message}`);
+    }
+  }
+
+  // 3. Stream directly from GCS bucket if signed URL is unavailable
   if (storage && gcsBucketName) {
     try {
       const objectPath = `temp-renders/${jobId}.mp4`;
       const file = storage.bucket(gcsBucketName).file(objectPath);
       res.setHeader('Content-Type', 'video/mp4');
       if (job.fileSize) res.setHeader('Content-Length', job.fileSize);
+      res.setHeader('Accept-Ranges', 'bytes');
       return file.createReadStream().pipe(res);
     } catch (streamErr: any) {
       return res.status(500).json({ success: false, error: `Streaming failed: ${streamErr.message}` });
@@ -402,5 +564,5 @@ app.use((req: Request, res: Response) => {
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[ShineRenderWorker] Direct-to-GCS Video Render Worker active on port ${PORT}`);
+  console.log(`[ShineRenderWorker] Video Render Worker active on port ${PORT}`);
 });

@@ -113,7 +113,7 @@ Scans and automatically activates 10 required GCP APIs:
 * Verifies or deploys `demucs-worker` (FastAPI + PyTorch + Meta Demucs v4 AI) on Cloud Run (`2 vCPU, 4Gi RAM, min-instances: 0`).
 
 ### Step 4: Video Render Worker
-* Verifies or deploys `shine-render-worker` (Playwright Chromium + WebCodecs Headless Compositor) on Cloud Run (`4 vCPU, 8Gi RAM, min-instances: 0`).
+* Verifies or deploys `shine-render-worker` (Playwright Chromium + WebCodecs Headless Compositor with `VideoRendererPool` instance management) on Cloud Run (`2 vCPU, 4Gi RAM, pool-size: 4, min-instances: 0, max-instances: 5`).
 
 ### Step 5: Main Application (`shine-app`)
 * Builds the complete Node.js Express backend + Vue 3 SPA container.

@@ -78,12 +78,37 @@ export class LocalStorageAdapter implements IStorageAdapter {
     return [];
   }
 
-  public async getFileStream(key: string): Promise<any> {
-    const filePath = path.join(this.uploadDir, key);
+  public getLocalFilePath(key: string): string | null {
+    const normalizedKey = key.replace(/^\/+/, '');
+    const possiblePaths = [
+      path.join(this.uploadDir, normalizedKey),
+      path.resolve(process.cwd(), 'uploads_storage', normalizedKey),
+      path.resolve(process.cwd(), 'server', 'uploads_storage', normalizedKey),
+      path.resolve(process.cwd(), 'server', 'server', 'uploads_storage', normalizedKey),
+    ];
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) return p;
+    }
+    return null;
+  }
+
+  public async getFileMetadata(key: string): Promise<{ size?: number; contentType?: string } | null> {
+    const filePath = this.getLocalFilePath(key);
+    if (!filePath) return null;
+    try {
+      const stats = await fs.promises.stat(filePath);
+      return { size: stats.size };
+    } catch {
+      return null;
+    }
+  }
+
+  public async getFileStream(key: string, options?: { start?: number; end?: number }): Promise<any> {
+    const filePath = this.getLocalFilePath(key) || path.join(this.uploadDir, key.replace(/^\/+/, ''));
     if (!fs.existsSync(filePath)) {
       throw new Error(`Local file not found: ${key}`);
     }
-    return fs.createReadStream(filePath);
+    return fs.createReadStream(filePath, options);
   }
 
   public async getUploadUrl(key: string, contentType?: string, expiresIn?: number): Promise<string> {

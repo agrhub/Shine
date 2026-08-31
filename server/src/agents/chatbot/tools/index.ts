@@ -9,6 +9,8 @@ import { createProductionPipelineTools, PipelineToolExecutors } from './pipeline
 import { createRenderTools, RenderToolExecutors } from './render.tools.js';
 import { createTimelineEditorTools } from './timeline.tools.js';
 import { createScreenplayTools, ScreenplayToolExecutors } from './screenplay.tools.js';
+import { createJobTools, JobToolExecutors } from './job.tools.js';
+import { createPublishTools, PublishToolExecutors } from './publish.tools.js';
 
 export * from './context.js';
 export * from './masterPlan.tools.js';
@@ -20,6 +22,8 @@ export * from './pipeline.tools.js';
 export * from './render.tools.js';
 export * from './timeline.tools.js';
 export * from './screenplay.tools.js';
+export * from './job.tools.js';
+export * from './publish.tools.js';
 
 /**
  * Creates the complete aggregate array of ADK FunctionTools for Chatbot Copilot
@@ -35,6 +39,8 @@ export function createChatbotTools(params?: ToolContextParams): FunctionTool[] {
     ...createRenderTools(params),
     ...createTimelineEditorTools(params),
     ...createScreenplayTools(params),
+    ...createJobTools(params),
+    ...createPublishTools(params),
   ];
 }
 

@@ -298,10 +298,13 @@ if ($DeployRender) {
   $RenderMem = if ($EnvMap.ContainsKey("RENDER_WORKER_MEMORY") -and $EnvMap["RENDER_WORKER_MEMORY"]) { $EnvMap["RENDER_WORKER_MEMORY"] } else { "4Gi" }
   $RenderTimeout = if ($EnvMap.ContainsKey("RENDER_WORKER_TIMEOUT") -and $EnvMap["RENDER_WORKER_TIMEOUT"]) { $EnvMap["RENDER_WORKER_TIMEOUT"] } else { "600" }
   $RenderMin = if ($EnvMap.ContainsKey("RENDER_WORKER_MIN_INSTANCES") -and $EnvMap["RENDER_WORKER_MIN_INSTANCES"]) { $EnvMap["RENDER_WORKER_MIN_INSTANCES"] } else { "0" }
-  $RenderMax = if ($EnvMap.ContainsKey("RENDER_WORKER_MAX_INSTANCES") -and $EnvMap["RENDER_WORKER_MAX_INSTANCES"]) { $EnvMap["RENDER_WORKER_MAX_INSTANCES"] } else { "3" }
-  $RenderConcurrency = if ($EnvMap.ContainsKey("RENDER_WORKER_CONCURRENCY") -and $EnvMap["RENDER_WORKER_CONCURRENCY"]) { $EnvMap["RENDER_WORKER_CONCURRENCY"] } else { "1" }
+  $RenderMax = if ($EnvMap.ContainsKey("RENDER_WORKER_MAX_INSTANCES") -and $EnvMap["RENDER_WORKER_MAX_INSTANCES"]) { $EnvMap["RENDER_WORKER_MAX_INSTANCES"] } else { "5" }
+  $RenderConcurrency = if ($EnvMap.ContainsKey("RENDER_WORKER_CONCURRENCY") -and $EnvMap["RENDER_WORKER_CONCURRENCY"]) { $EnvMap["RENDER_WORKER_CONCURRENCY"] } else { "10" }
+  $RenderPoolSize = if ($EnvMap.ContainsKey("RENDER_POOL_SIZE") -and $EnvMap["RENDER_POOL_SIZE"]) { $EnvMap["RENDER_POOL_SIZE"] } else { "4" }
+  $RenderPoolMin = if ($EnvMap.ContainsKey("RENDER_POOL_MIN") -and $EnvMap["RENDER_POOL_MIN"]) { $EnvMap["RENDER_POOL_MIN"] } else { "1" }
+  $RenderMaxPerInstance = if ($EnvMap.ContainsKey("RENDER_MAX_PER_INSTANCE") -and $EnvMap["RENDER_MAX_PER_INSTANCE"]) { $EnvMap["RENDER_MAX_PER_INSTANCE"] } else { "25" }
 
-  Write-Host "`n[Step 4/6] Building and Deploying Video Render Worker (CPU: $RenderCpu, Mem: $RenderMem, Timeout: ${RenderTimeout}s, Max Instances: $RenderMax)..." -ForegroundColor Yellow
+  Write-Host "`n[Step 4/6] Building and Deploying Video Render Worker (CPU: $RenderCpu, Mem: $RenderMem, Timeout: ${RenderTimeout}s, Max Instances: $RenderMax, Pool Size: $RenderPoolSize)..." -ForegroundColor Yellow
   Push-Location (Join-Path $RootDir "services/render-worker")
   gcloud run deploy shine-render-worker `
     --source . `
@@ -313,7 +316,7 @@ if ($DeployRender) {
     --min-instances $RenderMin `
     --max-instances $RenderMax `
     --allow-unauthenticated `
-    --set-env-vars "GCS_BUCKET=$GcsBucketName,PUBSUB_TOPIC_STATUS=$StatusTopic,GOOGLE_CLOUD_PROJECT=$ProjectId,GCP_REGION=$Region" `
+    --set-env-vars "GCS_BUCKET=$GcsBucketName,PUBSUB_TOPIC_STATUS=$StatusTopic,RENDER_POOL_SIZE=$RenderPoolSize,RENDER_POOL_MIN=$RenderPoolMin,RENDER_MAX_PER_INSTANCE=$RenderMaxPerInstance,GOOGLE_CLOUD_PROJECT=$ProjectId,GCP_REGION=$Region" `
     --quiet
   $RenderUrl = (gcloud run services describe shine-render-worker --region $Region --format "value(status.url)" 2>$null).Trim()
   Pop-Location

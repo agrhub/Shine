@@ -54,7 +54,7 @@
 
 ### 🚀 7. Dual-Mode Render & Export (B8)
 - **Local In-Browser Render**: Zero-server-cost fast client rendering via WebCodecs (`mediabunny` / `ExportModal`).
-- **Cloud Serverless Queue**: Scalable asynchronous rendering via `@openvideo/video-renderer` headless Playwright workers on Google Cloud Run + Pub/Sub.
+- **Cloud Serverless Queue**: Scalable asynchronous rendering via `@openvideo/video-renderer` headless Playwright workers on Google Cloud Run + Pub/Sub, featuring a managed **`VideoRendererPool`** (1–100 instances) with Out of Memory (OOM) protection and browser recycling.
 - **Post-Render Review**: In-app video preview player with instant download and direct publishing triggers.
 
 ### 🛡️ 8. AI Watermarking & Provenance

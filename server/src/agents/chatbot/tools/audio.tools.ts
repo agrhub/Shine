@@ -37,7 +37,7 @@ export class AudioToolExecutors {
       }
 
       // Determine primary / main language and target language
-      const primaryLang = (series.language || episode.dubbing_languages?.[0] || 'vi-VN').trim();
+      const primaryLang = (series.language || episode.dubbing_languages?.[0] || 'en-US').trim();
       const targetLang = (params.languageCode || primaryLang).trim();
       const isMainLang = targetLang.toLowerCase() === primaryLang.toLowerCase();
 
@@ -210,6 +210,76 @@ export class AudioToolExecutors {
     } catch (err: any) {
       Logger.error(`[AudioTools] Failed to generate scene voiceover: ${err.message}`);
       return { success: false, message: `Failed to generate scene voiceover: ${err.message}`, error: err.message };
+    }
+  }
+
+  /**
+   * Generate or extract background music (BGM) for a scene.
+   * If scene has video and dialogue, extracts clean BGM stem using Demucs.
+   * Otherwise, generates AI BGM soundtrack via SfxService.
+   */
+  static async generateSceneBgm(params: {
+    userId: string;
+    seriesId: string;
+    episodeId: string;
+    sceneIndex?: number;
+    forceRegenerate?: boolean;
+  }): Promise<ToolExecutionResult> {
+    try {
+      const db = await getDatabaseProvider();
+      const episode = await db.getEpisodeById(params.episodeId);
+      if (!episode) return { success: false, message: `Episode ${params.episodeId} not found` };
+
+      const scenes = (episode.scenes || []) as SceneEntity[];
+      const targetScene = params.sceneIndex !== undefined
+        ? scenes.find(s => Number(s.index || s.scene_number) === Number(params.sceneIndex))
+        : scenes[0];
+
+      if (!targetScene) {
+        return { success: false, message: `Scene not found in Episode "${episode.title}"` };
+      }
+
+      const hasDialogue = Array.isArray(targetScene.dialogue) && targetScene.dialogue.length > 0 && targetScene.dialogue.some(d => (d.line || '').trim().length > 0);
+
+      let bgmUrl = '';
+      if (targetScene.video_url && hasDialogue) {
+        // Extract clean BGM from video using Demucs
+        const { DemucsAudioService } = await import('@/services/DemucsAudioService.js');
+        const sep = await DemucsAudioService.separateStem(targetScene.video_url);
+        bgmUrl = sep?.bgmUrl || '';
+      }
+
+      if (!bgmUrl) {
+        // Generate AI BGM soundtrack via SfxService
+        const { SfxService } = await import('@/services/SfxService.js');
+        const series = await db.getSeriesById(params.seriesId);
+        const sfxRes = await SfxService.getSceneAudio({
+          prompt: targetScene.bgm_mood || `${series?.genre || 'cinematic'} background score`,
+          duration: Number(targetScene.duration_seconds) || 15,
+        });
+        bgmUrl = sfxRes.audioUrl;
+      }
+
+      if (bgmUrl) {
+        const scIdx = scenes.findIndex(s => s.id === targetScene.id || s.index === targetScene.index);
+        if (scIdx >= 0) {
+          scenes[scIdx].bgm_url = bgmUrl;
+          await db.updateEpisode(params.episodeId, { scenes });
+        }
+      }
+
+      return {
+        success: true,
+        message: `BGM generated/extracted successfully for Scene #${targetScene.index || 1}`,
+        data: {
+          scene_index: targetScene.index,
+          bgm_url: bgmUrl,
+          audio_url: bgmUrl,
+        },
+      };
+    } catch (err: any) {
+      Logger.error(`[AudioTools.generateSceneBgm] Error: ${err.message}`);
+      return { success: false, message: `Failed to generate BGM: ${err.message}`, error: err.message };
     }
   }
 }

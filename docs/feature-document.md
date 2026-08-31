@@ -544,7 +544,7 @@ Background music for scenes generated via `generateMusic()`:
 
 ### 21. Technical Infrastructure & UX Improvements (Proposals 22–26)
 
-1. **Async Render Stream & Cloud Pub/Sub Queue (`GET /api/v1/render/stream`):** Real-time SSE / WebSocket render progress streaming preventing 504 Gateway Timeouts during 50-episode batch jobs.
+1. **Async Render Stream & Cloud Pub/Sub Queue (`GET /api/render/stream`):** Real-time SSE / WebSocket render progress streaming preventing 504 Gateway Timeouts during 50-episode batch jobs.
 2. **AI Copyright Safety & Audio Fingerprinting (`POST /audio/copyright-verify`):** Pre-publishing audio scan auto-swapping copyrighted tracks with safe Lyria 3 / Artlist AI soundtracks.
 3. **Virtual Canvas Viewport & Lazy Asset Memory Manager:** WebGL texture windowing loading only 5 scene clips nearest to playhead to prevent browser RAM Out-Of-Memory crashes.
 4. **Touch-Optimized Tablet & Foldable Gesture Studio:** Pinch-to-zoom timeline scaling, drag-to-trim gesture handles, and floating AI action wheels for iPad and foldable devices.

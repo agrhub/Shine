@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
+import path from 'path';
 import { nanoid } from 'nanoid';
 import { aiProviderRouter } from '@/integrations/ai/router/AIProviderRouter.js';
 import { StorageFactory } from '@/services/storage/StorageFactory.js';
+import { LocalStorageAdapter } from '@/services/storage/LocalStorageAdapter.js';
 import { SfxService } from '@/services/SfxService.js';
 import { loadSkill } from '@/utils/SkillLoader.js';
 import { SynthIDService } from '@/services/SynthIDService.js';
@@ -25,37 +27,96 @@ assetsRouter.get('/file/*', async (req: Request, res: Response) => {
       return res.status(400).send('Missing storage key');
     }
 
-    const stream = await StorageFactory.getFileStream(rawKey);
-    const mimeType = rawKey.endsWith('.mp4') ? 'video/mp4' : rawKey.endsWith('.wav') ? 'audio/wav' : rawKey.endsWith('.mp3') ? 'audio/mpeg' : rawKey.endsWith('.png') ? 'image/png' : rawKey.endsWith('.jpg') || rawKey.endsWith('.jpeg') ? 'image/jpeg' : 'application/octet-stream';
+    const normalizedKey = rawKey.replace(/^\/+/, '');
+    const ext = path.extname(normalizedKey).toLowerCase();
+    const mimeType =
+      ext === '.mp4' ? 'video/mp4' :
+      ext === '.wav' ? 'audio/wav' :
+      ext === '.mp3' ? 'audio/mpeg' :
+      ext === '.png' ? 'image/png' :
+      (ext === '.jpg' || ext === '.jpeg') ? 'image/jpeg' :
+      ext === '.webp' ? 'image/webp' :
+      'application/octet-stream';
+
+    // 1. Fast-path: serve directly from local disk (no range processing needed)
+    const localStorage = LocalStorageAdapter.getInstance();
+    const localPath = localStorage.getLocalFilePath(normalizedKey);
+    if (localPath) {
+      return res.sendFile(localPath, {
+        acceptRanges: true,
+        cacheControl: true,
+        maxAge: '1y',
+        headers: { 'Content-Type': mimeType },
+      });
+    }
+
+    // 2. Cloud storage: transparent proxy — forward Range header directly to provider
+    const adapter = await StorageFactory.getActiveAdapter();
+    const rangeHeader = req.headers.range;
+
+    const result = await (adapter as any).getFileStream(normalizedKey, rangeHeader);
+
+    // GCSStorageAdapter returns { stream, status, headers }; other adapters return a stream directly
+    if (result && typeof result === 'object' && 'stream' in result) {
+      const { stream, status, headers: proxyHeaders } = result;
+
+      if (proxyHeaders['content-range']) res.setHeader('Content-Range', proxyHeaders['content-range']);
+      if (proxyHeaders['content-length']) res.setHeader('Content-Length', proxyHeaders['content-length']);
+      res.setHeader('Content-Type', proxyHeaders['content-type'] || mimeType);
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.status(status || 200);
+
+      if (typeof stream.setMaxListeners === 'function') stream.setMaxListeners(100);
+      const onError = (err: any) => {
+        const msg = err?.message || String(err);
+        if (msg.includes('socket hang up') || msg.includes('ECONNRESET') || msg.includes('aborted')) {
+          Logger.debug(`[Asset Proxy] Range request cancelled by client for ${normalizedKey}: ${msg}`);
+        } else {
+          Logger.warn(`[Asset Proxy] Stream error for ${normalizedKey}: ${msg}`);
+        }
+        if (!res.headersSent) res.status(499).end();
+      };
+      stream.once('error', onError);
+      req.on('close', () => { if (!stream.destroyed) stream.destroy(); });
+      return stream.pipe(res);
+    }
+
+    // Fallback: adapter returned a plain stream (S3, B2, local fallback)
+    const stream = result;
     res.setHeader('Content-Type', mimeType);
     res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
 
     if (stream && typeof stream.pipe === 'function') {
-      stream.on('error', (streamErr: any) => {
-        Logger.warn(`[Asset Proxy] Stream error for key ${rawKey}: ${streamErr?.message || streamErr}`);
-        if (!res.headersSent) {
-          res.status(404).json({
-            code: 404,
-            data: null,
-            message: `Asset key not found in storage: ${streamErr?.message || 'Not found'}`,
-            error: 'ASSET_NOT_FOUND',
-          });
+      if (typeof stream.setMaxListeners === 'function') stream.setMaxListeners(100);
+      const onError = (streamErr: any) => {
+        const msg = streamErr?.message || String(streamErr);
+        if (msg.includes('socket hang up') || msg.includes('ECONNRESET') || msg.includes('aborted')) {
+          Logger.debug(`[Asset Proxy] Stream cancelled by client for ${rawKey}: ${msg}`);
+          if (!res.headersSent) res.status(499).end();
+        } else {
+          Logger.warn(`[Asset Proxy] Stream error for key ${rawKey}: ${msg}`);
+          if (!res.headersSent) {
+            res.status(404).json({ code: 404, data: null, message: `Asset not found: ${msg}`, error: 'ASSET_NOT_FOUND' });
+          }
         }
-      });
-      stream.pipe(res);
-    } else {
-      res.send(stream);
+      };
+      stream.once('error', onError);
+      req.on('close', () => { if (typeof stream.destroy === 'function' && !stream.destroyed) stream.destroy(); });
+      return stream.pipe(res);
     }
+
+    return res.send(stream);
   } catch (err: any) {
     return res.status(404).json({
-      code: 404,
-      data: null,
-      message: `Asset key not found in storage: ${err.message}`,
+      code: 404, data: null,
+      message: `Asset not found: ${err.message}`,
       error: 'ASSET_NOT_FOUND',
     });
   }
 });
+
 
 // GET /api/assets - List all assets directly from Database
 assetsRouter.get('/', async (req: Request, res: Response) => {
@@ -496,6 +557,7 @@ assetsRouter.post('/screenplay/analyze', async (req: Request, res: Response) => 
       existing_characters,
       existing_locations,
       existing_props,
+      existing_scenes,
     } = req.body;
 
     if (!screenplay || typeof screenplay !== 'string') {
@@ -520,10 +582,16 @@ assetsRouter.post('/screenplay/analyze', async (req: Request, res: Response) => 
     // Automatically resolve country, language, duration, and existing assets from Series & Episode in DB
     const ctx = await resolveProjectLanguageContext(series_id, episode_id, country, language);
 
+    const scenesToPass = (Array.isArray(existing_scenes) && existing_scenes.length > 0)
+      ? existing_scenes
+      : (Array.isArray(episode?.scenes) && episode.scenes.length > 0 ? episode.scenes : []);
+
     const result = await scriptAgent.analyzeAndBreakdownScreenplay({
       screenplay,
-      country: ctx.language || ctx.country,
+      country: ctx.country,
+      language: ctx.language,
       targetDurationSeconds: targetDurationSeconds,
+      existingScenes: scenesToPass,
       existingCharacters: (Array.isArray(existing_characters) && existing_characters.length > 0) ? existing_characters : ctx.existingCharacters,
       existingLocations: (Array.isArray(existing_locations) && existing_locations.length > 0) ? existing_locations : ctx.existingLocations,
       existingProps: (Array.isArray(existing_props) && existing_props.length > 0) ? existing_props : ctx.existingProps,

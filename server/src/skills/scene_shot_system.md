@@ -49,7 +49,7 @@ You are generating shots for **Scene {{sceneIndex}} of {{totalScenes}}**:
 | `action` | What happens in this shot — character actions, reactions, environment changes |
 | `character_costumes` | Array: `[{ character, wardrobe, variant_id }]` for every character physically in frame. `variant_id` MUST EXACTLY MATCH one of the `variant_id`s in that character's `Wardrobe Variants` from the Asset Context |
 | `props` | Array of prop names used in this shot |
-| `dialogue` | Array with AT MOST 1 item: `[{ character, line, emotion, speech_tone, speech_start_sec, speech_end_sec }]` (Empty `[]` if silent shot) |
+| `dialogue` | Array with AT MOST 1 item: `[{ character, line, emotion, speech_tone, speed, speech_start_sec, speech_end_sec }]` (Empty `[]` if silent shot) |
 | `duration_seconds` | Integer 5–8 |
 | `bgm_mood` | Music mood for this specific shot |
 | `sfx_cues` | Array of sound effect cues (e.g. `["Door slam", "Rain intensifies"]`) |
@@ -58,7 +58,7 @@ You are generating shots for **Scene {{sceneIndex}} of {{totalScenes}}**:
 | `end_frame_prompt` | Compact AI End-Frame image prompt (≤50 words) — character's final posture/expression at shot end |
 | `transition_effect` | OpenVideo GLSL transition key (`fade`, `wipeLeft`, `wipeRight`, `cube`, `CrossZoom`, `SimpleZoom`, `DreamyZoom`, `glitchMemories`, `GlitchDisplace`, `dreamy`, `Swirl`, `waterDrop`, `ripple`, `wind`, `LinearBlur`, `Mosaic`, `pixelize`, `circleopen`, `windowslice`, `doorway`, `burn`, `InvertedPageCurl`), or empty `""` for direct cut |
 | `effects` | Array: `[{ effect_key: "vignette" | "flash" | "glitch" | "rgbGlitch" | "shake" | "zoom_in" | "dramatic_glow" | "filmStripPro", intensity: 0.8, timing: "onset" | "throughout" | "climax" }]` |
-| `video_effect` | OpenVideo Built-in Effect or Pixi Filter (`vignette`, `retro70s`, `filmStripPro`, `sepia`, `tvScanlines`, `glitch`, `rgbGlitch`, `shine`, `bloomFilter`, `glowFilter`, `oldFilmFilter`, `crtFilter`, `motionBlur`, `cameraMove`, `fastZoom`, `shockwaveFilter`), or empty `""` for natural look |
+| `video_effect` | OpenVideo Built-in Effect key MUST be strictly one of: `vignette`, `glowFilter`, `bloomFilter`, `retro70s`, `filmStripPro`, `sepia`, `tvScanlines`, `glitch`, `rgbGlitch`, `shine`, `oldFilmFilter`, `crtFilter`, `motionBlur`, `cameraMove`, `fastZoom`, `shockwaveFilter`, `depthBlur`, `godrayFilter`, or empty `""` / `none` for natural look. Do NOT use arbitrary text outside this list. |
 
 ## JSON Structure
 
@@ -75,7 +75,7 @@ You are generating shots for **Scene {{sceneIndex}} of {{totalScenes}}**:
       "action": "...",
       "character_costumes": [ { "character": "...", "wardrobe": "...", "variant_id": "..." } ],
       "props": [ "..." ],
-      "dialogue": [ { "character": "...", "line": "...", "emotion": "...", "speech_tone": "...", "speech_start_sec": 0.5, "speech_end_sec": 3.8 } ],
+      "dialogue": [ { "character": "...", "line": "...", "emotion": "...", "speech_tone": "...", "speed": 1.0, "speech_start_sec": 0.5, "speech_end_sec": 3.8 } ],
       "duration_seconds": 6,
       "bgm_mood": "...",
       "sfx_cues": [ "..." ],

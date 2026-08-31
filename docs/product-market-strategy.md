@@ -189,7 +189,7 @@ To secure an unassailable market moat against competitors (Runway, CapCut, HeyGe
 
 ### 💡 Proposal 22: Async Render Event Stream & Cloud Pub/Sub Queue Manager (`FR-120`)
 - **Friction Point:** Batch rendering 50 episodes (1,500 clips) risks HTTP gateway timeouts (504 Timeout) during long Veo video generation queues.
-- **Solution:** Asynchronous Cloud Pub/Sub worker queue streaming real-time progress events over Server-Sent Events (SSE) / WebSockets (`GET /api/v1/render/stream`).
+- **Solution:** Asynchronous Cloud Pub/Sub worker queue streaming real-time progress events over Server-Sent Events (SSE) / WebSockets (`GET /api/render/stream`).
 
 ### 💡 Proposal 23: AI Copyright Safety & Audio Fingerprinting Engine (`FR-121`)
 - **Friction Point:** Automatic social media uploads risk copyright audio mutes or channel strikes on TikTok/YouTube.

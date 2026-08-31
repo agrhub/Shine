@@ -7,7 +7,7 @@ import { getLanguageForCountry } from '../utils/LanguageMapping.js';
 import { getVisualStylePrompt } from '../constants/VisualStyles.js';
 import { buildWordLevelCaptionsFromDialogue } from '../utils/captionAlignment.js';
 import { ShotFrame, SceneEntity, LocationAsset, PropAsset, CharacterSeriesEntity, CharacterWardrobeVariant } from '../types.js';
-import { ScriptItemSchema, SceneEntitySchema, validateAiJson } from '@/schemas/aiSchemas.js';
+import { ScriptItemSchema, SceneEntitySchema, validateAiJson } from '~/schemas/AISchemas.js';
 import { nanoid } from 'nanoid';
 
 export interface ScriptAgentInput {
@@ -30,6 +30,7 @@ export interface ScriptAgentInput {
     gold_finger_rule?: string;
   };
   country?: string;
+  language?: string;
   ratio?: string;
   target_duration_seconds?: number;
 }
@@ -418,25 +419,40 @@ export class ScriptAgent {
     localLocations: LocationAsset[],
     localProps: PropAsset[]
   ): { character_ids: string[]; location_ids: string[]; prop_ids: string[] } {
-    const norm = (s: string) => (s || '').normalize('NFC').toLowerCase().trim();
+    const norm = (s: any): string => (typeof s === 'string' ? s : (s?.name ?? s?.id ?? (s != null ? String(s) : ''))).normalize('NFC').toLowerCase().trim();
     const uniqueCharIds = Array.from(new Set(
-      charNames.map(n => {
+      (Array.isArray(charNames) ? charNames : []).map(n => {
         const nn = norm(n);
-        const found = localCharacters.find(c => norm(c.name) === nn || norm(c.id) === nn || (norm(c.name).includes(nn) || nn.includes(norm(c.name))));
+        if (!nn) return null;
+        const found = localCharacters.find(c => {
+          const cn = norm(c.name);
+          const cid = norm(c.id);
+          return cn === nn || cid === nn || (cn && nn && (cn.includes(nn) || nn.includes(cn)));
+        });
         return found?.id || null;
       }).filter(Boolean)
     )) as string[];
     const uniqueLocIds = Array.from(new Set(
-      locationNames.map(n => {
+      (Array.isArray(locationNames) ? locationNames : []).map(n => {
         const nn = norm(n);
-        const found = localLocations.find(l => norm(l.name) === nn || norm(l.id) === nn || (norm(l.name).includes(nn) || nn.includes(norm(l.name))));
+        if (!nn) return null;
+        const found = localLocations.find(l => {
+          const ln = norm(l.name);
+          const lid = norm(l.id);
+          return ln === nn || lid === nn || (ln && nn && (ln.includes(nn) || nn.includes(ln)));
+        });
         return found?.id || null;
       }).filter(Boolean)
     )) as string[];
     const uniquePropIds = Array.from(new Set(
-      propNames.map(n => {
+      (Array.isArray(propNames) ? propNames : []).map(n => {
         const nn = norm(n);
-        const found = localProps.find(p => norm(p.name) === nn || norm(p.id) === nn || (norm(p.name).includes(nn) || nn.includes(norm(p.name))));
+        if (!nn) return null;
+        const found = localProps.find(p => {
+          const pn = norm(p.name);
+          const pid = norm(p.id);
+          return pn === nn || pid === nn || (pn && nn && (pn.includes(nn) || nn.includes(pn)));
+        });
         return found?.id || null;
       }).filter(Boolean)
     )) as string[];
@@ -453,7 +469,7 @@ export class ScriptAgent {
     const processedChars = new Set<string>();
     const costumesArr = Array.isArray(rawCostumes) ? rawCostumes : [];
 
-    const norm = (s: string) => (s || '').normalize('NFC').toLowerCase().trim();
+    const norm = (s: any): string => (typeof s === 'string' ? s : (s?.name ?? s?.id ?? (s != null ? String(s) : ''))).normalize('NFC').toLowerCase().trim();
     const findCharDef = (name: string) => {
       const n = norm(name);
       if (!n) return undefined;
@@ -757,8 +773,9 @@ export class ScriptAgent {
     const visual_style = input.visual_style || 'realistic';
     const visual_style_prompt = input.visual_style_prompt || getVisualStylePrompt(visual_style);
     const country = input.country || 'US';
+    const language = input.language || input.country || 'en-US';
     const ratio = input.ratio || '9:16';
-    const langInfo = getLanguageForCountry(country);
+    const langInfo = getLanguageForCountry(language);
 
     const tiers = this.calculateDurationTiers(input.target_duration_seconds);
     const { targetDuration, minShots, maxShots, minScenes, maxScenes } = tiers;
@@ -1125,6 +1142,7 @@ export class ScriptAgent {
     existingCharacters?: CharacterSeriesEntity[];
     existingLocations?: LocationAsset[];
     existingProps?: PropAsset[];
+    existingScenes?: any[];
   }): Promise<{
     screenplay: string;
     characters: CharacterSeriesEntity[];
@@ -1140,8 +1158,9 @@ export class ScriptAgent {
       existingCharacters = [],
       existingLocations = [],
       existingProps = [],
+      existingScenes = [],
     } = params;
-    const langInfo = getLanguageForCountry(country || language);
+    const langInfo = getLanguageForCountry(language || country || 'en-US');
 
     const tiers = this.calculateDurationTiers(params.targetDurationSeconds);
     const { targetDuration, minShots, maxShots } = tiers;
@@ -1176,13 +1195,28 @@ export class ScriptAgent {
       ? headingMatches.map((h, i) => `Scene ${i + 1}: ${h}`).join('\n')
       : '';
 
+    const existingScenesSummary = Array.isArray(existingScenes) && existingScenes.length > 0
+      ? existingScenes.map((s, idx) => {
+          const dlg = Array.isArray(s.dialogue) ? s.dialogue.map((d: any) => `${d.character || d.speaker || 'Character'}: "${d.line || d.text || ''}"`).join(', ') : '';
+          const endFrame = s.end_frame_prompt || s.endFramePrompt || '';
+          const frameDesc = s.frame_description || s.frameDescription || s.description || '';
+          const ctx = s.scene_context || s.sceneContext || '';
+          return `Scene #${s.index || (idx + 1)} - Title: "${s.title || ''}" | Heading: "${s.heading || ''}" | Context: "${ctx}" | Frame: "${frameDesc}" | End Frame: "${endFrame}" | Dialogue: [${dlg}]`;
+        }).join('\n')
+      : '';
+
     // 5. Breakdown screenplay into sequential timed shots adhering to target duration & all scenes
     const breakdownPrompt = PromptLoader.render('screenplay/breakdown_screenplay', {
       screenplay,
+      country: country || 'US',
+      languageName: langInfo.name,
+      languageNativeName: langInfo.nativeName,
+      languageCode: langInfo.code,
       languageInstruction: langInfo.dialogueInstruction,
       targetDuration,
       minShots,
       maxShots,
+      existingScenesSummary,
       detectedScenesList,
       charactersList: this.formatCharactersContext(characters) || 'None specified',
       locationsList: this.formatLocationsContext(locations) || 'None specified',
@@ -1210,16 +1244,29 @@ export class ScriptAgent {
 
       // LLM Iterative Expansion: If shots are below minShots, feed previous draft back into LLM to enrich and expand scenes authentically
       let iteration = 0;
-      while (parsedShots.length < minShots && iteration < 2) {
+      const retry = 1;
+      while (parsedShots.length < minShots && iteration < retry) {
         iteration++;
         Logger.warn(`[ScriptAgent.analyzeAndBreakdownScreenplay] Generated ${parsedShots.length} shots (need ≥ ${minShots}). Prompting LLM to enrich and expand existing breakdown (Attempt ${iteration})...`);
         try {
+          const prevJson = rawScenes.map((scene: SceneEntity, idx: number) => {
+            return {
+              scene_number: scene.index ?? idx + 1,
+              title: scene.title,
+              heading: scene.heading,
+              description: scene.description,
+              dialogue: scene.dialogue,
+              end_frame_prompt: scene.end_frame_prompt,
+              frame_description: scene.frame_description,
+              action: scene.action
+            };
+          });
           const enrichPrompt = PromptLoader.render('screenplay/breakdown_screenplay_expand', {
             currentShotsCount: parsedShots.length,
             targetDuration,
             minShots,
             maxShots,
-            previousDraftJson: JSON.stringify(rawScenes, null, 2),
+            previousDraftJson: JSON.stringify(prevJson, null, 2),
             screenplay,
             charactersList: this.formatCharactersContext(characters) || 'None specified',
             locationsList: this.formatLocationsContext(locations) || 'None specified',

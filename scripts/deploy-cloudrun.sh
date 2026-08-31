@@ -242,11 +242,14 @@ if [ "$DEPLOY_RENDER" = "true" ]; then
   RENDER_MEM="${ENV_MAP["RENDER_WORKER_MEMORY"]:-4Gi}"
   RENDER_TIMEOUT="${ENV_MAP["RENDER_WORKER_TIMEOUT"]:-600}"
   RENDER_MIN="${ENV_MAP["RENDER_WORKER_MIN_INSTANCES"]:-0}"
-  RENDER_MAX="${ENV_MAP["RENDER_WORKER_MAX_INSTANCES"]:-3}"
-  RENDER_CONCURRENCY="${ENV_MAP["RENDER_WORKER_CONCURRENCY"]:-1}"
+  RENDER_MAX="${ENV_MAP["RENDER_WORKER_MAX_INSTANCES"]:-5}"
+  RENDER_CONCURRENCY="${ENV_MAP["RENDER_WORKER_CONCURRENCY"]:-10}"
+  RENDER_POOL_SIZE="${ENV_MAP["RENDER_POOL_SIZE"]:-4}"
+  RENDER_POOL_MIN="${ENV_MAP["RENDER_POOL_MIN"]:-1}"
+  RENDER_MAX_PER_INSTANCE="${ENV_MAP["RENDER_MAX_PER_INSTANCE"]:-25}"
 
   echo ""
-  echo "[Step 4/6] Building and Deploying Video Render Worker (CPU: $RENDER_CPU, Mem: $RENDER_MEM, Timeout: ${RENDER_TIMEOUT}s, Max Instances: $RENDER_MAX)..."
+  echo "[Step 4/6] Building and Deploying Video Render Worker (CPU: $RENDER_CPU, Mem: $RENDER_MEM, Timeout: ${RENDER_TIMEOUT}s, Max Instances: $RENDER_MAX, Pool: $RENDER_POOL_SIZE)..."
   cd "$ROOT_DIR/services/render-worker"
   gcloud run deploy shine-render-worker \
     --source . \
@@ -258,7 +261,7 @@ if [ "$DEPLOY_RENDER" = "true" ]; then
     --min-instances "$RENDER_MIN" \
     --max-instances "$RENDER_MAX" \
     --allow-unauthenticated \
-    --set-env-vars "GCS_BUCKET=$GCS_BUCKET_NAME,PUBSUB_TOPIC_STATUS=$STATUS_TOPIC,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCP_REGION=$REGION" \
+    --set-env-vars "GCS_BUCKET=$GCS_BUCKET_NAME,PUBSUB_TOPIC_STATUS=$STATUS_TOPIC,RENDER_POOL_SIZE=$RENDER_POOL_SIZE,RENDER_POOL_MIN=$RENDER_POOL_MIN,RENDER_MAX_PER_INSTANCE=$RENDER_MAX_PER_INSTANCE,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCP_REGION=$REGION" \
     --quiet
 
   RENDER_URL=$(gcloud run services describe shine-render-worker --region "$REGION" --format="value(status.url)" 2>/dev/null | xargs || true)

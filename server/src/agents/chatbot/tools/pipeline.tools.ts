@@ -102,121 +102,55 @@ export class PipelineToolExecutors {
     }
     
     const normalizedStep = (step || 'b1').toLowerCase().trim();
+    const { PipelineJobService } = await import('@/services/PipelineJobService.js');
+    const db = await getDatabaseProvider();
+    const series = await db.getSeriesById(seriesId);
+    const episode = await db.getEpisodeById(episodeId);
 
-    switch (normalizedStep) {
-      case 'b1': {
-        Logger.info(`[PipelineTools] Running Step B1 (Cast Avatars & Wardrobes) for Series ${seriesId}...`);
-        const charRes = await CharacterToolExecutors.generateCharacterAsset({ userId, seriesId, forceRegenerate });
-        if (!charRes.success) {
-          return { success: false, message: `Step B1 failed at Character Portraits: ${charRes.message}` };
-        }
+    const stepTypeMap: Record<string, string> = {
+      b1: 'step_b1',
+      b2: 'step_b2',
+      b3: 'step_b3',
+      b4: 'step_b4',
+      b5: 'step_b5',
+      b6: 'step_b6',
+      render: 'render',
+    };
+    const targetType = stepTypeMap[normalizedStep] || 'full_pipeline';
 
-        const wardrobeRes = await CharacterToolExecutors.generateWardrobeVariants({ userId, seriesId, episodeId, forceRegenerate });
-        if (!wardrobeRes.success) {
-          return { success: false, message: `Step B1 failed at Wardrobe Lookbooks: ${wardrobeRes.message}` };
-        }
+    const stepLabels: Record<string, string> = {
+      b1: 'Cast & Wardrobes (B1)',
+      b2: 'Assets & Storyboards (B2)',
+      b3: 'AI Video Clips (B3)',
+      b4: 'Voiceover & Dubbing (B4)',
+      b5: 'Subtitles & Captions (B5)',
+      b6: 'Master Video Export (B6)',
+      render: 'Master Video Export',
+    };
+    const stepLabel = stepLabels[normalizedStep] || normalizedStep.toUpperCase();
 
-        return {
-          success: true,
-          message: `Pipeline Step B1 (Cast Render) completed successfully.\n- Cast Avatars: ${charRes.message}\n- Wardrobes: ${wardrobeRes.message}`,
-          data: { characters: charRes.data, wardrobes: wardrobeRes.data },
-        };
-      }
+    const { job, is_new } = await PipelineJobService.startOrGetPipelineJob({
+      user_id: userId,
+      series_id: seriesId,
+      episode_id: episodeId,
+      type: targetType,
+      force_regenerate: forceRegenerate,
+      title: `Step ${stepLabel}: ${series?.title || 'Series'} (EP #${episode?.episode_number || 1})`,
+    });
 
-      case 'b2': {
-        Logger.info(`[PipelineTools] Running Step B2 (Assets & Storyboards) for Episode ${episodeId}...`);
-        const locRes = await AssetToolExecutors.generateLocationAsset({ userId, seriesId, episodeId, forceRegenerate });
-        const propRes = await AssetToolExecutors.generatePropAsset({ userId, seriesId, episodeId, forceRegenerate });
-        const sbRes = await AssetToolExecutors.generatePipelineEpisodeStoryboard({ userId, seriesId, episodeId, forceRegenerate });
-        if (!sbRes.success) {
-          return {
-            success: false,
-            message: `Pipeline Step B2 failed: ${sbRes.message}`,
-          };
-        }
-        return {
-          success: true,
-          message: `Pipeline Step B2 (Assets & Storyboards) completed: ${sbRes.message}`,
-          data: { storyboards: sbRes.data, locations: locRes.data, props: propRes.data },
-        };
-      }
-
-      case 'b3': {
-        Logger.info(`[PipelineTools] Running Step B3 (Storyboard to Video) for Episode ${episodeId}...`);
-        const vidRes = await VideoToolExecutors.generateSceneVideo({ userId, seriesId, episodeId, forceRegenerate });
-        if (!vidRes.success) {
-          return {
-            success: false,
-            message: `Pipeline Step B3 failed at Video Generation: ${vidRes.message}`,
-          };
-        }
-        return {
-          success: true,
-          message: `Pipeline Step B3 (Video Generation) completed: ${vidRes.message}`,
-          data: vidRes.data,
-        };
-      }
-
-      case 'b4': {
-        Logger.info(`[PipelineTools] Running Step B4 (Voiceover & Dubbing) for Episode ${episodeId}...`);
-        const audioRes = await AudioToolExecutors.generateSceneVoiceover({ userId, seriesId, episodeId, forceRegenerate });
-        if (!audioRes.success) {
-          return {
-            success: false,
-            message: `Pipeline Step B4 failed at Voiceover Generation: ${audioRes.message}`,
-          };
-        }
-        return {
-          success: true,
-          message: `Pipeline Step B4 (Voiceover & Dubbing) completed: ${audioRes.message}`,
-          data: audioRes.data,
-        };
-      }
-
-      case 'b5': {
-        Logger.info(`[PipelineTools] Running Step B5 (Subtitles & Captions) for Episode ${episodeId}...`);
-        const captionRes = await CaptionToolExecutors.generateSceneCaption({ userId, seriesId, episodeId, forceRegenerate });
-        if (!captionRes.success) {
-          return {
-            success: false,
-            message: `Pipeline Step B5 failed at Captions Generation: ${captionRes.message}`,
-          };
-        }
-        return {
-          success: true,
-          message: `Pipeline Step B5 (Captions) completed: ${captionRes.message}`,
-          data: captionRes.data,
-        };
-      }
-
-      case 'b6': {
-        Logger.info(`[PipelineTools] Running Step B6 (Final Compositor Render) for Episode ${episodeId}...`);
-        const renderRes = await RenderToolExecutors.renderEpisodeVideo({ userId, seriesId, episodeId, forceRegenerate });
-        if (!renderRes.success) {
-          return {
-            success: false,
-            message: `Pipeline Step B6 failed: ${renderRes.message}`,
-          };
-        }
-        return {
-          success: true,
-          message: `Pipeline Step B6 (Export Video) completed: ${renderRes.message}`,
-          data: renderRes.data,
-        };
-      }
-
-      case 'b7':
-      case 'b8': {
-        return {
-          success: true,
-          message: `Pipeline Step ${normalizedStep.toUpperCase()} completed successfully.`,
-          data: { step: normalizedStep },
-        };
-      }
-
-      default:
-        return { success: false, message: `Unknown pipeline step: ${step}` };
-    }
+    return {
+      success: true,
+      message: is_new
+        ? `🚀 Background Job **${job.id}** for **Step ${stepLabel}** has been started!\n- Progress: ${job.progress}%\n- You can monitor real-time progress via the top-bar Job Popover.`
+        : `⚡ Job **${job.id}** for **Step ${stepLabel}** is already running in background (${job.progress}% - ${job.current_step}).`,
+      data: {
+        job_id: job.id,
+        status: job.status,
+        progress: job.progress,
+        current_step: job.current_step,
+        is_new,
+      },
+    };
   }
 
   /**

@@ -3,6 +3,30 @@ import { Logger } from '@/utils/logger.js';
 import type { SceneDialogue, SceneCaption, CaptionWord, SceneCaptionWordLevel } from '@/types.js';
 
 /**
+ * Sanitizes dialogue line by stripping character name prefix (e.g. "Trần Minh Quân: ..."), quotes, and stage directions.
+ */
+export function cleanDialogueLine(rawLine: string, characterName?: string): string {
+  if (!rawLine || typeof rawLine !== 'string') return '';
+  let line = rawLine.trim();
+
+  // 1. Remove specific character name prefix
+  if (characterName && line.toLowerCase().startsWith(characterName.toLowerCase() + ':')) {
+    line = line.slice(characterName.length + 1).trim();
+  }
+
+  // 2. Remove generic "[Speaker Name]: " pattern at start of line
+  line = line.replace(/^[A-ZÀ-Ỹa-zà-ỹ0-9\s._-]{1,35}:\s*/u, '');
+
+  // 3. Remove parenthesized stage directions at beginning e.g. "(crying) Hello"
+  line = line.replace(/^\([^)]*\)\s*/, '').replace(/^\[[^\]]*\]\s*/, '');
+
+  // 4. Remove surrounding quotes
+  line = line.replace(/^["'“](.*)["'”]$/, '$1').trim();
+
+  return line;
+}
+
+/**
  * Translate a list of SceneDialogue objects into target language using Gemini
  */
 export async function translateDialogueList(
@@ -11,39 +35,54 @@ export async function translateDialogueList(
 ): Promise<SceneDialogue[]> {
   if (!Array.isArray(dialogueList) || dialogueList.length === 0) return [];
   try {
+    const cleanedInput = dialogueList.map(d => ({
+      character: d.character || 'Character',
+      emotion: d.emotion || 'Dramatic',
+      line: cleanDialogueLine(d.line || (d as any).text || '', d.character),
+      speech_tone: d.speech_tone || (d as any).speechTone || 'Standard',
+    }));
+
     const prompt = `You are a professional cinematic localization translator for micro-dramas.
 Translate the following dialogue lines into language code/name: "${targetLanguage}".
 Ensure punchy, natural acting delivery while preserving character emotions, tone, and sentence rhythm.
+DO NOT prepend character names into the "line" field.
 
 Input Dialogue:
-${JSON.stringify(dialogueList, null, 2)}
+${JSON.stringify(cleanedInput, null, 2)}
 
 Respond with a JSON array where each object has:
 - character: string
 - emotion: string
-- line: string (translated line in ${targetLanguage})
+- line: string (translated line in ${targetLanguage}, containing ONLY spoken dialogue)
 - speech_tone: string`;
 
     const raw = await geminiClient.generateText({
       prompt,
-      systemInstruction: 'You are an expert film dialogue localization translator. Return ONLY a valid JSON array of SceneDialogue objects.',
+      systemInstruction: 'You are an expert film dialogue localization translator. Return ONLY a valid JSON array of SceneDialogue objects without character name prefixes in the line property.',
       jsonMode: true,
     });
 
     const parsed = JSON.parse(raw);
     const list = Array.isArray(parsed) ? parsed : (parsed.dialogue || parsed.translations || []);
     if (Array.isArray(list) && list.length > 0) {
-      return list.map((d: any, idx: number) => ({
-        character: String(d.character || dialogueList[idx]?.character || 'Character').trim(),
-        emotion: String(d.emotion || dialogueList[idx]?.emotion || 'Dramatic').trim(),
-        line: String(d.line || d.text || dialogueList[idx]?.line || '').trim(),
-        speech_tone: String(d.speech_tone || d.speechTone || dialogueList[idx]?.speech_tone || 'Standard').trim(),
-      }));
+      return list.map((d: any, idx: number) => {
+        const charName = String(d.character || dialogueList[idx]?.character || 'Character').trim();
+        const rawTranslated = String(d.line || d.text || dialogueList[idx]?.line || '').trim();
+        return {
+          character: charName,
+          emotion: String(d.emotion || dialogueList[idx]?.emotion || 'Dramatic').trim(),
+          line: cleanDialogueLine(rawTranslated, charName),
+          speech_tone: String(d.speech_tone || d.speechTone || dialogueList[idx]?.speech_tone || 'Standard').trim(),
+        };
+      });
     }
   } catch (err: any) {
     Logger.warn(`[translateDialogueList] Gemini translation to ${targetLanguage} failed: ${err.message}. Using original lines.`);
   }
-  return dialogueList;
+  return dialogueList.map(d => ({
+    ...d,
+    line: cleanDialogueLine(d.line || (d as any).text || '', d.character),
+  }));
 }
 
 /**
@@ -68,7 +107,7 @@ export function buildWordLevelCaptionsFromDialogue(
     };
   }
 
-  const fullLine = dialogueList.map(d => d.line || '').join(' ').trim();
+  const fullLine = dialogueList.map(d => cleanDialogueLine(d.line || (d as any).text || '', d.character)).filter(Boolean).join(' ').trim();
   if (!fullLine) {
     return {
       voice_start_us: 0,

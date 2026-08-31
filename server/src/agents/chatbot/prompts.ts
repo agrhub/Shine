@@ -142,6 +142,51 @@ export async function buildLiveContextSnapshot(seriesId?: string, episodeId?: st
       const series = seriesId && !seriesId.startsWith('wiz_') && !seriesId.startsWith('temp_') ? await db.getSeriesById(seriesId) : null;
       const episode = episodeId && episodeId !== '1' ? await db.getEpisodeById(episodeId) : null;
 
+      // ─── Case 0: Global Context (Dashboard, Assets, Analytics, Settings) ─────
+      if (seriesId === 'global' || seriesId?.startsWith('global') || context?.pageContext === 'dashboard' || context?.pageContext === 'analytics' || context?.pageContext === 'assets' || context?.pageContext === 'settings') {
+        const userId = context?.userId || context?.user_id;
+        const allSeries = await db.getSeriesList(userId || undefined);
+        const activeJobs = await db.getPipelineJobs({ user_id: userId || undefined, limit: 10 });
+        
+        const seriesSummary = allSeries.slice(0, 10).map((s: any, idx: number) => {
+          return `${idx + 1}. "${s.title || 'Untitled'}" (ID: ${s.id}, Genre: ${s.genre || 'Drama'}, Episodes: ${s.total_episodes || s.episodes?.length || 0}, Status: ${s.status || 'draft'})`;
+        }).join('\n') || 'No series created yet.';
+
+        const jobsSummary = activeJobs.map((j: any) => {
+          return `- Job [${j.id}]: ${j.type} | Status: ${j.status} | Progress: ${j.progress}% | Series: ${j.series_id || 'N/A'}`;
+        }).join('\n') || 'No active background pipeline jobs.';
+
+        const globalPrompt = `=== SHINE STUDIO GLOBAL AI COPILOT ===
+You are Shine AI Studio Copilot operating in GLOBAL context (Page: ${context?.pageContext || 'Dashboard'}).
+You assist the creator with overall studio management, project planning, viral hooks, analytics evaluation, credit budgeting, and trigger production pipelines.
+
+CREATOR'S ACTIVE SERIES PORTFOLIO:
+${seriesSummary}
+
+ACTIVE PIPELINE & RENDER JOBS:
+${jobsSummary}
+
+CURRENT PAGE: ${context?.pageContext || 'Dashboard'}
+CAPABILITIES:
+- Brainstorm and outline new micro-drama concepts and 3-act story arcs.
+- Analyze retention, viewer drop-off points, and conversion metrics across series.
+- Inspect active jobs, suggest pipeline execution, and guide asset production.
+- Recommend trending viral genres and character hooks.`;
+
+        const baseInstruction = getRootAgentInstruction({
+          seriesId: 'global',
+          episodeId: 'main',
+          seriesTitle: 'Shine Studio Global Management',
+          genre: 'Multi-Genre',
+          visualStyle: 'Cinematic',
+          language: context?.language || 'en-US',
+          country: context?.country || 'United States',
+          context,
+        });
+
+        return `${baseInstruction}\n\n${globalPrompt}\n\n`;
+      }
+
       // ─── Case 1: Wizard Flow (No series/episode created yet) ───────────────────
       if (!series && !episode) {
         const totalEpisodes = Number(context?.target_episodes || context?.targetEpisodes || context?.total_episodes || context?.totalEpisodes || 24);

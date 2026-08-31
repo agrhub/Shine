@@ -1,11 +1,11 @@
 import { EventEmitter } from 'events';
 import axios from 'axios';
 import { nanoid } from 'nanoid';
-import { renderVideo } from '@openvideo/video-renderer';
 import { StorageFactory } from '../storage/StorageFactory.js';
 import { getDatabaseProvider } from '../../database/index.js';
 import { TimelineService, type IProject } from '../TimelineService.js';
 import { PubSubService } from '../pubsub/PubSubService.js';
+import { videoRendererPool } from './VideoRendererPool.js';
 import { Logger } from '../../utils/logger.js';
 
 export interface CompositorClip {
@@ -343,6 +343,11 @@ export class CompositorWorker extends EventEmitter {
                     format: 'mp4',
                     audio: true,
                     prioritizeSpeed: false,
+                    backgroundColor: "#111111",
+                    videoCodec: "avc1.640033",
+                    bitrate: 12_000_000,
+                    audioCodec: "opus",//render worker only work with opus now
+                    audioSampleRate: 48000
                   },
                 },
                 { timeout: 30_000 }
@@ -378,48 +383,74 @@ export class CompositorWorker extends EventEmitter {
 
                     if (pubSubCompletedEvent) {
                       Logger.info(`[CompositorWorker] Cloud Run job ${remoteJobId} completed via Pub/Sub notification.`);
-                      const downloadUrl = pubSubCompletedEvent.downloadUrl || `${cloudRunWorkerUrl}/download/${remoteJobId}`;
-                      const videoResp = await axios.get(downloadUrl, { responseType: 'arraybuffer', timeout: 120_000 });
-                      const videoBuffer = Buffer.from(videoResp.data);
+                      try {
+                        const downloadUrl = pubSubCompletedEvent.downloadUrl || `${cloudRunWorkerUrl}/download/${remoteJobId}`;
+                        const videoResp = await axios.get(downloadUrl, { responseType: 'arraybuffer', timeout: 120_000 });
+                        const videoBuffer = Buffer.from(videoResp.data);
 
-                      await adapter.uploadFile(storageKey, videoBuffer, 'video/mp4');
-                      Logger.info(`[CompositorWorker] Video saved to storage: ${storageKey} (${(videoBuffer.length / (1024 * 1024)).toFixed(2)} MB)`);
-                      renderedViaCloud = true;
-                      break;
+                        if (!videoBuffer || videoBuffer.length < 10_000) {
+                          Logger.warn(`[CompositorWorker] Cloud Run worker returned empty/corrupted video (${videoBuffer?.length || 0} bytes), falling back to local render pool...`);
+                          renderedViaCloud = false;
+                          break;
+                        }
+
+                        await adapter.uploadFile(storageKey, videoBuffer, 'video/mp4');
+                        Logger.info(`[CompositorWorker] Video saved to storage: ${storageKey} (${(videoBuffer.length / (1024 * 1024)).toFixed(2)} MB)`);
+                        renderedViaCloud = true;
+                        break;
+                      } catch (downloadErr: any) {
+                        Logger.warn(`[CompositorWorker] Failed to download Cloud Run video (${downloadErr.message}), falling back to local render pool...`);
+                        renderedViaCloud = false;
+                        break;
+                      }
                     }
 
+                    let jobData: any = null;
                     try {
                       const statusResp = await axios.get(`${cloudRunWorkerUrl}/jobs/${remoteJobId}`, {
                         timeout: 15_000,
                         validateStatus: (status) => status < 500,
                       });
-                      const jobData = statusResp.data;
+                      jobData = statusResp.data;
+                    } catch (pollErr: any) {
+                      Logger.debug(`[CompositorWorker] Cloud Run poll notice for ${remoteJobId}: ${pollErr.message}`);
+                    }
 
-                      if (jobData && jobData.success) {
-                        if (jobData.status === 'rendering') {
-                          const pct = Math.min(99, Math.max(1, Math.round(jobData.progress || 0)));
-                          this.emit('progress', {
-                            jobId,
-                            progress: pct,
-                            stage: `Rendering ${comb.label} (Cloud Run): ${pct}%`,
-                          });
-                        } else if (jobData.status === 'completed') {
-                          Logger.info(`[CompositorWorker] Cloud Run job ${remoteJobId} finished. Downloading rendered video...`);
-
+                    if (jobData && jobData.success) {
+                      if (jobData.status === 'rendering') {
+                        const pct = Math.min(99, Math.max(1, Math.round(jobData.progress || 0)));
+                        this.emit('progress', {
+                          jobId,
+                          progress: pct,
+                          stage: `Rendering ${comb.label} (Cloud Run): ${pct}%`,
+                        });
+                      } else if (jobData.status === 'completed') {
+                        Logger.info(`[CompositorWorker] Cloud Run job ${remoteJobId} finished. Downloading rendered video...`);
+                        try {
                           const downloadUrl = jobData.downloadUrl || `${cloudRunWorkerUrl}/download/${remoteJobId}`;
                           const videoResp = await axios.get(downloadUrl, { responseType: 'arraybuffer', timeout: 120_000 });
                           const videoBuffer = Buffer.from(videoResp.data);
+
+                          if (!videoBuffer || videoBuffer.length < 10_000) {
+                            Logger.warn(`[CompositorWorker] Cloud Run worker returned empty/corrupted video (${videoBuffer?.length || 0} bytes), falling back to local render pool...`);
+                            renderedViaCloud = false;
+                            break;
+                          }
 
                           await adapter.uploadFile(storageKey, videoBuffer, 'video/mp4');
                           Logger.info(`[CompositorWorker] Video saved to storage: ${storageKey} (${(videoBuffer.length / (1024 * 1024)).toFixed(2)} MB)`);
                           renderedViaCloud = true;
                           break;
-                        } else if (jobData.status === 'failed') {
-                          throw new Error(jobData.error || 'Remote video rendering job failed');
+                        } catch (downloadErr: any) {
+                          Logger.warn(`[CompositorWorker] Failed to download Cloud Run video (${downloadErr.message}), falling back to local render pool...`);
+                          renderedViaCloud = false;
+                          break;
                         }
+                      } else if (jobData.status === 'failed') {
+                        Logger.warn(`[CompositorWorker] Cloud Run job ${remoteJobId} reported failure (${jobData.error || 'Unknown error'}), falling back to local render pool...`);
+                        renderedViaCloud = false;
+                        break;
                       }
-                    } catch (pollErr: any) {
-                      Logger.debug(`[CompositorWorker] Cloud Run poll notice for ${remoteJobId}: ${pollErr.message}`);
                     }
                   }
                 } finally {
@@ -431,16 +462,21 @@ export class CompositorWorker extends EventEmitter {
             }
           }
 
-          // Step C2: Local Fallback via @openvideo/video-renderer (Playwright + WebCodecs)
+          // Step C2: Local Fallback via @openvideo/video-renderer Instance Pool (Playwright + WebCodecs)
           if (!renderedViaCloud) {
-            Logger.info(`[CompositorWorker] Rendering project locally with @openvideo/video-renderer for ${comb.label}...`);
-            const renderedVideoBuffer = await renderVideo(projectData as any, {
+            Logger.info(`[CompositorWorker] Rendering project locally with VideoRendererPool for ${comb.label}...`);
+            const renderedVideoBuffer = await videoRendererPool.render(projectData as any, {
               width: projectData.settings.width || 1080,
               height: projectData.settings.height || 1920,
               fps: projectData.settings.fps || 30,
               format: 'mp4',
               audio: true,
               prioritizeSpeed: false,
+              backgroundColor: "#111111",
+              videoCodec: "avc1.640033",
+              bitrate: 12000000,
+              audioCodec: "opus",
+              audioSampleRate: 48000,
               onProgress: (progress: number) => {
                 const percentage = Math.round(progress * 100);
                 this.emit('progress', { jobId, progress: percentage, stage: `Exporting ${comb.label}: ${percentage}%` });

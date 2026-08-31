@@ -18,9 +18,12 @@ MEMORY="${MEMORY:-${RENDER_WORKER_MEMORY:-4Gi}}"
 CPU="${CPU:-${RENDER_WORKER_CPU:-2}}"
 TIMEOUT="${TIMEOUT:-${RENDER_WORKER_TIMEOUT:-600}}"
 MIN_INSTANCES="${MIN_INSTANCES:-${RENDER_WORKER_MIN_INSTANCES:-0}}"
-MAX_INSTANCES="${MAX_INSTANCES:-${RENDER_WORKER_MAX_INSTANCES:-3}}"
-CONCURRENCY="${CONCURRENCY:-${RENDER_WORKER_CONCURRENCY:-1}}"
+MAX_INSTANCES="${MAX_INSTANCES:-${RENDER_WORKER_MAX_INSTANCES:-5}}"
+CONCURRENCY="${CONCURRENCY:-${RENDER_WORKER_CONCURRENCY:-10}}"
 GCS_BUCKET="${GCS_BUCKET:-${GCS_BUCKET_NAME:-shine-studio-media}}"
+RENDER_POOL_SIZE="${RENDER_POOL_SIZE:-4}"
+RENDER_POOL_MIN="${RENDER_POOL_MIN:-1}"
+RENDER_MAX_PER_INSTANCE="${RENDER_MAX_PER_INSTANCE:-25}"
 
 echo "========================================================="
 echo " Deploying Video Render Worker to Google Cloud Run"
@@ -29,6 +32,8 @@ echo " Region:        $REGION"
 echo " Memory / CPU:  $MEMORY / $CPU CPU"
 echo " Timeout:       $TIMEOUT seconds"
 echo " Min / Max:     $MIN_INSTANCES / $MAX_INSTANCES instances"
+echo " Concurrency:   $CONCURRENCY requests"
+echo " Render Pool:   Min $RENDER_POOL_MIN / Max $RENDER_POOL_SIZE instances"
 echo " GCS Bucket:    $GCS_BUCKET"
 echo "========================================================="
 
@@ -63,7 +68,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --concurrency "$CONCURRENCY" \
   --min-instances "$MIN_INSTANCES" \
   --max-instances "$MAX_INSTANCES" \
-  --set-env-vars "GCS_BUCKET=$GCS_BUCKET,PUBSUB_TOPIC_STATUS=shine-render-status" \
+  --set-env-vars "GCS_BUCKET=$GCS_BUCKET,PUBSUB_TOPIC_STATUS=shine-render-status,RENDER_POOL_SIZE=$RENDER_POOL_SIZE,RENDER_POOL_MIN=$RENDER_POOL_MIN,RENDER_MAX_PER_INSTANCE=$RENDER_MAX_PER_INSTANCE,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCP_REGION=$REGION" \
   --allow-unauthenticated
 
 # Print service URL

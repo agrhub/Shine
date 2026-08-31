@@ -125,7 +125,7 @@ export class ScreenplayToolExecutors {
       const locIdSet = new Set<string>();
       const propIdSet = new Set<string>();
 
-      const norm = (s: string) => (s || '').normalize('NFC').toLowerCase().trim();
+      const norm = (s: any): string => (typeof s === 'string' ? s : (s?.name ?? s?.id ?? (s != null ? String(s) : ''))).normalize('NFC').toLowerCase().trim();
 
       normalizedScenes.forEach((sc: any) => {
         // Gather from character_costumes

@@ -1,6 +1,15 @@
 import { StorageFactory } from '@/services/storage/StorageFactory.js';
 import { Logger } from '@/utils/logger.js';
 import axios from 'axios';
+import ffmpeg from 'fluent-ffmpeg';
+import ffmpegStatic from 'ffmpeg-static';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+
+if (ffmpegStatic) {
+  ffmpeg.setFfmpegPath(ffmpegStatic as string);
+}
 
 export interface DspSeparationResult {
   bgmUrl: string;
@@ -15,6 +24,47 @@ export interface DspSeparationResult {
  * Isolates Background Music (BGM) & Ambient sound and detects precise speech onset timestamps.
  */
 export class DspAudioService {
+  /**
+   * Helper: Convert any media buffer (video MP4/WEBM, audio MP3/AAC/WAV) to standard 16-bit 44.1kHz stereo WAV buffer using FFmpeg
+   */
+  public static async convertToWavPcmBuffer(inputBuffer: Buffer): Promise<{ buffer: Buffer; sampleRate: number }> {
+    return new Promise((resolve) => {
+      const tempId = `dsp_pcm_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const tempIn = path.join(os.tmpdir(), `${tempId}.tmp`);
+      const tempOut = path.join(os.tmpdir(), `${tempId}.wav`);
+
+      try {
+        fs.writeFileSync(tempIn, inputBuffer);
+        ffmpeg(tempIn)
+          .noVideo()
+          .audioCodec('pcm_s16le')
+          .audioChannels(2)
+          .audioFrequency(44100)
+          .output(tempOut)
+          .on('end', () => {
+            try {
+              const wavBuf = fs.readFileSync(tempOut);
+              try { if (fs.existsSync(tempIn)) fs.unlinkSync(tempIn); } catch {}
+              try { if (fs.existsSync(tempOut)) fs.unlinkSync(tempOut); } catch {}
+              resolve({ buffer: wavBuf, sampleRate: 44100 });
+            } catch {
+              resolve({ buffer: inputBuffer, sampleRate: 44100 });
+            }
+          })
+          .on('error', (err) => {
+            Logger.warn(`[DspAudioService] FFmpeg PCM conversion notice: ${err.message}`);
+            try { if (fs.existsSync(tempIn)) fs.unlinkSync(tempIn); } catch {}
+            try { if (fs.existsSync(tempOut)) fs.unlinkSync(tempOut); } catch {}
+            resolve({ buffer: inputBuffer, sampleRate: 44100 });
+          })
+          .run();
+      } catch (err: any) {
+        Logger.warn(`[DspAudioService] convertToWavPcmBuffer error: ${err.message}`);
+        resolve({ buffer: inputBuffer, sampleRate: 44100 });
+      }
+    });
+  }
+
   /**
    * Separates Vocal dialogue and extracts clean Background Music (BGM) stem via DSP,
    * while detecting the exact timestamp (in microseconds) when character speech begins.
@@ -35,12 +85,8 @@ export class DspAudioService {
       let rawBuffer: Buffer;
       if (sourceUrl.startsWith('/api/assets/file/') || sourceUrl.startsWith('assets/')) {
         try {
-          const stream = await StorageFactory.getFileStream(sourceUrl);
-          const chunks: Buffer[] = [];
-          for await (const chunk of stream) {
-            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-          }
-          rawBuffer = Buffer.concat(chunks);
+          const fileRes = await StorageFactory.getFileBuffer(sourceUrl);
+          rawBuffer = fileRes.buffer;
         } catch {
           rawBuffer = Buffer.alloc(0);
         }
@@ -58,9 +104,12 @@ export class DspAudioService {
         throw new Error('Empty source audio buffer');
       }
 
-      // 2. Extract PCM samples from WAV or synthesize PCM from raw stream
-      const { leftChannel, rightChannel, sampleRate: detectedRate } = this.decodeToFloatStereo(rawBuffer, sampleRate);
-      const activeRate = detectedRate || sampleRate;
+      // 2. Transcode to clean 16-bit 44.1kHz stereo PCM WAV via FFmpeg
+      const { buffer: wavPcmBuffer, sampleRate: convertedRate } = await this.convertToWavPcmBuffer(rawBuffer);
+
+      // 3. Extract PCM samples from WAV
+      const { leftChannel, rightChannel, sampleRate: detectedRate } = this.decodeToFloatStereo(wavPcmBuffer, convertedRate || sampleRate);
+      const activeRate = detectedRate || convertedRate || sampleRate;
 
       // 3. Apply DSP Vocal Cancellation & Voice Activity Detection (VAD)
       const sampleCount = leftChannel.length;

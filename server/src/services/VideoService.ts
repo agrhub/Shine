@@ -117,8 +117,8 @@ export class VideoService {
       }
     }
 
-    Logger.info(`[VideoService.generateSceneImage] targetSeries: ${JSON.stringify(targetSeries, null, 2)}`);
-    Logger.info(`[VideoService.generateSceneImage] targetEpisode: ${JSON.stringify(targetEpisode, null, 2)}`);
+    // Logger.info(`[VideoService.generateSceneImage] targetSeries: ${JSON.stringify(targetSeries, null, 2)}`);
+    // Logger.info(`[VideoService.generateSceneImage] targetEpisode: ${JSON.stringify(targetEpisode, null, 2)}`);
 
     if (targetSeries) {
       seriesTitle = targetSeries.title || '';
@@ -231,7 +231,7 @@ export class VideoService {
       : null;
     const sceneContextLower = (sceneContext || '').toLowerCase();
 
-    const norm = (s: string) => (s || '').normalize('NFC').toLowerCase().trim();
+    const norm = (s: any): string => (typeof s === 'string' ? s : (s?.name ?? s?.id ?? (s != null ? String(s) : ''))).normalize('NFC').toLowerCase().trim();
 
     for (const char of allSeriesCharacters) {
       const charNameNorm = norm(char.name);
@@ -647,10 +647,8 @@ export class VideoService {
       } catch {}
     }
 
-    const dialogues: Array<{
-      character: string;
-      line: string;
-      tone: string;
+    const dialogues: Array<SceneDialogue & {
+      tone?: string;
       voiceId?: string;
       speechStartSec?: number;
       speechEndSec?: number;
@@ -677,7 +675,8 @@ export class VideoService {
             dialogues.push({
               character: charName,
               line: line.replace(/^["']|["']$/g, ''),
-              tone: d.speech_tone || d.emotion || 'natural tone',
+              emotion: d.emotion || 'neutral',
+              speech_tone: d.speech_tone || 'natural tone',
               voiceId,
               speechStartSec,
               speechEndSec,
@@ -717,7 +716,7 @@ export class VideoService {
 
     const sceneContextLower = (sceneContext || '').toLowerCase();
 
-    const norm = (s: string) => (s || '').normalize('NFC').toLowerCase().trim();
+    const norm = (s: any): string => (typeof s === 'string' ? s : (s?.name ?? s?.id ?? (s != null ? String(s) : ''))).normalize('NFC').toLowerCase().trim();
 
     for (const char of allSeriesCharacters) {
       const charNameNorm = norm(char.name);
@@ -878,7 +877,7 @@ export class VideoService {
 
     const videoResult = await aiProviderRouter.generateVideo(videoPrompt, {
       aspectRatio: (seriesRatio as '9:16' | '1:1' | '16:9') || '9:16',
-      characterReferences,
+      // characterReferences,//disable references
       imageStart: startFrameUrl,
       imageEnd: endFrameUrl,
     });

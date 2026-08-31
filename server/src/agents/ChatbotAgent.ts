@@ -1,4 +1,4 @@
-import { getDatabaseProvider } from '~/database/index.js';
+import { getDatabaseProvider, MasterPlanOutput } from '~/database/index.js';
 import { Logger } from '~/utils/logger.js';
 import { EnvConfig } from '~/config/env.js';
 import {
@@ -45,6 +45,9 @@ export interface EpisodeChatSession {
   episodeId: string;
   messages: ChatMessage[];
   lastActive: number;
+  // currentPlan?: any;
+  masterPlan?: MasterPlanOutput;
+  contextData?: any;
 }
 
 const sessions = new Map<string, EpisodeChatSession>();
@@ -219,11 +222,16 @@ export class ChatbotAgent {
   }
 
   /**
-   * Get full series chat history
+   * Get full series or global chat history
    */
   public static async getSeriesHistory(userId: string, seriesId: string): Promise<ChatMessage[]> {
+    const isGlobal = seriesId === 'global' || seriesId.startsWith('global');
+
     for (const [key, session] of sessions.entries()) {
-      if (session.seriesId === seriesId || session.sessionId === seriesId || key.includes(seriesId)) {
+      if (
+        (isGlobal && (session.seriesId === 'global' || session.sessionId.includes('global') || key.includes(`${userId}_global`))) ||
+        session.seriesId === seriesId || session.sessionId === seriesId || key.includes(seriesId)
+      ) {
         if (session.messages && session.messages.length > 0) {
           return session.messages.map(m => ({
             ...m,
@@ -239,6 +247,28 @@ export class ChatbotAgent {
     }
     try {
       const db = await getDatabaseProvider();
+      if (isGlobal) {
+        const user = await db.getUserById(userId);
+        if (user && (user as any).global_chat_history && Array.isArray((user as any).global_chat_history)) {
+          const rawHistory: ChatMessage[] = (user as any).global_chat_history;
+          if (rawHistory.length > 0) {
+            const history: ChatMessage[] = rawHistory.map(m => ({
+              ...m,
+              toolCalls: (m.toolCalls || [])
+                .filter((tc, idx, arr) => arr.findIndex(t => t.name === tc.name && (t.status === 'success' || JSON.stringify(t.args) === JSON.stringify(tc.args))) === idx)
+                .map(tc => ({
+                  ...tc,
+                  status: (tc.status === 'running' ? 'success' : tc.status) as 'running' | 'success' | 'error',
+                })),
+            }));
+            const session = await this.getOrCreateSession(userId, 'global', 'main');
+            session.messages = [...history];
+            return history;
+          }
+        }
+        return [];
+      }
+
       const series = await db.getSeriesById(seriesId);
       if (series && (series as any).chat_history && Array.isArray((series as any).chat_history)) {
         const rawHistory: ChatMessage[] = (series as any).chat_history;
@@ -258,9 +288,53 @@ export class ChatbotAgent {
         }
       }
     } catch (err: any) {
-      Logger.warn(`[ChatbotAgent] Could not load chat history from DB for series ${seriesId}: ${err.message}`);
+      Logger.warn(`[ChatbotAgent] Could not load chat history from DB for series/global ${seriesId}: ${err.message}`);
     }
     return [];
+  }
+
+  /**
+   * Inject a proactive assistant notification into the active episode/series chat session
+   * Used when background pipeline/render jobs complete to notify the user in real-time.
+   */
+  public static injectSystemNotification(
+    userId: string,
+    seriesId: string,
+    episodeId: string,
+    content: string,
+    suggestions?: Array<{ label: string; prompt: string }>
+  ): void {
+    const sessionKey = `${userId}_${seriesId}_${episodeId}`;
+    let session = sessions.get(sessionKey);
+
+    if (!session) {
+      for (const [k, s] of sessions.entries()) {
+        if (s.userId === userId && (s.seriesId === seriesId || s.sessionId === seriesId)) {
+          session = s;
+          break;
+        }
+      }
+    }
+
+    if (session) {
+      const msg: ChatMessage = {
+        id: `msg_${Date.now()}`,
+        role: 'assistant',
+        content,
+        timestamp: Date.now(),
+        suggestions,
+      };
+      session.messages.push(msg);
+      session.lastActive = Date.now();
+      
+      // Broadcast via socket to connected clients in the series room
+      try {
+        const { PatchSyncService } = require('~/realtime/PatchSyncService.js');
+        PatchSyncService.broadcast(seriesId, 'chat:message', { sessionId: session.sessionId, message: msg });
+      } catch (err: any) {
+        // Ignore if realtime broadcast unavailable
+      }
+    }
   }
 
   /**
@@ -395,7 +469,7 @@ export class ChatbotAgent {
     // Build live project & episode data context snapshot from database
     const liveContext = await buildLiveContextSnapshot(params.seriesId, params.episodeId, params.context);
 
-    const localizedMessage = `=== LIVE PROJECT & EPISODE CONTEXT ===\n${liveContext}\n=======================================\n\n${cleanUserMsg}\n\n[MANDATORY CONVERSATION DIRECTIVE: You MUST write your entire response, explanations, reasoning thoughts, and suggestions in the EXACT SAME LANGUAGE as the user's message above. If the user is writing in English, respond in English. If the user is writing in Vietnamese, respond in Vietnamese. DO NOT switch conversation language to Spanish, Chinese, or any other language unless the user directly speaks in that language.]${wizardSyncInstruction}`;
+    const localizedMessage = `=== LIVE PROJECT & EPISODE CONTEXT ===\n${liveContext}\n=======================================\n\nUSER MESSAGE:\n${cleanUserMsg}\n\n[ABSOLUTE MANDATORY MULTILINGUAL DIRECTIVE: You MUST detect the exact natural language of the USER MESSAGE above (whether English, Spanish, Japanese, French, German, Chinese, Vietnamese, Korean, Portuguese, Italian, Arabic, etc.) and write 100% of your response, explanations, thoughts, status reports, and suggestion chips in that EXACT SAME LANGUAGE. STRICTLY FORBIDDEN to switch to any other language.]${wizardSyncInstruction}`;
 
     const sanitizeMediaUrl = (text: string) => {
       if (!text || typeof text !== 'string') return text;
@@ -405,12 +479,20 @@ export class ChatbotAgent {
     try {
       Logger.info(`[ChatbotAgent] Running ADK session (${sessionId}) for user ${params.userId}...`);
 
+      const combinedContext = {
+        ...(session.contextData || {}),
+        ...(params.context || {}),
+        currentPlan: params.context?.currentPlan || session.masterPlan,
+        masterPlan: params.context?.masterPlan || session.masterPlan,
+        session,
+      };
+
       await runWithChatContext(
         {
           userId: params.userId,
           seriesId: params.seriesId,
           episodeId: params.episodeId,
-          contextData: params.context,
+          contextData: combinedContext,
           onItemUpdated: params.onItemUpdated,
           onProgress: params.onProgress,
           onToolCall: handleToolCallEvent,
@@ -586,8 +668,12 @@ export class ChatbotAgent {
       Logger.info(`[ChatbotAgent] Extracted direct Master Plan for "${extractedPlan.title}" (${(extractedPlan.characters || []).length} characters, ${(extractedPlan.episodes || []).length} episodes)`);
       
       // Update memory context snapshot so subsequent turns retain the updated plan
+      session.masterPlan = extractedPlan;
+      if (!session.contextData) session.contextData = {};
+      session.contextData.masterPlan = extractedPlan;
+
       if (params.context) {
-        params.context.currentPlan = extractedPlan;
+        params.context.masterPlan = extractedPlan;
         if (extractedPlan.title) params.context.title = extractedPlan.title;
         if (extractedPlan.genre) params.context.genre = extractedPlan.genre;
         if (extractedPlan.synopsis) params.context.synopsis = extractedPlan.synopsis;
@@ -691,7 +777,17 @@ AI Response Summary: "${fullText.slice(0, 500)}"`;
       suggestions: extractedSuggestions.length > 0 ? extractedSuggestions : undefined,
     });
 
-    if (params.seriesId && !params.seriesId.startsWith('wiz_') && !params.seriesId.startsWith('temp_')) {
+    if (params.seriesId === 'global' || params.seriesId?.startsWith('global')) {
+      try {
+        const db = await getDatabaseProvider();
+        const user = await db.getUserById(params.userId);
+        if (user) {
+          await db.updateUser({ ...user, global_chat_history: session.messages } as any);
+        }
+      } catch (e: any) {
+        Logger.warn(`[ChatbotAgent] Failed to persist global chat history to database: ${e.message}`);
+      }
+    } else if (params.seriesId && !params.seriesId.startsWith('wiz_') && !params.seriesId.startsWith('temp_')) {
       try {
         const db = await getDatabaseProvider();
         await db.updateSeries(params.seriesId, { chat_history: session.messages });

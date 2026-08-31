@@ -2,6 +2,9 @@ import { getDatabaseProvider } from '../database/index.js';
 import { EpisodeEntity, SceneEntity, SeriesEntity } from '../database/IDatabaseProvider.js';
 import { Logger } from '../utils/logger.js';
 import { normalizeSceneEntity } from '../utils/sceneNormalizer.js';
+import { cleanDialogueLine } from '../utils/captionAlignment.js';
+import { OPENVIDEO_EFFECTS } from '../constants/effects.js';
+import { getLanguageForCountry } from '../utils/LanguageMapping.js';
 
 export interface IProjectSettings {
   width: number;
@@ -38,6 +41,64 @@ export interface TimelineDimensions {
 }
 
 export class TimelineService {
+  /**
+   * Normalize arbitrary transition strings from AI to canonical gl-transitions keys
+   */
+  public static normalizeTransitionKey(raw?: string): string | null {
+    if (!raw) return null;
+    const clean = raw.toLowerCase().trim().replace(/[\-_]/g, ' ');
+    if (['cut', 'direct cut', 'smash cut', 'match cut', 'none', 'null', ''].includes(clean)) {
+      return null;
+    }
+    if (['fade', 'dissolve', 'crossfade', 'cross fade', 'fade to black', 'fade to white', 'wipe to black'].includes(clean)) {
+      return 'fade';
+    }
+    if (['wipeleft', 'wipe left', 'wipe_left'].includes(clean)) return 'wipeLeft';
+    if (['wiperight', 'wipe right', 'wipe_right'].includes(clean)) return 'wipeRight';
+    if (['wipeup', 'wipe up', 'wipe_up'].includes(clean)) return 'wipeUp';
+    if (['wipedown', 'wipe down', 'wipe_down'].includes(clean)) return 'wipeDown';
+    if (['cube'].includes(clean)) return 'cube';
+    if (['zoom', 'crosszoom', 'cross zoom', 'simplezoom', 'simple zoom'].includes(clean)) return 'CrossZoom';
+    if (['dreamy', 'dreamyzoom', 'dreamy zoom'].includes(clean)) return 'dreamy';
+    if (['glitch', 'glitchmemories', 'glitch memories', 'glitchdisplace', 'glitch displace'].includes(clean)) return 'glitchMemories';
+    if (['swirl'].includes(clean)) return 'Swirl';
+    if (['ripple', 'waterdrop', 'water drop'].includes(clean)) return 'ripple';
+    if (['wind'].includes(clean)) return 'wind';
+    if (['blur', 'linearblur', 'linear blur'].includes(clean)) return 'LinearBlur';
+    if (['mosaic', 'pixelize', 'pixel'].includes(clean)) return 'Mosaic';
+    if (['doorway'].includes(clean)) return 'doorway';
+    if (['burn', 'filmburn', 'film burn'].includes(clean)) return 'burn';
+    if (['circleopen', 'circle open'].includes(clean)) return 'circleopen';
+    if (['windowslice', 'window slice'].includes(clean)) return 'windowslice';
+
+    // Fallback: check if raw itself is standard camelCase gl-transition key
+    const knownKeys = ['fade', 'wipeLeft', 'wipeRight', 'wipeUp', 'wipeDown', 'cube', 'CrossZoom', 'SimpleZoom', 'DreamyZoom', 'glitchMemories', 'GlitchDisplace', 'dreamy', 'Swirl', 'waterDrop', 'ripple', 'wind', 'LinearBlur', 'Mosaic', 'pixelize', 'circleopen', 'windowslice', 'doorway', 'burn', 'InvertedPageCurl'];
+    const matched = knownKeys.find(k => k.toLowerCase() === clean.replace(/\s+/g, ''));
+    return matched || 'fade';
+  }
+
+  /**
+   * Normalize arbitrary video effect strings from AI to supported OpenVideo Pixi effect keys
+   */
+  public static normalizeEffectKey(raw?: string): string | null {
+    if (!raw) return null;
+    const clean = raw.toLowerCase().trim().replace(/[\-_]/g, ' ');
+    if (['none', 'null', '', 'normal', 'rain overlay', 'overlay', 'noneeffect', 'default', 'raw'].includes(clean)) {
+      return null;
+    }
+    const cleanNoSpace = clean.replace(/\s+/g, '');
+    if (OPENVIDEO_EFFECTS[cleanNoSpace]) {
+      return OPENVIDEO_EFFECTS[cleanNoSpace];
+    }
+    if (['glow', 'glowfilter', 'glow filter'].includes(clean)) return 'glowFilter';
+    if (['vignette', 'vignette filter'].includes(clean)) return 'vignette';
+    if (['blur', 'depthblur', 'depth blur', 'blur filter', 'depth'].includes(clean)) return 'depthBlur';
+    if (['noise', 'noise filter'].includes(clean)) return 'noiseFilter';
+    if (['crt', 'crt filter', 'retro'].includes(clean)) return 'crtFilter';
+    if (['rgb', 'rgbsplitter', 'rgb split', 'rgbglitch'].includes(clean)) return 'rgbSplitter';
+    if (['godray', 'godray filter', 'sunray'].includes(clean)) return 'godrayFilter';
+    return null;
+  }
   /**
    * Helper to resolve canvas dimensions from series ratio
    */
@@ -112,8 +173,8 @@ export class TimelineService {
       const vClipId = `clip_v_${episodeId}_s${scIdx}`;
       const srcUrl = scene.video_url || scene.storyboard_frame_url || '/images/dashboard/poster-1.jpg';
       const isVideo = !!scene.video_url;
-      const hasDialogue = (scene.dialogue && scene.dialogue.length > 0);
-      const volume = hasDialogue ? 0.2 : 1;
+      const hasDialogue = (scene.dialogue && scene.dialogue.length > 0) || Boolean(scene.voiceover_url);
+      const volume = hasDialogue ? 0 : 1;
 
       clips[vClipId] = {
         id: vClipId,
@@ -143,13 +204,14 @@ export class TimelineService {
       videoClipIds.push(vClipId);
 
       // 2. Transition between visual clips
-      if (scIdx > 1 && scene.transition_effect && (scene.transition_effect as string) !== 'cut' && (scene.transition_effect as string) !== 'none') {
+      const normalizedTransKey = TimelineService.normalizeTransitionKey(scene.transition_effect as string);
+      if (scIdx > 1 && normalizedTransKey) {
         const transClipId = `clip_trans_${episodeId}_s${scIdx - 1}`;
         clips[transClipId] = {
           id: transClipId,
           type: 'Transition',
-          name: `Transition: ${scene.transition_effect}`,
-          transitionKey: scene.transition_effect,
+          name: `Transition: ${normalizedTransKey}`,
+          transitionKey: normalizedTransKey,
           duration: 1_000_000,
           fromClipId: `clip_v_${episodeId}_s${scIdx - 1}`,
           toClipId: vClipId,
@@ -157,14 +219,15 @@ export class TimelineService {
       }
 
       // 3. Visual Effect Clip on track_effects
-      if (scene.video_effect) {
+      const normalizedEffKey = TimelineService.normalizeEffectKey(scene.video_effect as string);
+      if (normalizedEffKey) {
         const effClipId = `clip_eff_${episodeId}_s${scIdx}`;
         clips[effClipId] = {
           id: effClipId,
           trackId: 'track_effects',
           type: 'Effect',
-          name: `Effect: ${scene.video_effect}`,
-          effectKey: scene.video_effect,
+          name: `Effect: ${normalizedEffKey}`,
+          effectKey: normalizedEffKey,
           intensity: 0.8,
           timing: {
             display: { from: fromUs, to: fromUs + 1_000_000 },
@@ -232,7 +295,7 @@ export class TimelineService {
     };
 
     // Synchronize language tracks (voiceover & subtitles) for primary and configured languages
-    const primaryLang = series?.language || episode.dubbing_languages?.[0] || episode.caption_languages?.[0] || 'vi-VN';
+    const primaryLang = series?.language || episode.dubbing_languages?.[0] || episode.caption_languages?.[0] || (series?.country ? getLanguageForCountry(series.country)?.code : 'en-US') || 'en-US';
     this.syncLanguageTracksIntoTimeline(projectData, episode, primaryLang);
 
     return projectData;
@@ -496,22 +559,26 @@ export class TimelineService {
               lastEndUs = cueToUs; // Advance watermark
 
               const rawWords = cue.words || trans?.words || (isPrimary ? scene.words : []);
+              const cleanedCueText = cleanDialogueLine(cue.text || '');
               const cueWords = Array.isArray(rawWords) && rawWords.length > 0 ? rawWords.map((w: any) => ({
-                text: w.text || w.punctuated_word || w.word || '',
+                text: cleanDialogueLine(w.text || w.punctuated_word || w.word || ''),
                 from: Number(w.from ?? 0),
                 to: Number(w.to ?? (cueDurUs / 1000)),
                 isKeyWord: Boolean(w.isKeyWord ?? w.is_key_word),
-              })) : [{ text: cue.text || '', from: 0, to: Math.round(cueDurUs / 1000), isKeyWord: true }];
+              })) : [{ text: cleanedCueText, from: 0, to: Math.round(cueDurUs / 1000), isKeyWord: true }];
+
+              const hasVoiceover = Boolean(hasDialogue && voUrl && timeline.clips[voClipId]);
+              const targetSourceClipId = hasVoiceover ? voClipId : vClipId;
 
               timeline.clips[capClipId] = {
                 id: capClipId,
                 trackId: capTrackId,
                 type: 'Caption',
                 name: `Sub #${scIdx} (${langCode})`,
-                text: cue.text || '',
-                mediaId: vClipId,
+                text: cleanedCueText,
+                mediaId: targetSourceClipId,
                 metadata: {
-                  sourceClipId: vClipId,
+                  sourceClipId: targetSourceClipId,
                 },
                 wordsPerLine: 'multiple',
                 timing: {
@@ -687,13 +754,14 @@ export class TimelineService {
       }
 
       // 2. Transition between visual clips
-      if (scIdx > 1 && scene.transition_effect && (scene.transition_effect as string) !== 'cut' && (scene.transition_effect as string) !== 'none') {
+      const normalizedTransKey = TimelineService.normalizeTransitionKey(scene.transition_effect as string);
+      if (scIdx > 1 && normalizedTransKey) {
         const transClipId = `clip_trans_${episodeId}_s${scIdx - 1}`;
         clips[transClipId] = {
           id: transClipId,
           type: 'Transition',
-          name: `Transition: ${scene.transition_effect}`,
-          transitionKey: scene.transition_effect,
+          name: `Transition: ${normalizedTransKey}`,
+          transitionKey: normalizedTransKey,
           duration: 1_000_000,
           fromClipId: `clip_v_${episodeId}_s${scIdx - 1}`,
           toClipId: vClipId,
@@ -701,14 +769,15 @@ export class TimelineService {
       }
 
       // 3. Visual Effect Clip on track_effects
-      if (scene.video_effect) {
+      const normalizedEffKey = TimelineService.normalizeEffectKey(scene.video_effect as string);
+      if (normalizedEffKey) {
         const effClipId = `clip_eff_${episodeId}_s${scIdx}`;
         clips[effClipId] = {
           id: effClipId,
           trackId: 'track_effects',
           type: 'Effect',
-          name: `Effect: ${scene.video_effect}`,
-          effectKey: scene.video_effect,
+          name: `Effect: ${normalizedEffKey}`,
+          effectKey: normalizedEffKey,
           intensity: 0.8,
           timing: {
             display: { from: fromUs, to: fromUs + 500_000 },

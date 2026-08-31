@@ -7,26 +7,38 @@ import { GCSStorageAdapter } from './GCSStorageAdapter.js';
 import { LocalStorageAdapter } from './LocalStorageAdapter.js';
 import { config, EnvConfig, isStorageConfigured } from '@/config/env.js';
 import { getDatabaseProvider } from '~/database/index.js';
+import type { StudioSystemConfig } from '@/types.js';
 
 export type StorageProviderType = 's3' | 'r2' | 'b2' | 'gcs' | 'local';
 
 export class StorageFactory {
   private static adapters: Map<string, Promise<IStorageAdapter>> = new Map();
+  /** Cached resolved provider so we don't re-query DB on every streaming chunk request */
+  private static cachedProvider: StorageProviderType | null = null;
+  private static cachedProviderAt: number = 0;
+  private static readonly PROVIDER_CACHE_TTL_MS = 30_000; // 30 seconds
 
   public static clearAdapters(): void {
     this.adapters.clear();
-    GCSStorageAdapter.resetInstance();
-    S3StorageAdapter.resetInstance();
-    B2StorageAdapter.resetInstance();
+    this.cachedProvider = null;
+    this.cachedProviderAt = 0;
   }
 
   /**
    * Returns active storage adapter based on env variables or fallback.
+   * Caches the resolved provider for PROVIDER_CACHE_TTL_MS to avoid DB round-trips
+   * on every byte-range streaming request.
    */
   public static async getActiveAdapter(): Promise<IStorageAdapter> {
+    const now = Date.now();
+    // Use cached provider if still fresh to avoid DB query on every streaming chunk
+    if (this.cachedProvider && (now - this.cachedProviderAt) < this.PROVIDER_CACHE_TTL_MS) {
+      return this.getAdapter(this.cachedProvider);
+    }
+
     let provider: StorageProviderType = 'local';
     const db = await getDatabaseProvider();
-    const savedConfig = await db.getSystemSetting('studio_config');
+    const savedConfig = await db.getSystemSetting<StudioSystemConfig>('studio_config');
     const envProvider = (
       savedConfig?.s3?.provider ||
       savedConfig?.storage?.provider ||
@@ -49,6 +61,9 @@ export class StorageFactory {
     } else {
       provider = 'local';
     }
+
+    this.cachedProvider = provider;
+    this.cachedProviderAt = now;
 
     return this.getAdapter(provider, savedConfig);
   }
@@ -173,30 +188,96 @@ export class StorageFactory {
   /**
    * Get streaming readable stream from active storage adapter.
    */
-  public static async getFileStream(key: string): Promise<any> {
+  public static async getFileStream(key: string, options?: { start?: number; end?: number }): Promise<any> {
     // Check if URL matches /api/assets/file/{storageKey}
     const match = key.match(/(?:\/api\/assets\/file\/)(.+)$/);
     if (match && match[1]) {
       key = decodeURIComponent(match[1]);
     }
+    // Resolve adapter ONCE and hold reference — never re-resolve mid-stream
     const adapter = await this.getActiveAdapter();
     const exists = await adapter.exists?.(key);
     if (exists === false) {
-      // Fallback: try local disk or B2 if file was uploaded prior to switching adapter
+      // Fallback: try local disk if file was uploaded prior to switching adapter
       try {
         const local = await this.getAdapter('local');
         if (await local.exists?.(key)) {
-          return local.getFileStream(key);
+          return (local as any).getFileStream(key, options);
         }
       } catch {}
+      // Fallback: try B2 if previously stored there
       try {
         const b2 = await this.getAdapter('b2');
         if (await b2.exists?.(key)) {
-          return b2.getFileStream(key);
+          return (b2 as any).getFileStream(key, options);
+        }
+      } catch {}
+      // Fallback: try GCS if previously stored there
+      try {
+        const gcs = await this.getAdapter('gcs');
+        if (await gcs.exists?.(key)) {
+          return (gcs as any).getFileStream(key, options);
         }
       } catch {}
     }
-    return adapter.getFileStream(key);
+    return (adapter as any).getFileStream(key, options);
+  }
+
+  /**
+   * Get complete Buffer for a storage key or /api/assets/file/* URL.
+   */
+  public static async getFileBuffer(keyOrUrl: string): Promise<{ buffer: Buffer; mimeType?: string }> {
+    if (!keyOrUrl) throw new Error('Empty storage key or URL');
+
+    if (keyOrUrl.startsWith('http://') || keyOrUrl.startsWith('https://')) {
+      const response = await axios.get(keyOrUrl, { responseType: 'arraybuffer' });
+      return {
+        buffer: Buffer.from(response.data),
+        mimeType: String(response.headers['content-type'] || 'application/octet-stream'),
+      };
+    }
+
+    if (keyOrUrl.startsWith('data:')) {
+      const parts = keyOrUrl.split(',');
+      const mimeType = parts[0].split(':')[1].split(';')[0];
+      return {
+        buffer: Buffer.from(parts[1], 'base64'),
+        mimeType,
+      };
+    }
+
+    const streamResult = await this.getFileStream(keyOrUrl);
+    const rawStream = streamResult?.stream || streamResult;
+
+    if (Buffer.isBuffer(rawStream)) {
+      return { buffer: rawStream, mimeType: streamResult?.headers?.['content-type'] };
+    }
+
+    const chunks: Buffer[] = [];
+    const buffer = await new Promise<Buffer>((resolve, reject) => {
+      if (typeof rawStream?.on === 'function') {
+        rawStream.on('data', (chunk: any) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+        rawStream.on('error', reject);
+        rawStream.on('end', () => resolve(Buffer.concat(chunks)));
+      } else if (typeof rawStream?.transformToByteArray === 'function') {
+        rawStream.transformToByteArray().then((bytes: Uint8Array) => resolve(Buffer.from(bytes))).catch(reject);
+      } else if (rawStream && typeof rawStream[Symbol.asyncIterator] === 'function') {
+        (async () => {
+          try {
+            for await (const chunk of rawStream) {
+              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            }
+            resolve(Buffer.concat(chunks));
+          } catch (e) {
+            reject(e);
+          }
+        })();
+      } else {
+        reject(new Error(`Unrecognized stream object: ${typeof rawStream}`));
+      }
+    });
+
+    return { buffer, mimeType: streamResult?.headers?.['content-type'] };
   }
 
   /**

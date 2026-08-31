@@ -161,14 +161,54 @@ export class S3StorageAdapter implements IStorageAdapter {
     }));
   }
 
-  public async getFileStream(key: string): Promise<any> {
+  public async getFileMetadata(key: string): Promise<{ size?: number; contentType?: string } | null> {
+    if (!this.client) return null;
+    try {
+      const command = new HeadObjectCommand({
+        Bucket: this.bucket,
+        Key: key.replace(/^\/+/, ''),
+      });
+      const res = await this.client.send(command);
+      return {
+        size: Number(res.ContentLength || 0),
+        contentType: res.ContentType,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  public async getFileStream(
+    key: string,
+    options?: { start?: number; end?: number } | string
+  ): Promise<any> {
     if (!this.client) throw new Error('S3 client not initialized');
+
+    let rangeHeader: string | undefined;
+    if (typeof options === 'string') {
+      rangeHeader = options || undefined;
+    } else if (typeof options === 'object' && options !== null && options.start !== undefined) {
+      const end = options.end !== undefined ? options.end : '';
+      rangeHeader = `bytes=${options.start}-${end}`;
+    }
+
     const command = new GetObjectCommand({
       Bucket: this.bucket,
-      Key: key,
+      Key: key.replace(/^\/+/, ''),
+      Range: rangeHeader,
     });
     const response = await this.client.send(command);
-    return response.Body;
+
+    return {
+      stream: response.Body,
+      status: response.ContentRange ? 206 : (response.$metadata.httpStatusCode || 200),
+      headers: {
+        'content-range': response.ContentRange,
+        'content-length': response.ContentLength ? String(response.ContentLength) : undefined,
+        'content-type': response.ContentType,
+        'accept-ranges': 'bytes',
+      },
+    };
   }
 
   public async getUploadUrl(

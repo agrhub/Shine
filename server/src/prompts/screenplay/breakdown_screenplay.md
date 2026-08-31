@@ -21,9 +21,21 @@ Your mission is to analyze the provided Screenplay content and break it down int
 5. **Completeness**: Every spoken dialogue line, character action, and emotional beat from the screenplay MUST be fully populated into the shots. NEVER return empty string `""` for `frameDescription`, `action`, `cameraMovement`, `visualPrompt`, or `location`.
 6. **Exact Duration Targeting**: Set `durationSeconds` (5 to 8) on each shot such that the cumulative duration of all shots accurately equals **{{targetDuration}}s**.
 
-## LANGUAGE DIRECTIVE
+## LANGUAGE & DIALOGUE DIRECTIVE (STRICT)
+- **Series Spoken Language**: **{{languageName}} ({{languageNativeName}} / {{languageCode}})**
+- **Country / Cultural Setting**: **{{country}}**
+- **CRITICAL LANGUAGE RULES**:
+  1. ALL spoken character dialogue (`dialogue[].line`), emotional subtext (`dialogue[].emotion`), and speech tone (`dialogue[].speech_tone`) MUST be written STRICTLY in **{{languageName}} ({{languageNativeName}})**.
+  2. If the screenplay text contains dialogue written in another language, translate and adapt the spoken lines naturally into **{{languageName}}**.
+  3. Visual descriptions (`frame_description`, `visual_prompt`, `end_frame_prompt`, `action`) should be written in English for generative AI models, while incorporating authentic cultural backdrops matching **{{country}}**.
 {{#if languageInstruction}}
 {{languageInstruction}}
+{{/if}}
+
+{{#if existingScenesSummary}}
+## EXISTING SCENES DRAFT (PRESERVE CONTEXT & EXPAND TO REACH {{targetDuration}}s):
+The following scenes already exist in the episode draft. You MUST maintain continuous character positioning, scene context, and end frames, and EXPAND/ENRICH the shots to reach the target duration of {{targetDuration}}s:
+{{existingScenesSummary}}
 {{/if}}
 
 {{#if detectedScenesList}}
@@ -48,7 +60,7 @@ Your mission is to analyze the provided Screenplay content and break it down int
 - `scene_number`: Dramatic scene group index (1, 2, 3...).
 - `shot_number`: Sequential shot number within this scene (1, 2, 3, 4...).
 - `title`: Short descriptive title (3-5 words).
-- `heading`: Standard scene heading slugline (e.g. `### INT. PHÒNG KHÁCH - ĐÊM`).
+- `heading`: Standard scene heading slugline (e.g. `### INT. LIVING ROOM - NIGHT`).
 - `location`: Exact location name from available assets.
 - `time_of_day`: `DAY`, `NIGHT`, `DUSK`, `DAWN`.
 - `lighting_mood`: Cinematic lighting mood.
@@ -59,14 +71,14 @@ Your mission is to analyze the provided Screenplay content and break it down int
 - `action`: (MANDATORY) Narrative character action happening in this shot. NEVER empty string.
 - `character_costumes`: (MANDATORY) `[ { "character": "Character Name", "wardrobe": "Clothing description", "variant_id": "exact_variant_id_from_wardrobe_variants" } ]` for every character physically present. `variant_id` MUST be copied EXACTLY from the `Wardrobe Variants` of the character defined in the Available Characters list above (e.g. `elena_ivory_blazer` or `wv_1`). NEVER invent arbitrary variant IDs!
 - `props`: Array of prop names appearing in this shot.
-- `dialogue`: `[ { "character": "Name", "line": "Exact dialogue line", "emotion": "Tone/Emotion", "speech_tone": "Tone" } ]` (Empty array `[]` only if purely silent/reaction shot).
+- `dialogue`: `[ { "character": "Name", "line": "Exact dialogue line", "emotion": "Tone/Emotion", "speech_tone": "Tone", "speed": 1.0 } ]` (Float between 0.8 and 1.3 matching delivery speed & dramatic pacing; empty array `[]` only if purely silent/reaction shot).
 - `duration_seconds`: Integer (4 to 8) accurately reflecting the time needed for dialogue speech and physical action.
 - `bgm_mood`: Music mood cue describing the musical instruments and suspense/emotional pacing.
 - `sfx_cues`: Sound effects cues array.
 - `visual_prompt`: (MANDATORY) AI Start-Frame image prompt (subject + wardrobe + posture + lighting + composition + mood). NEVER empty string.
 - `end_frame_prompt`: (MANDATORY) AI End-Frame image prompt describing the subject's final posture, micro-expression, eye gaze, hand movement, and lighting at shot end. NEVER empty string.
 - `transition_effect`: OpenVideo GLSL transition key (`fade`, `wipeLeft`, `wipeRight`, `cube`, `CrossZoom`, `SimpleZoom`, `DreamyZoom`, `glitchMemories`, `GlitchDisplace`, `dreamy`, `Swirl`, `waterDrop`, `ripple`, `wind`, `LinearBlur`, `Mosaic`, `pixelize`, `circleopen`, `windowslice`, `doorway`, `burn`, `InvertedPageCurl`), or empty `""` for direct cut.
-- `video_effect`: (MANDATORY) OpenVideo Built-in Filter Effect key matching the mood: (`vignette`, `glowFilter`, `bloomFilter`, `retro70s`, `filmStripPro`, `sepia`, `tvScanlines`, `glitch`, `rgbGlitch`, `shine`, `oldFilmFilter`, `crtFilter`, `motionBlur`, `cameraMove`, `fastZoom`, `shockwaveFilter`). NEVER empty string.
+- `video_effect`: (MANDATORY) MUST be strictly one of the canonical OpenVideo Effect keys: `vignette`, `glowFilter`, `bloomFilter`, `retro70s`, `filmStripPro`, `sepia`, `tvScanlines`, `glitch`, `rgbGlitch`, `shine`, `oldFilmFilter`, `crtFilter`, `motionBlur`, `cameraMove`, `fastZoom`, `shockwaveFilter`, `depthBlur`, `godrayFilter`, or `none`. NEVER invent arbitrary names or descriptions outside this exact list.
 - `reference_assets`: `{ "characters": ["Name"], "locations": ["Name"], "props": ["Name"] }` (Only include assets physically present in this shot).
 
 ## JSON OUTPUT FORMAT:
@@ -89,7 +101,7 @@ Respond ONLY with a valid JSON object containing between {{minShots}} and {{maxS
       "action": "Elena looks down at the cold dinner table, her eyes reflecting deep sorrow and betrayal.",
       "character_costumes": [ { "character": "Elena Vance", "wardrobe": "Minimalist luxury ivory blazer", "variant_id": "elena_ivory_blazer" } ],
       "props": ["Cracked Platinum Wedding Band"],
-      "dialogue": [ { "character": "Elena Vance", "line": "Five years... Are you really in a board meeting until midnight, Alexander?", "emotion": "Melancholic, sorrowful", "speech_tone": "Subdued, trembling" } ],
+      "dialogue": [ { "character": "Elena Vance", "line": "Five years... Are you really in a board meeting until midnight, Alexander?", "emotion": "Melancholic, sorrowful", "speech_tone": "Subdued, trembling", "speed": 0.9 } ],
       "duration_seconds": 6,
       "bgm_mood": "Melancholic piano and soft strings",
       "sfx_cues": ["Heavy ticking clock in background"],

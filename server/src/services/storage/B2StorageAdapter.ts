@@ -206,17 +206,39 @@ export class B2StorageAdapter implements IStorageAdapter {
     }));
   }
 
-  public async getFileStream(key: string): Promise<any> {
+  public async getFileStream(
+    key: string,
+    options?: { start?: number; end?: number } | string
+  ): Promise<any> {
     await this.ensureAuthorized();
     if (!this.s3Client) throw new Error('B2 S3 Client not initialized');
 
+    let rangeHeader: string | undefined;
+    if (typeof options === 'string') {
+      rangeHeader = options || undefined;
+    } else if (typeof options === 'object' && options !== null && options.start !== undefined) {
+      const end = options.end !== undefined ? options.end : '';
+      rangeHeader = `bytes=${options.start}-${end}`;
+    }
+
     const command = new GetObjectCommand({
       Bucket: this.bucketName,
-      Key: key,
+      Key: key.replace(/^\/+/, ''),
+      Range: rangeHeader,
     });
 
     const response = await this.s3Client.send(command);
-    return response.Body;
+
+    return {
+      stream: response.Body,
+      status: response.ContentRange ? 206 : (response.$metadata.httpStatusCode || 200),
+      headers: {
+        'content-range': response.ContentRange,
+        'content-length': response.ContentLength ? String(response.ContentLength) : undefined,
+        'content-type': response.ContentType,
+        'accept-ranges': 'bytes',
+      },
+    };
   }
 
   public async getUploadUrl(

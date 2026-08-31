@@ -1,6 +1,21 @@
 import mongoose from 'mongoose';
 import { nanoid } from 'nanoid';
-import { IDatabaseProvider, UserEntity, SeriesEntity, EpisodeEntity, FlowAccountEntity, CreditTransactionEntity, WorkerHeartbeatEntity, WorkerJobEntity, ClusterMetricsSummary } from './IDatabaseProvider.js';
+import {
+  IDatabaseProvider,
+  UserEntity,
+  SeriesEntity,
+  EpisodeEntity,
+  FlowAccountEntity,
+  CreditTransactionEntity,
+  WorkerHeartbeatEntity,
+  WorkerJobEntity,
+  ClusterMetricsSummary,
+  IProject,
+  TimelineSnapshotVersion,
+  TimelineSnapshotHistoryItem,
+  RestoreTimelineResult,
+} from './IDatabaseProvider.js';
+import { normalizePureTimeline } from '../utils/timeline.js';
 
 const WorkerHeartbeatSchema = new mongoose.Schema({
   workerId: { type: String, required: true, unique: true },
@@ -408,7 +423,7 @@ export class MongoDBProvider implements IDatabaseProvider {
 
   async saveTimeline(
     episode_id: string,
-    timeline_data: any,
+    timeline_data: IProject,
     author: { id: string; name: string; avatar?: string },
     change_summary = 'Timeline updated'
   ): Promise<{ version_id: string; version_number: number; updated_at: string }> {
@@ -416,7 +431,8 @@ export class MongoDBProvider implements IDatabaseProvider {
     const history = await this.getTimelineHistory(episode_id, 1, 0);
     const version_number = history.total + 1;
     const label = `v1.${version_number} - ${change_summary}`;
-    const serializedData = typeof timeline_data === 'string' ? timeline_data : JSON.stringify(timeline_data);
+    const pureTimeline = normalizePureTimeline(timeline_data);
+    const serializedData = JSON.stringify(pureTimeline);
 
     const doc = await TimelineSnapshotModel.create({
       id: version_id,
@@ -434,53 +450,55 @@ export class MongoDBProvider implements IDatabaseProvider {
     return { version_id, version_number, updated_at: doc.created_at.toISOString() };
   }
 
-  async getLatestTimeline(episodeId: string): Promise<any | null> {
+  async getLatestTimeline(episodeId: string): Promise<IProject | null> {
     const snap: any = await TimelineSnapshotModel.findOne({ episode_id: episodeId }).sort({ version_number: -1 }).lean();
     if (!snap) return null;
-    try {
-      return JSON.parse(snap.timeline_data);
-    } catch {
-      return snap.timeline_data;
-    }
+    return normalizePureTimeline(snap.timeline_data);
   }
 
-  async getTimelineHistory(episodeId: string, limit = 20, offset = 0): Promise<{ total: number; history: any[] }> {
+  async getTimelineHistory(episodeId: string, limit = 20, offset = 0): Promise<{ total: number; history: TimelineSnapshotHistoryItem[] }> {
     const total = await TimelineSnapshotModel.countDocuments({ episode_id: episodeId });
-    const docs: any[] = await TimelineSnapshotModel.find({ episode_id: episodeId })
+    const docs: Array<{
+      id: string;
+      version_number: number;
+      label?: string;
+      author_id?: string;
+      author_name?: string;
+      author_avatar?: string;
+      change_summary?: string;
+      created_at?: Date | string;
+    }> = await TimelineSnapshotModel.find({ episode_id: episodeId })
       .sort({ version_number: -1 })
       .skip(offset)
       .limit(limit)
       .lean();
 
-    const history = docs.map((r) => ({
-      versionId: r.id,
-      versionNumber: r.version_number,
+    const history: TimelineSnapshotHistoryItem[] = docs.map((r) => ({
+      version_id: r.id,
+      version_number: r.version_number,
       label: r.label,
       author: {
         userId: r.author_id,
         name: r.author_name,
         avatar: r.author_avatar,
       },
-      changeSummary: r.change_summary,
-      createdAt: r.created_at?.toISOString ? r.created_at.toISOString() : r.created_at,
+      change_summary: r.change_summary,
+      created_at: r.created_at instanceof Date ? r.created_at.toISOString() : (typeof r.created_at === 'string' ? r.created_at : new Date().toISOString()),
     }));
 
     return { total, history };
   }
 
-  async getTimelineVersion(episodeId: string, versionId: string): Promise<any | null> {
+  async getTimelineVersion(episodeId: string, versionId: string): Promise<TimelineSnapshotVersion | null> {
     const doc: any = await TimelineSnapshotModel.findOne({ episode_id: episodeId, id: versionId }).lean();
     if (!doc) return null;
-    let data = {};
-    try { data = JSON.parse(doc.timeline_data); } catch { data = doc.timeline_data; }
     return {
-      versionId: doc.id,
-      versionNumber: doc.version_number,
+      version_id: doc.id,
+      version_number: doc.version_number,
       author: { userId: doc.author_id, name: doc.author_name },
-      changeSummary: doc.change_summary,
       change_summary: doc.change_summary,
       created_at: doc.created_at?.toISOString ? doc.created_at.toISOString() : doc.created_at,
-      timeline_data: data,
+      timeline_data: normalizePureTimeline(doc.timeline_data),
     };
   }
 
@@ -489,7 +507,7 @@ export class MongoDBProvider implements IDatabaseProvider {
     version_id: string,
     author: { id: string; name: string; avatar?: string },
     reason = 'Restored version'
-  ): Promise<any> {
+  ): Promise<RestoreTimelineResult> {
     const version = await this.getTimelineVersion(episode_id, version_id);
     if (!version) throw new Error('Version snapshot not found');
 
@@ -700,6 +718,10 @@ export class MongoDBProvider implements IDatabaseProvider {
     };
     this.memoryPipelineJobs.set(job_id, updated);
     return updated;
+  }
+
+  async deletePipelineJob(job_id: string): Promise<boolean> {
+    return this.memoryPipelineJobs.delete(job_id);
   }
 
   async findActivePipelineJob(series_id: string, episode_id: string, type?: string): Promise<any | null> {

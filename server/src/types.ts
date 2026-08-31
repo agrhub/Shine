@@ -128,6 +128,7 @@ export interface SceneDialogue {
   emotion: string;
   line: string;
   speech_tone: string;
+  speed?: number;
 }
 
 export interface SceneEffect {
@@ -208,11 +209,13 @@ export interface SeriesEntity {
   visual_style_prompt?: string;
   target_audience: string;
   episode_count: number;
+  published_episode_count?: number;
   episode_duration: number;
   country: string;
   language: string;
   ratio: "9:16" | "16:9" | "4:3" | "1:1";
   viral_hook: string;
+  cover_image?: string;
   master_plan: MasterPlanOutput;
   characters: CharacterSeriesEntity[];
   locations: LocationAsset[];
@@ -223,22 +226,76 @@ export interface SeriesEntity {
   updated_at?: string;
 }
 
-export interface EpisodeRenderVersion {
-  version_id: string;
-  version_number: number;
-  rendered_at: string;
-  status: 'RENDER' | 'READY_TO_PUBLISH' | 'PUBLISHED';
-  video_url: string;
-  video_urls_by_lang: Record<string, string>;
-  languages: string[];
-  duration?: number;
-  notes?: string;
-}
+// export interface EpisodeRenderVersion {
+//   version_id: string;
+//   version_number: number;
+//   rendered_at: string;
+//   status: 'RENDER' | 'READY_TO_PUBLISH' | 'PUBLISHED';
+//   video_url: string;
+//   video_urls_by_lang: Record<string, string>;
+//   languages: string[];
+//   duration?: number;
+//   notes?: string;
+// }
 
 export interface EpisodeReferenceAssets {
   character_ids?: string[];
   location_ids?: string[];
   prop_ids?: string[];
+}
+
+export interface DubbingSettings {
+  voice_name?: string;
+  voice_id?: string;
+  language?: string;
+  speed?: number;
+  pitch?: number;
+  volume?: number;
+  target_languages?: string[];
+}
+
+export interface CaptionSettings {
+  font_family?: string;
+  font_size?: number;
+  font_color?: string;
+  background_color?: string;
+  position?: 'bottom' | 'top' | 'middle';
+  burned_in?: boolean;
+  languages?: string[];
+}
+
+export interface EpisodeRenderVersion {
+  id?: string;
+  version_id?: string;
+  language: string;
+  languages?: string[];
+  voice?: string;
+  subtitles?: string[];
+  resolution?: string;
+  video_url?: string;
+  url?: string;
+  thumbnail_url?: string;
+  duration?: number;
+  file_size?: string;
+  rendered_at?: string;
+  status?: string;
+}
+
+export interface RenderedVersionItem {
+  id: string;
+  episode_id: string;
+  episode_number: number;
+  episode_title: string;
+  language: string;
+  voice: string;
+  subtitles: string[];
+  resolution: string;
+  video_url: string;
+  thumbnail_url: string;
+  duration: number;
+  file_size: string;
+  rendered_at: string;
+  status: string;
 }
 
 export interface EpisodeEntity {
@@ -257,9 +314,10 @@ export interface EpisodeEntity {
   script?: string;
   cover_image?: string;
   duration: number;
+  duration_seconds?: number;
   status: 'DRAFT' | 'RENDER' | 'READY_TO_PUBLISH' | 'PUBLISHED' | 'ARCHIVED';
-  dubbing_settings?: any;
-  caption_settings?: any;
+  dubbing_settings?: DubbingSettings;
+  caption_settings?: CaptionSettings;
   caption_languages?: string[];
   dubbing_languages?: string[];
   video_url?: string;
@@ -267,6 +325,20 @@ export interface EpisodeEntity {
   render_versions?: EpisodeRenderVersion[];
   created_at?: string;
   updated_at?: string;
+}
+
+export interface PlatformAccount {
+  id: string; 
+  provider: "youtube" | "facebook" | "tiktok" | "instagram" | "threads"; 
+  channel_id: string; 
+  channel_name: string; 
+  channel_avatar?: string; 
+  handle?: string;
+  access_token?: string;
+  refresh_token?: string;
+  connected_at: string; 
+  status: string;
+  expires_at?: number;
 }
 
 export interface UserEntity {
@@ -279,13 +351,62 @@ export interface UserEntity {
   api_key?: string;
   api_key_rotated_at?: string;
   two_factor_enabled?: boolean;
-  integrations?: { id: string; name: string; icon: string; connected: boolean }[];
-  connected_channels?: { id: string; provider: string; channelId: string; channelName: string; channelAvatar?: string; connectedAt: string; status: string }[];
+  integrations?: { 
+    id: string; 
+    name: string; 
+    icon: string; 
+    connected: boolean 
+  }[];
+  connected_channels?: PlatformAccount[];
   tier: 'FREE' | 'PRO' | 'ENTERPRISE';
   credits: number;
   theme?: string;
   language?: string;
   created_at?: string;
+}
+
+export interface StorageSystemConfig {
+  provider?: string;
+  bucketName?: string;
+  region?: string;
+  endpoint?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  accountId?: string;
+  publicDomain?: string;
+}
+
+export interface StudioSystemConfig {
+  s3?: StorageSystemConfig;
+  storage?: StorageSystemConfig;
+  gcs?: {
+    bucketName?: string;
+    projectId?: string;
+    clientEmail?: string;
+    privateKey?: string;
+  };
+  gemini?: {
+    textModel?: string;
+    imageModel?: string;
+    videoModel?: string;
+    apiKey?: string;
+  };
+  parallel?: Record<string, unknown>;
+  grafana?: Record<string, unknown>;
+  pixabay?: Record<string, unknown>;
+  freesound?: Record<string, unknown>;
+  pexels?: Record<string, unknown>;
+  captcha?: {
+    enabled?: boolean;
+    provider?: string;
+    siteKey?: string;
+    secretKey?: string;
+  };
+  email?: Record<string, unknown>;
+  notifications?: Record<string, unknown>;
+  cloudRun?: Record<string, unknown>;
+  pubsub?: Record<string, unknown>;
+  creditRates?: Record<string, number>;
 }
 
 export interface SystemSettingEntity {
@@ -489,12 +610,26 @@ export interface PipelineJobLog {
   message: string;
 }
 
+export interface AssetJobItem {
+  id: string;
+  name: string;
+  type: 'character' | 'wardrobe' | 'location' | 'prop' | 'storyboard' | 'video' | 'voice' | 'subtitle' | 'render' | 'bgm' | 'sfx' | string;
+  status: 'pending' | 'completed' | 'failed';
+  url?: string;
+  thumbnail?: string;
+  scene_index?: number;
+  shot_number?: number;
+  metadata?: Record<string, any>;
+  created_at?: string;
+}
+
 export interface PipelineJobStepProgress {
   status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
   progress: number;
   message?: string;
   started_at?: string;
   completed_at?: string;
+  assets?: AssetJobItem[];
 }
 
 export interface PipelineJobEntity {
@@ -658,4 +793,73 @@ export interface MasterPlanOutput {
   major_reversals: MajorReversal[];
   paywall_hooks: PaywallHook[];
   episodes: EpisodeSkeleton[];
+}
+
+export interface IProjectSettings {
+  width: number;
+  height: number;
+  fps: number;
+  duration?: number;
+  backgroundColor?: string;
+  artboardColor?: string;
+  format?: string;
+  videoCodec?: string;
+  bitrate?: number;
+  audio?: boolean;
+  audioCodec?: string;
+  audioSampleRate?: number;
+  prioritizeSpeed?: boolean;
+  [key: string]: any;
+}
+
+export interface ITrack {
+  id: string;
+  name: string;
+  type: string;
+  clipIds: string[];
+  accepts?: string[];
+  static?: boolean;
+  muted?: boolean;
+  visible?: boolean;
+  languageCode?: string;
+  config?: any;
+  [key: string]: any;
+}
+
+export interface IProject {
+  settings: IProjectSettings;
+  tracks: ITrack[];
+  clips: Record<string, any>;
+  [key: string]: any;
+}
+
+export interface TimelineSnapshotVersion {
+  version_id: string;
+  version_number: number;
+  author?: { userId?: string; name?: string; avatar?: string };
+  change_summary?: string;
+  created_at: string;
+  timeline_data: IProject;
+}
+
+export interface TimelineSnapshotHistoryItem {
+  version_id: string;
+  version_number: number;
+  label?: string;
+  author?: {
+    userId?: string;
+    name?: string;
+    avatar?: string;
+  };
+  change_summary?: string;
+  created_at: string;
+}
+
+export interface RestoreTimelineResult {
+  success: boolean;
+  restored_from_version_id: string;
+  new_version_id: string;
+  new_version_number: number;
+  active_timeline: IProject;
+  created_at: string;
 }

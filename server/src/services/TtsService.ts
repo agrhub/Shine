@@ -7,7 +7,8 @@ export interface TTSRequest {
   voiceId: string;
   language?: string;
   speed?: number;
-  tone?: string;
+  emotion?: string;
+  speech_tone?: string;
 }
 
 /**
@@ -69,7 +70,12 @@ export class TTSService {
 
     try {
       // Generate voice synthesis via AIProviderRouter (auto routes ElevenLabs or Gemini Native Audio)
-      const audioResult = await aiProviderRouter.generateAudio(req.text, req.voiceId);
+      const audioResult = await aiProviderRouter.generateAudio(req.text, req.voiceId, {
+        emotion: req.emotion,
+        speech_tone: req.speech_tone,
+        speed: req.speed,
+        language: req.language,
+      });
 
       if (audioResult?.url && (audioResult.url.startsWith('http') || audioResult.url.startsWith('data:'))) {
         // Calculate exact audio duration from buffer headers
