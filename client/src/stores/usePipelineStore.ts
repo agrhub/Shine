@@ -10,8 +10,9 @@ import { generateCaptionClips } from '@/utils/caption-generator';
 
 import { normalizeTransitionKey } from '@/constants/transitions';
 import { normalizeEffectKey } from '@/constants/effects';
+import { useWebSocket } from '@/composables/useWebSocket';
 import { VoicePreset } from '@/types';
-import { CaptionCue, CaptionsData, Character, LocationAsset, PipelineStep, PropAsset, Scene, SceneRenderStatus, StepStatus } from '@/types/api';
+import { AssetJobItem, CaptionCue, CaptionsData, Character, LocationAsset, PipelineStep, PropAsset, Scene, SceneDialogue, SceneRenderStatus, StepStatus } from '@/types/api';
 export { normalizeTransitionKey, normalizeEffectKey };
 
 export const usePipelineStore = defineStore('pipeline', () => {
@@ -283,8 +284,6 @@ export const usePipelineStore = defineStore('pipeline', () => {
       if (url) {
         updateSceneStatus(sceneIndex, { bg_status: 'done', storyboard_url: url });
         seriesStore.updateSceneStoryboard(epId, sceneIndex, url);
-        // Auto-save scene assets immediately
-        if (sId) await seriesStore.saveEpisodeScenes(sId, epId);
         if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pipeline-asset-updated'));
       } else {
         updateSceneStatus(sceneIndex, { bg_status: 'done' });
@@ -414,7 +413,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
           // if the new matched cast is the same as the old one, it means the avatar is not rendered
           referenceAvatar = matchedCast?.avatar || '';
           if (!matchedCast || !referenceAvatar) {
-            toast.error(`Failed to render avatar for character ${char.name}`);
+            toast.error(i18n.global.t('toast.renderAvatarFailed', { name: char.name }));
             hasError = true;
             continue;
           }
@@ -620,9 +619,6 @@ export const usePipelineStore = defineStore('pipeline', () => {
           // });
         }
 
-        // Auto-save immediately
-        const sId = seriesStore.currentSeries?.id;
-        if (sId) await seriesStore.saveEpisodeScenes(sId, epId);
         if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pipeline-asset-updated'));
       } else {
         updateSceneStatus(sceneIndex, { video_status: 'done' });
@@ -674,10 +670,10 @@ export const usePipelineStore = defineStore('pipeline', () => {
   // ─── Scene Voiceover Render ─────────────────────────────────────────────
   async function renderSceneVoiceover(
     sceneIndex: number,
-    dialogue: any[],
+    dialogue: SceneDialogue[],
     voicePreset: string,
     intensity: number,
-    speed: number,
+    speed?: number,
     languageCode?: string,
   ) {
     const epId = seriesStore.activeEpisodeId;
@@ -690,15 +686,20 @@ export const usePipelineStore = defineStore('pipeline', () => {
     currentRenderingMessage.value = `Generating Voiceover for Scene ${sceneIndex}`;
     currentRenderingPercent.value = 50;
 
+    const dialogueSpeed = Array.isArray(dialogue)
+      ? dialogue.find((d: SceneDialogue) => typeof d.speed === 'number' && d.speed > 0)?.speed
+      : undefined;
+    const effectiveSpeed = speed ?? dialogueSpeed ?? 1.0;
+
     try {
-      const text = dialogue.map((d: any) => `${d.character}: ${d.line}`).join('\n');
+      const text = dialogue.map((d: SceneDialogue) => `${d.character}: ${d.line}`).join('\n');
       const res: any = await http.post('/voices/tts', {
         episode_id: epId,
         scene_index: sceneIndex,
         text,
         voice_id: voicePreset,
         intensity,
-        speed,
+        speed: effectiveSpeed,
         dialogue,
         language: languageCode || seriesStore.currentSeries?.country || 'en-US',
       });
@@ -717,9 +718,6 @@ export const usePipelineStore = defineStore('pipeline', () => {
         const currentScene = allScenes.find((s: Scene) => s.index === sceneIndex) || { index: sceneIndex, dialogue };
         await syncSceneVoiceoverAndCaptionsToTimeline(sceneIndex, url, res?.data?.cues || dialogue, currentScene);
 
-        // Auto-save immediately
-        const sId = seriesStore.currentSeries?.id;
-        if (sId) await seriesStore.saveEpisodeScenes(sId, epId);
         if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pipeline-asset-updated'));
       } else {
         updateSceneStatus(sceneIndex, { voiceover_status: 'done' });
@@ -760,10 +758,14 @@ export const usePipelineStore = defineStore('pipeline', () => {
 
       for (let i = 0; i < scenes.length; i++) {
         const scene = scenes[i];
+        const sceneDialogue = scene.dialogue || [];
+        const sceneSpeed = Array.isArray(scene.dialogue)
+          ? scene.dialogue.find((d: SceneDialogue) => typeof d.speed === 'number' && d.speed > 0)?.speed ?? speed
+          : speed;
         currentRenderingScene.value = scene.index;
         currentRenderingMessage.value = `Generating Voiceover (${languageCode}) Scene ${scene.index} (${i + 1}/${total})`;
         currentRenderingPercent.value = Math.round(((i + 1) / total) * 100);
-        try { await renderSceneVoiceover(scene.index, scene.dialogue, trackVoice, intensity, speed, languageCode); }
+        try { await renderSceneVoiceover(scene.index, sceneDialogue, trackVoice, intensity, sceneSpeed, languageCode); }
         catch { hasError = true; }
       }
       setStepStatus('b4', hasError ? 'error' : 'done');
@@ -782,10 +784,14 @@ export const usePipelineStore = defineStore('pipeline', () => {
 
       for (let i = 0; i < scenes.length; i++) {
         const scene = scenes[i];
+        const sceneDialogue = scene.dialogue || [];
+        const sceneSpeed = Array.isArray(scene.dialogue)
+          ? scene.dialogue.find((d: SceneDialogue) => typeof d.speed === 'number' && d.speed > 0)?.speed ?? speed
+          : speed;
         currentRenderingScene.value = scene.index;
         currentRenderingMessage.value = `Generating Voiceover Scene ${scene.index} (${i + 1}/${total})`;
         currentRenderingPercent.value = Math.round(((i + 1) / total) * 100);
-        try { await renderSceneVoiceover(scene.index, scene.dialogue, voicePreset, intensity, speed); }
+        try { await renderSceneVoiceover(scene.index, sceneDialogue, voicePreset, intensity, sceneSpeed); }
         catch { hasError = true; }
       }
       setStepStatus('b4', hasError ? 'error' : 'done');
@@ -893,7 +899,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
       const scenesToTranslate = scenes.map((s: Scene) => ({
         sceneIndex: s.index,
         dialogue: Array.isArray(s.dialogue)
-          ? s.dialogue.map((d: any) => `${d.character}: ${d.line}`).join('\n')
+          ? s.dialogue.map((d: any) => d.line || d.text || '').filter(Boolean).join(' ')
           : (s.dialogue || ''),
       })).filter((s: any) => s.dialogue.trim().length > 0);
 
@@ -905,18 +911,16 @@ export const usePipelineStore = defineStore('pipeline', () => {
           scenes: scenesToTranslate,
         });
 
-        const translatedScenes = batchRes?.data?.translated_scenes || batchRes?.data?.translatedScenes || batchRes?.translated_scenes || [];
+        const translatedScenes: Array<{ scene_index: number; translated_dialogue: string }> = batchRes?.data?.translated_scenes || [];
         const transMap = new Map<number, string>();
-        translatedScenes.forEach((ts: any) => {
-          const sIdx = ts.scene_index ?? ts.sceneIndex;
-          const diag = ts.translated_dialogue ?? ts.translatedDialogue;
-          if (sIdx !== undefined) {
-            transMap.set(sIdx, diag);
+        translatedScenes.forEach((ts) => {
+          if (ts.scene_index !== undefined) {
+            transMap.set(ts.scene_index, ts.translated_dialogue);
           }
         });
 
         for (const scene of scenes) {
-          const translated = transMap.get(scene.index) || (Array.isArray(scene.dialogue) ? scene.dialogue.map((d: any) => d.line).join(' ') : (scene.dialogue || ''));
+          const translated = transMap.get(scene.index) || (Array.isArray(scene.dialogue) ? scene.dialogue.map((d: SceneDialogue) => d.line).join(' ') : (scene.dialogue || ''));
           if (!translated) continue;
 
           const sourceCues: CaptionsData[] = (translateFrom ? scene.translations?.[translateFrom]?.captions_data : scene.captions_data) || scene.captions_data || [];
@@ -978,7 +982,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
         currentRenderingMessage.value = `Generating Captions (${langCode}) Scene ${scene.index} (${sIdx + 1}/${total})`;
         currentRenderingPercent.value = Math.round(((sIdx + 1) / total) * 100);
         try {
-          const dialogueText = (scene.dialogue || []).map((d: any) => `${d.character}: ${d.line}`).join('\n');
+          const dialogueText = (scene.dialogue || []).map((d: any) => d.line || d.text || '').filter(Boolean).join(' ');
           if (!dialogueText) continue;
 
           const res: any = await http.post('/captions/auto-generate', {
@@ -997,7 +1001,6 @@ export const usePipelineStore = defineStore('pipeline', () => {
 
           updateSceneStatus(scene.index, { caption_status: 'done' });
           seriesStore.updateLanguageTrackCaptions(epId, langCode, scene.index, cues);
-          if (sId) await seriesStore.saveEpisodeScenes(sId, epId);
           if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pipeline-asset-updated'));
         } catch (err) {
           console.warn(`[generateCaptionsForLanguage] scene ${scene.index} failed:`, err);
@@ -1007,7 +1010,6 @@ export const usePipelineStore = defineStore('pipeline', () => {
 
     setStepStatus('b5', 'done');
     isRendering.value = false;
-    if (sId) await seriesStore.saveEpisodeScenes(sId, epId);
   }
 
   // Sync captions (legacy path: flat array of cues with sceneIndex)
@@ -1150,267 +1152,19 @@ export const usePipelineStore = defineStore('pipeline', () => {
   }
 
   async function syncSceneVoiceoverAndCaptionsToTimeline(
-    sceneIndex: number,
-    audioUrl: string,
-    cues: any[],
-    scene: any,
-    words?: any[],
-    explicitVoiceStartUs?: number,
-    explicitVoiceDurationUs?: number
+    _sceneIndex: number,
+    _audioUrl: string,
+    _cues: any[],
+    _scene: any,
+    _words?: any[],
+    _explicitVoiceStartUs?: number,
+    _explicitVoiceDurationUs?: number
   ) {
     try {
       const epId = seriesStore.activeEpisodeId;
-      if (!epId) return;
-      const state = core.store.getState();
-      const clips = { ...(state.clips || {}) };
-      const tracks = [ ...(state.tracks || []) ];
-
-      // Find video clip for this scene to locate starting timestamp
-      const vClipId = `clip_v_${epId}_s${sceneIndex}`;
-      const vClip: any = clips[vClipId] || Object.values(clips).find((c: any) =>
-        c.id === vClipId || ((c.type === 'Video' || c.type === 'Image') && (c.name?.includes(`Scene ${sceneIndex}`) || c.label?.includes(`Scene ${sceneIndex}`)))
-      );
-      const sceneFromUs = vClip?.timing?.display?.from ?? (vClip?.display?.from ?? 0);
-      const sceneDurationUs = vClip?.timing?.duration ?? (vClip?.duration ?? Math.round((Number(scene.duration_seconds || scene.durationSeconds) || 6) * 1_000_000));
-
-      const rawCues = Array.isArray(cues) && cues.length > 0 ? cues : (scene.dialogue || []);
-      if (!audioUrl && rawCues.length === 0) {
-        return;
-      }
-
-      // Build normalized Deepgram words array
-      let wordsList: any[] = [];
-      if (Array.isArray(words) && words.length > 0) {
-        wordsList = words;
-      } else if (Array.isArray(rawCues) && rawCues.length > 0) {
-        rawCues.forEach((c: any) => {
-          const cueStartSec = (c.fromUs !== undefined && c.fromUs > 100_000)
-            ? (c.fromUs / 1_000_000)
-            : (c.startMs !== undefined ? c.startMs / 1000 : 0);
-          if (Array.isArray(c.words) && c.words.length > 0) {
-            c.words.forEach((w: any) => {
-              const divisor = (w.from > 20000 || w.to > 20000) ? 1000 : 1;
-              wordsList.push({
-                word: (w.text || w.word || '').toLowerCase(),
-                punctuated_word: w.text || w.word || '',
-                start: cueStartSec + (w.from || 0) / divisor / 1000,
-                end: cueStartSec + (w.to || ((w.from || 0) + 300)) / divisor / 1000,
-                confidence: 0.98,
-              });
-            });
-          } else if (c.text || c.line) {
-            const cueDurSec = (c.durationUs && c.durationUs > 100_000)
-              ? (c.durationUs / 1_000_000)
-              : (c.durationMs ? c.durationMs / 1000 : 2);
-            wordsList.push({
-              word: (c.text || c.line || '').toLowerCase(),
-              punctuated_word: c.text || c.line || '',
-              start: cueStartSec,
-              end: cueStartSec + cueDurSec,
-              confidence: 0.98,
-            });
-          }
-        });
-      }
-
-      // Calculate exact dialogue voiceover duration without stretching/repeating
-      let voiceStartUs = explicitVoiceStartUs !== undefined && explicitVoiceStartUs >= 0
-        ? explicitVoiceStartUs
-        : (wordsList.length > 0 ? Math.round(wordsList[0].start * 1_000_000) : 200_000);
-      let voiceDurationUs = explicitVoiceDurationUs !== undefined && explicitVoiceDurationUs > 0
-        ? explicitVoiceDurationUs
-        : (wordsList.length > 0
-            ? Math.max(500_000, Math.round((wordsList[wordsList.length - 1].end - wordsList[0].start) * 1_000_000))
-            : Math.min(sceneDurationUs - voiceStartUs, 3_000_000));
-
-      voiceDurationUs = Math.min(sceneDurationUs - voiceStartUs, Math.max(100_000, voiceDurationUs));
-
-      // 1. Sync Voiceover Audio Track
-      if (audioUrl) {
-        let voiceTrack = tracks.find((t: any) => t.id === 'track_voiceover_main' || (t.type === 'Audio' && t.name?.toLowerCase().includes('voice')));
-        if (!voiceTrack) {
-          voiceTrack = {
-            id: 'track_voiceover_main',
-            name: '🎙 Voiceover Track',
-            type: 'Audio',
-            clipIds: [],
-          };
-          tracks.push(voiceTrack);
-        }
-
-        const aClipId = `clip_a_voice_${epId}_s${sceneIndex}`;
-        if (!voiceTrack.clipIds.includes(aClipId)) {
-          voiceTrack.clipIds.push(aClipId);
-        }
-
-        clips[aClipId] = {
-          id: aClipId,
-          type: 'Audio',
-          name: `${rawCues[0]?.character || 'Voice'}: ${rawCues[0]?.text || rawCues[0]?.line || ''}`,
-          src: audioUrl,
-          timing: {
-            display: { from: sceneFromUs + voiceStartUs, to: sceneFromUs + voiceStartUs + voiceDurationUs },
-            trim: { from: 0, to: voiceDurationUs },
-            duration: voiceDurationUs,
-            playbackRate: 1,
-          },
-          volume: 1,
-          style: {},
-          locked: false,
-          effects: [],
-          animations: [],
-        } as any;
-      }
-
-      // 2. Sync Captions Track
-      let captionTrack: any = tracks.find((t: any) => t.id === 'track_captions_main' || t.type === 'Caption' || t.type === 'caption');
-      if (!captionTrack) {
-        const captionConfig = {
-          captions: {
-            style: {
-              fontSize: 44,
-              fontFamily: 'Inter',
-              fontWeight: '700',
-              fontStyle: 'normal',
-              color: '#ffffff',
-              align: 'center',
-              wordWrap: true,
-              wordWrapWidth: Math.round(1080 * 0.86),
-              breakWords: true,
-              fontUrl: 'https://fonts.gstatic.com/s/inter/v20/UcCo3FwrK3iLTcvtYwYL8g.woff2',
-              stroke: {
-                color: '#000000',
-                width: 4,
-              },
-              shadow: {
-                color: '#000000',
-                alpha: 0.6,
-                blur: 4,
-                offsetX: 2,
-                offsetY: 2,
-              },
-            },
-            colors: {
-              active: {
-                color: '#ffffff',
-                background: '#FF5700',
-              },
-              future: {
-                color: '#ffffff',
-              },
-              keyword: {
-                color: '#ffffff',
-                preserveAfterSpoken: true,
-              },
-            },
-            positioning: {
-              videoWidth: 1080,
-              videoHeight: 1920,
-            },
-            wordsPerLine: 'multiple',
-          },
-        };
-
-        captionTrack = {
-          id: 'track_captions_main',
-          name: '💬 Subtitles / Captions',
-          type: 'caption',
-          clipIds: [],
-          accepts: ['caption'],
-          config: captionConfig,
-          captions: captionConfig.captions,
-        } as any;
-        tracks.unshift(captionTrack);
-      } else {
-        // Move captionTrack to the very top (index 0) if not already there
-        const capIdx = tracks.indexOf(captionTrack);
-        if (capIdx > 0) {
-          tracks.splice(capIdx, 1);
-          tracks.unshift(captionTrack);
-        }
-      }
-
-      const settings = state.settings || { width: 1080, height: 1920 };
-      const videoWidth = settings.width || 1080;
-      const videoHeight = settings.height || 1920;
-
-      if (wordsList.length > 0) {
-        const captionTrackStyle = captionTrack?.config?.captions?.style || {};
-        const captionClipsJSON = await generateCaptionClips({
-          videoWidth,
-          videoHeight,
-          words: wordsList,
-          fontSize: captionTrackStyle.fontSize || 44,
-          fontFamily: captionTrackStyle.fontFamily || 'Inter',
-          style: {
-            ...captionTrackStyle,
-            wordWrap: true,
-            wordWrapWidth: Math.round(videoWidth * 0.86),
-            breakWords: true,
-          },
-        });
-
-        captionClipsJSON.forEach((json: any, cIdx: number) => {
-          const cClipId = `clip_cap_${epId}_s${sceneIndex}_${cIdx + 1}`;
-          if (!captionTrack.clipIds.includes(cClipId)) {
-            captionTrack.clipIds.push(cClipId);
-          }
-
-          const cueFromUs = json.timing.display.from + sceneFromUs;
-          const cueToUs = Math.min(sceneFromUs + sceneDurationUs - 50_000, json.timing.display.to + sceneFromUs);
-          const cueDurationUs = cueToUs - cueFromUs;
-
-          const defaultTop = captionTrackStyle.verticalAlign === 'top'
-            ? 80
-            : captionTrackStyle.verticalAlign === 'center'
-              ? Math.round((videoHeight - (json.height || 100)) / 2)
-              : videoHeight - 450;
-
-          clips[cClipId] = {
-            ...json,
-            id: cClipId,
-            name: 'Caption',
-            mediaId: vClipId,
-            metadata: {
-              ...json.metadata,
-              sourceClipId: vClipId,
-            },
-            timing: {
-              display: { from: cueFromUs, to: cueToUs },
-              trim: { from: 0, to: cueDurationUs },
-              duration: cueDurationUs,
-              playbackRate: 1,
-            },
-            style: {
-              color: '#ffffff',
-              align: 'center',
-              // ...(captionTrackStyle || {}),
-            },
-            locked: false,
-            effects: [],
-            animations: [],
-            wordsPerLine: '',
-            transform: {
-              x: json.left ?? Math.round((videoWidth - (json.width || Math.round(videoWidth * 0.88))) / 2),
-              y: json.top ?? defaultTop,
-              width: json.width ?? Math.round(videoWidth * 0.88),
-              height: json.height ?? 100,
-              angle: 0,
-              opacity: 1,
-              zIndex: 10,
-              flip: {
-                x: false,
-                y: false,
-              },
-            },
-          };
-        });
-      }
-
-      core.store.setState({ ...state, clips, tracks });
-      await saveCurrentTimeline(`Scene ${sceneIndex} voiceover & captions synced`);
+      await seriesStore.loadEpisodeTimeline(epId, true);
     } catch (e) {
-      console.warn('[usePipelineStore] Failed to sync voiceover/captions to timeline:', e);
+      console.warn('[usePipelineStore] Failed to reload synchronized timeline:', e);
     }
   }
 
@@ -1515,9 +1269,6 @@ export const usePipelineStore = defineStore('pipeline', () => {
       await saveCurrentTimeline(`Scene ${sceneIndex} BGM and audio synced`);
     }
 
-    // Auto-save immediately
-    const sId = seriesStore.currentSeries?.id;
-    if (sId) await seriesStore.saveEpisodeScenes(sId, epId);
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pipeline-asset-updated'));
   }
 
@@ -1553,26 +1304,48 @@ export const usePipelineStore = defineStore('pipeline', () => {
   // ─── Background Job Tracking & Engine ─────────────────────────────────────
   const activeJobs = ref<any[]>([]);
   const isJobsLoading = ref(false);
-  let jobPollingTimer: any = null;
+  let isPollingBusy = false;
+  let currentPollAbortController: AbortController | null = null;
+  let jobPollingTimeout: any = null;
+  let isPollingActive = false;
 
-  const activeJob = computed(() => activeJobs.value.find(j => j.status === 'running' || j.status === 'queued') || null);
+  const isJobRunning = computed(() => activeJobs.value.some(j => j.status === 'running' || j.status === 'queued'));
+  const activeJob = computed(() => activeJobs.value.find(j => j.status === 'running' || j.status === 'queued') || activeJobs.value[0] || null);
 
   async function fetchActiveJobs(seriesId?: string, episodeId?: string) {
-    const sid = seriesId || seriesStore.currentSeries?.id;
+    if (isPollingBusy) {
+      return activeJobs.value;
+    }
+    isPollingBusy = true;
+    isJobsLoading.value = activeJobs.value.length === 0;
+
+    const sid = seriesId !== undefined ? seriesId : (seriesStore.currentSeries?.id || 'all');
     const eid = episodeId || seriesStore.activeEpisode?.id || seriesStore.activeEpisodeId;
-    if (!sid) return [];
+
+    if (currentPollAbortController) {
+      currentPollAbortController.abort();
+    }
+    currentPollAbortController = new AbortController();
+
     try {
       const res: any = await http.get('/jobs/active', {
         params: { series_id: sid, episode_id: eid },
+        // signal: currentPollAbortController.signal,
+        timeout: 60000,
       });
       const data = res?.data || res;
       if (data && Array.isArray(data.jobs)) {
         activeJobs.value = data.jobs;
       }
       return activeJobs.value;
-    } catch (err) {
-      console.warn('[usePipelineStore] Error fetching active jobs:', err);
-      return [];
+    } catch (err: any) {
+      if (err?.name !== 'CanceledError' && err?.name !== 'AbortError' && err?.code !== 'ERR_CANCELED') {
+        console.warn('[usePipelineStore] Error fetching active jobs:', err?.message || err);
+      }
+      return activeJobs.value;
+    } finally {
+      isPollingBusy = false;
+      isJobsLoading.value = false;
     }
   }
 
@@ -1580,7 +1353,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
     const seriesId = seriesStore.currentSeries?.id;
     const episodeId = seriesStore.activeEpisode?.id || seriesStore.activeEpisodeId;
     if (!seriesId || !episodeId) {
-      toast.error('Series or Episode not loaded');
+      toast.error(i18n.global.t('toast.seriesOrEpisodeNotLoaded'));
       return null;
     }
 
@@ -1608,38 +1381,206 @@ export const usePipelineStore = defineStore('pipeline', () => {
   async function cancelBackgroundJob(jobId: string) {
     try {
       await http.post(`/jobs/${jobId}/cancel`);
-      toast.info('Pipeline job cancelled');
-      const sid = seriesStore.currentSeries?.id;
+      toast.info(i18n.global.t('toast.jobCancelled'));
+      const sid = seriesStore.currentSeries?.id || 'all';
       const eid = seriesStore.activeEpisode?.id || seriesStore.activeEpisodeId;
-      if (sid && eid) await fetchActiveJobs(sid, eid);
+      await fetchActiveJobs(sid, eid);
     } catch (err: any) {
-      toast.error('Failed to cancel job');
+      toast.error(i18n.global.t('toast.cancelJobFailed'));
     }
   }
 
-  function startJobPolling(seriesId?: string, episodeId?: string, intervalMs = 4000) {
-    stopJobPolling();
-    const sid = seriesId || seriesStore.currentSeries?.id;
-    const eid = episodeId || seriesStore.activeEpisode?.id || seriesStore.activeEpisodeId;
-    if (!sid || !eid) return;
+  async function deleteBackgroundJob(jobId: string) {
+    try {
+      await http.delete(`/jobs/${jobId}`);
+      activeJobs.value = activeJobs.value.filter((j) => j.id !== jobId);
+      toast.success(i18n.global.t('toast.taskRemoved'));
+      const sid = seriesStore.currentSeries?.id || 'all';
+      const eid = seriesStore.activeEpisode?.id || seriesStore.activeEpisodeId;
+      await fetchActiveJobs(sid, eid);
+    } catch (err: any) {
+      toast.error(i18n.global.t('toast.deleteTaskFailed'));
+    }
+  }
 
-    fetchActiveJobs(sid, eid);
-    jobPollingTimer = setInterval(async () => {
-      const jobs = await fetchActiveJobs(sid, eid);
-      const hasRunning = jobs.some(j => j.status === 'running' || j.status === 'queued');
-      if (!hasRunning) {
-        // Refresh episode data when job completes
-        seriesStore.loadWorkspaceData(sid);
-        stopJobPolling();
+  async function retryJob(job: any) {
+    if (!job) return;
+    const type = job.type || 'full_pipeline';
+    if (type.startsWith('step_')) {
+      const stepKey = type.replace('step_', '');
+      await retryPipelineStep(stepKey);
+    } else {
+      await startBackgroundPipeline({ forceRegenerate: true, type });
+    }
+  }
+
+  async function retryPipelineStep(stepKey: string) {
+    const seriesId = seriesStore.currentSeries?.id;
+    const episodeId = seriesStore.activeEpisode?.id || seriesStore.activeEpisodeId;
+    if (!seriesId || !episodeId) {
+      toast.error(i18n.global.t('toast.seriesOrEpisodeNotSelected'));
+      return null;
+    }
+
+    try {
+      toast.info(i18n.global.t('toast.retryingStep', { step: stepKey.toUpperCase() }));
+      const res: any = await http.post('/jobs/retry-step', {
+        series_id: seriesId,
+        episode_id: episodeId,
+        step: stepKey,
+      });
+      const data = res?.data || res;
+      if (data?.job) {
+        await fetchActiveJobs(seriesId, episodeId);
+        startJobPolling(seriesId, episodeId);
+        toast.success(i18n.global.t('toast.stepRetryJobStarted', { step: stepKey.toUpperCase() }));
+        return data.job;
       }
-    }, intervalMs);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Failed to retry step');
+      return null;
+    }
+  }
+
+  async function retrySingleAsset(asset: AssetJobItem) {
+    const seriesId = seriesStore.currentSeries?.id;
+    const episodeId = seriesStore.activeEpisode?.id || seriesStore.activeEpisodeId;
+    if (!seriesId || !episodeId) {
+      toast.error(i18n.global.t('toast.seriesOrEpisodeNotSelected'));
+      return null;
+    }
+
+    try {
+      toast.info(i18n.global.t('toast.regeneratingAsset', { name: asset.name }));
+      const res: any = await http.post('/jobs/retry-asset', {
+        series_id: seriesId,
+        episode_id: episodeId,
+        asset_type: asset.type,
+        asset_id: asset.id,
+        scene_index: asset.scene_index,
+        name: asset.name,
+      });
+      const data = res?.data || res;
+      toast.success(res?.message || `Asset "${asset.name}" regenerated`);
+      await fetchActiveJobs(seriesId, episodeId);
+      startJobPolling(seriesId, episodeId);
+      await seriesStore.loadWorkspaceData(seriesId);
+      return data;
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Failed to retry asset');
+      return null;
+    }
+  }
+
+  let socketListenersInitialized = false;
+  function initJobSocketListeners() {
+    if (socketListenersInitialized) return;
+    socketListenersInitialized = true;
+    try {
+      const { onPipelineJobUpdated, onPipelineJobCompleted, onEpisodeUpdated } = useWebSocket();
+      onPipelineJobUpdated((updatedJob: any) => {
+        if (!updatedJob?.id) return;
+        const idx = activeJobs.value.findIndex(j => j.id === updatedJob.id);
+        if (idx >= 0) {
+          activeJobs.value[idx] = updatedJob;
+          activeJobs.value = [...activeJobs.value];
+        } else {
+          activeJobs.value = [updatedJob, ...activeJobs.value];
+        }
+        const sid = seriesStore.currentSeries?.id;
+        const eid = seriesStore.activeEpisode?.id || seriesStore.activeEpisodeId;
+        if (sid && eid) {
+          syncStepStatusesWithEpisode(seriesStore.activeEpisode, seriesStore.charactersList);
+          window.dispatchEvent(new CustomEvent('pipeline-asset-updated'));
+        }
+      });
+
+      onPipelineJobCompleted((completedJob: any) => {
+        if (!completedJob?.id) return;
+        const idx = activeJobs.value.findIndex(j => j.id === completedJob.id);
+        if (idx >= 0) {
+          activeJobs.value[idx] = completedJob;
+          activeJobs.value = [...activeJobs.value];
+        } else {
+          activeJobs.value = [completedJob, ...activeJobs.value];
+        }
+        const sid = seriesStore.currentSeries?.id;
+        const eid = seriesStore.activeEpisode?.id || seriesStore.activeEpisodeId;
+        if (sid) {
+          seriesStore.loadWorkspaceData(sid).then(() => {
+            if (eid) {
+              seriesStore.loadEpisodeScript(sid, eid);
+            }
+            window.dispatchEvent(new CustomEvent('pipeline-asset-updated'));
+          });
+        }
+      });
+
+      onEpisodeUpdated((latestEp: any) => {
+        if (latestEp?.id) {
+          const idx = seriesStore.episodesList.findIndex((ep: any) => ep.id === latestEp.id);
+          if (idx >= 0) {
+            seriesStore.episodesList[idx] = latestEp;
+            seriesStore.episodesList = [...seriesStore.episodesList];
+          } else {
+            seriesStore.episodesList.push(latestEp);
+          }
+          if (latestEp.id === seriesStore.activeEpisodeId) {
+            syncStepStatusesWithEpisode(latestEp, seriesStore.charactersList);
+            window.dispatchEvent(new CustomEvent('pipeline-asset-updated'));
+          }
+        }
+      });
+    } catch (err) {
+      console.warn('[usePipelineStore] WebSocket listeners init notice:', err);
+    }
+  }
+
+  function startJobPolling(seriesId?: string, episodeId?: string, intervalMs = 60000) {
+    initJobSocketListeners();
+    stopJobPolling();
+    isPollingActive = true;
+
+    const sid = seriesId !== undefined ? seriesId : (seriesStore.currentSeries?.id || 'all');
+    const eid = episodeId || seriesStore.activeEpisode?.id || seriesStore.activeEpisodeId;
+
+    async function pollTick() {
+      if (!isPollingActive) return;
+      const currentSid = seriesStore.currentSeries?.id || sid || 'all';
+      const currentEid = seriesStore.activeEpisode?.id || seriesStore.activeEpisodeId || eid;
+
+      try {
+        const jobs = await fetchActiveJobs(currentSid, currentEid);
+        const runningJob = jobs.find((j: any) => j.status === 'running' || j.status === 'queued');
+        if (runningJob && seriesStore.activeEpisode) {
+          syncStepStatusesWithEpisode(seriesStore.activeEpisode, seriesStore.charactersList);
+        }
+      } catch (err) {
+        console.warn('[usePipelineStore] Polling tick notice:', err);
+      } finally {
+        if (isPollingActive) {
+          const hasRunning = activeJobs.value.some((j: any) => j.status === 'running' || j.status === 'queued');
+          const delay = hasRunning ? intervalMs : Math.max(intervalMs * 2.5, 10000);
+          jobPollingTimeout = setTimeout(pollTick, delay);
+        }
+      }
+    }
+
+    // Launch first poll immediately
+    pollTick();
   }
 
   function stopJobPolling() {
-    if (jobPollingTimer) {
-      clearInterval(jobPollingTimer);
-      jobPollingTimer = null;
+    isPollingActive = false;
+    if (jobPollingTimeout) {
+      clearTimeout(jobPollingTimeout);
+      jobPollingTimeout = null;
     }
+    if (currentPollAbortController) {
+      currentPollAbortController.abort();
+      currentPollAbortController = null;
+    }
+    isPollingBusy = false;
   }
 
   // ─── Reset ────────────────────────────────────────────────────────────────
@@ -1693,10 +1634,15 @@ export const usePipelineStore = defineStore('pipeline', () => {
     separateSceneAudio,
     activeJobs,
     activeJob,
+    isJobRunning,
     isJobsLoading,
     fetchActiveJobs,
     startBackgroundPipeline,
     cancelBackgroundJob,
+    deleteBackgroundJob,
+    retryJob,
+    retryPipelineStep,
+    retrySingleAsset,
     startJobPolling,
     stopJobPolling,
     resetAll,

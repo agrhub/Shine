@@ -10,7 +10,7 @@ import { useStudioStore } from '@/composables/useStudioStore';
 import { usePlaybackStore } from '@/composables/usePlaybackStore';
 import { core } from '@/utils/project';
 import { toast } from 'vue-sonner';
-import { ElMessageBox } from 'element-plus';
+import { ElMessageBox, ElLoading } from 'element-plus';
 import { Bot } from 'lucide-vue-next';
 import http from '@/utils/http';
 
@@ -29,6 +29,8 @@ import Chatbot from './workspace/Chatbot.vue';
 import ExportModal from '@/components/editor/ExportModal.vue';
 import CountryFlag from '@/components/common/CountryFlag.vue';
 import JobStatusPopover from '@/components/workspace/JobStatusPopover.vue';
+import SeriesMasterPlanDialog from '@/components/workspace/SeriesMasterPlanDialog.vue';
+import BulkExportPublishDialog from '@/components/workspace/BulkExportPublishDialog.vue';
 import { getLanguageByCode } from '@/constants/geminiLanguages';
 import { nextTick } from 'vue';
 import { data, sanitizeTimelineData } from '@/components/editor/data';
@@ -64,6 +66,14 @@ const renderReviewUrl = ref('');         // URL of the rendered video for review
 const renderReviewOutputs = ref<Record<string, string>>({});
 const renderReviewSelectedLang = ref<string>('en-US');
 const renderReviewThumbnail = ref('');
+
+// Series Master Plan & Bulk Publish Dialogs
+const isSeriesInfoModalOpen = ref(false);
+const isBulkPublishModalOpen = ref(false);
+
+function triggerBulkPublish() {
+  isBulkPublishModalOpen.value = true;
+}
 
 // Watch active language to switch voiceover and caption tracks on OpenVideo Core
 watch(() => seriesStore.activeLanguageCode, (activeLang) => {
@@ -248,7 +258,7 @@ async function runPipelineStep(stepId: string) {
       // Server-side render available via the "Queue Server Render" button in the modal
       isExportModalOpen.value = true;
       // Don't mark done yet — wait for export to complete
-      return;
+      // return;
     } else if (stepId === 'b7') {
       await saveAllWorkspaceData();
       toast.success(t('toast.b7TimelineSaved'));
@@ -414,34 +424,67 @@ function getCanvasDimensionsForRatio(ratio?: string): { width: number; height: n
 // 4. Load Episode Timeline into OpenVideo Core with Concurrency Guard
 let loadingTimelinePromise: Promise<void> | null = null;
 let lastLoadedEpisodeId = '';
+const isReanalyzingScreenplay = ref(false);
 
-async function loadEpisodeTimeline(epId: string, silent = false) {
+async function reanalyzeEpisodeScreenplay() {
+  const epId = activeEpisodeId.value;
+  const sId = seriesId.value;
+  if (!epId || !sId) return;
+
+  const ep = seriesStore.activeEpisode;
+  const screenplayText = ep?.screenplay || ep?.script || seriesStore.activeScript?.screenplay || '';
+  if (!screenplayText.trim()) {
+    toast.error(t('workspace.noScriptToAnalyze'));
+    return;
+  }
+
+  const targetDur = Number(seriesStore.currentSeries?.episode_duration) || 60;
+  const currentScenes = ep?.scenes || seriesStore.activeScript?.scenes || [];
+
+  isReanalyzingScreenplay.value = true;
+  const loadingInstance = ElLoading.service({
+    text: t('workspace.reanalyzingScreenplay'),
+    background: 'rgba(0, 0, 0, 0.7)',
+  });
+
+  try {
+    await http.post('/assets/screenplay/analyze', {
+      series_id: sId,
+      episode_id: epId,
+      screenplay: screenplayText,
+      target_duration_seconds: targetDur,
+      country: seriesStore.currentSeries?.country,
+      language: seriesStore.currentSeries?.language,
+      existing_scenes: currentScenes,
+      existing_characters: seriesStore.charactersList,
+      existing_locations: ep?.locations || seriesStore.currentSeries?.locations,
+      existing_props: ep?.props || seriesStore.currentSeries?.props,
+    });
+
+    toast.success(t('workspace.reanalyzeSuccess'));
+    await seriesStore.loadEpisodeScript(sId, epId);
+    await loadEpisodeTimeline(epId, false, true);
+  } catch (err: any) {
+    console.error('Re-analyze screenplay failed:', err);
+    toast.error(`${t('workspace.reanalyzeFailed')}: ${err.message || ''}`);
+  } finally {
+    loadingInstance.close();
+    isReanalyzingScreenplay.value = false;
+  }
+}
+
+async function loadEpisodeTimeline(epId: string, silent = false, forceReset = false) {
   if (!epId) return;
-  if (loadingTimelinePromise && lastLoadedEpisodeId === epId) {
+  if (loadingTimelinePromise && lastLoadedEpisodeId === epId && !forceReset) {
     return loadingTimelinePromise;
   }
+  const isDifferentEp = lastLoadedEpisodeId !== epId;
   lastLoadedEpisodeId = epId;
   loadingTimelinePromise = (async () => {
     try {
-      const res: any = await http.get(`/episodes/${epId}/timeline`);
-      if (res?.data) {
+      const projectData = await seriesStore.loadEpisodeTimeline(epId, silent, forceReset || isDifferentEp);
+      if (projectData) {
         const targetRatio = seriesStore.currentSeries?.ratio || '9:16';
-        const dim = getCanvasDimensionsForRatio(targetRatio);
-        const rawTimeline = res.data?.data || res.data;
-        const rawProject = {
-          ...rawTimeline,
-          settings: {
-            ...(rawTimeline.settings || {}),
-            width: rawTimeline.settings?.width || dim.width,
-            height: rawTimeline.settings?.height || dim.height,
-            fps: rawTimeline.settings?.fps || 30,
-            duration: rawTimeline.settings?.duration || 30_000_000,
-          },
-        };
-        const projectData = sanitizeTimelineData(rawProject);
-        console.log("projectData", projectData);
-
-        core.reset(projectData);
         projectStore.setCanvasSize({ width: projectData.settings.width, height: projectData.settings.height }, targetRatio);
         projectStore.setProjectName(currentEpisodeTitle.value);
         projectStore.setFps(projectData.settings.fps || 30);
@@ -453,6 +496,42 @@ async function loadEpisodeTimeline(epId: string, silent = false) {
           toast.success(t('toast.projectLoaded'));
         }
         pipelineStore.syncStepStatusesWithEpisode(seriesStore.activeEpisode, seriesStore.charactersList);
+
+        // Check for empty clips (unanalyzed script) or duration shorter than target by > 10s
+        const clipCount = Object.keys(projectData.clips || {}).length;
+        const scenesCount = seriesStore.activeEpisode?.scenes?.length || 0;
+        const targetDur = Number(seriesStore.currentSeries?.episode_duration) || 60;
+        const actualDur = (projectData.settings?.duration || 0) / 1_000_000;
+
+        if (!silent && !isReanalyzingScreenplay.value) {
+          if (clipCount === 0 || scenesCount === 0) {
+            ElMessageBox.confirm(
+              t('workspace.emptyTimelinePrompt'),
+              t('workspace.unbrokenScriptTitle'),
+              {
+                confirmButtonText: t('workspace.analyzeScriptNow'),
+                cancelButtonText: t('common.cancel'),
+                type: 'warning',
+                roundButton: true,
+              }
+            ).then(async () => {
+              await reanalyzeEpisodeScreenplay();
+            }).catch(() => {});
+          } else if (actualDur > 0 && actualDur < targetDur - 10) {
+            ElMessageBox.confirm(
+              t('workspace.shortDurationPrompt', { actual: Math.round(actualDur), target: targetDur }),
+              t('workspace.durationAlertTitle'),
+              {
+                confirmButtonText: t('workspace.expandAndReanalyze'),
+                cancelButtonText: t('workspace.keepCurrent'),
+                type: 'info',
+                roundButton: true,
+              }
+            ).then(async () => {
+              await reanalyzeEpisodeScreenplay();
+            }).catch(() => {});
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to load episode timeline', err);
@@ -471,10 +550,17 @@ async function saveAllWorkspaceData() {
     const sId = seriesId.value;
 
     if (epId) {
+      const masterTracks = seriesStore.masterTracks?.length > 0 ? seriesStore.masterTracks : (state.tracks as any[]);
+      const masterClips = Object.keys(seriesStore.masterClips || {}).length > 0 ? seriesStore.masterClips : state.clips;
+
+      const activeTrackMap = new Map((state.tracks as any[]).map((t: any) => [t.id, t]));
+      const mergedTracks = masterTracks.map((t: any) => activeTrackMap.get(t.id) || t);
+      const mergedClips = { ...masterClips, ...state.clips };
+
       await http.put(`/episodes/${epId}/timeline`, {
         settings: state.settings,
-        tracks: state.tracks,
-        clips: state.clips,
+        tracks: mergedTracks,
+        clips: mergedClips,
         changeSummary: 'Updated via Workspace Editor',
         author: { id: authStore.user?.id || 'usr_default', name: authStore.user?.name || 'Studio Editor' },
       });
@@ -686,12 +772,24 @@ async function applyCaptionsToTimeline() {
   }
 }
 
+const isWorkspaceLoading = ref(true);
+const isEpisodeLoading = ref(false);
+const workspaceLoadingText = ref(t('workspace.loadingWorkspace', 'Loading Series Workspace...'));
+
 async function selectEpisode(ep: any, index: number) {
+  if (isEpisodeLoading.value || (activeEpisodeIndex.value === index && activeEpisodeId.value === ep.id)) return;
   activeEpisodeIndex.value = index;
-  await seriesStore.selectEpisode(ep.id);
-  await loadEpisodeTimeline(ep.id);
-  pipelineStore.syncStepStatusesWithEpisode(seriesStore.activeEpisode, seriesStore.charactersList);
-  toast.info(t('toast.switchedToEpisode', { title: ep.title }));
+  isEpisodeLoading.value = true;
+  try {
+    await seriesStore.selectEpisode(ep.id);
+    await loadEpisodeTimeline(ep.id);
+    pipelineStore.syncStepStatusesWithEpisode(seriesStore.activeEpisode, seriesStore.charactersList);
+    toast.info(t('toast.switchedToEpisode', { title: ep.title }));
+  } catch (err) {
+    console.error('Failed to switch episode:', err);
+  } finally {
+    isEpisodeLoading.value = false;
+  }
 }
 
 function togglePlay() {
@@ -742,11 +840,6 @@ async function triggerAutoPipeline(agentMode = false) {
   runPipeline(undefined);
 }
 
-
-function triggerBulkPublish() {
-  isPublishModalOpen.value = true;
-}
-
 function goBack() {
   router.push('/dashboard');
 }
@@ -757,15 +850,32 @@ function handleAssetUpdated() {
   }
 }
 
+const isWorkspaceLoaded = ref(false);
+
 watch(activeEpisodeId, async (newEpId) => {
-  if (newEpId) {
+  if (isWorkspaceLoaded.value && newEpId && !isWorkspaceLoading.value && !isEpisodeLoading.value) {
     await loadEpisodeTimeline(newEpId);
   }
 });
 
 onMounted(async () => {
   window.addEventListener('pipeline-asset-updated', handleAssetUpdated);
-  await loadSeriesData();
+  isWorkspaceLoading.value = true;
+  workspaceLoadingText.value = t('workspace.loadingWorkspace', 'Loading Series Workspace...');
+
+  try {
+    await loadSeriesData();
+    isWorkspaceLoaded.value = true;
+    if (activeEpisodeId.value) {
+      workspaceLoadingText.value = t('workspace.loadingEpisodeTimeline', 'Loading Episode Timeline...');
+      await loadEpisodeTimeline(activeEpisodeId.value);
+    }
+  } catch (err) {
+    console.error('Failed to initialize workspace data:', err);
+  } finally {
+    isWorkspaceLoading.value = false;
+  }
+
   const targetRatio = seriesStore.currentSeries?.ratio || '9:16';
   const initialDim = getCanvasDimensionsForRatio(targetRatio);
   projectStore.setCanvasSize({ width: initialDim.width, height: initialDim.height }, initialDim.ratio);
@@ -786,11 +896,67 @@ onUnmounted(() => {
     previewResizeObserver.disconnect();
     previewResizeObserver = null;
   }
+
+  // 1. Pause playback
+  try {
+    pause();
+  } catch (_) {}
+
+  // 2. Cleanly reset OpenVideo core store and clear clips/tracks
+  try {
+    core.reset({
+      settings: {
+        width: 1080,
+        height: 1920,
+        fps: 30,
+        duration: 30_000_000,
+        backgroundColor: '#000000',
+      },
+      tracks: [],
+      clips: {},
+    });
+  } catch (e) {
+    console.warn('[ProjectWorkspacePage] Core reset on unmount failed:', e);
+  }
+
+  // 3. Clear series store cached master tracks and clips
+  seriesStore.masterTracks = [];
+  seriesStore.masterClips = {};
+  isWorkspaceLoaded.value = false;
 });
 </script>
 
 <template>
-  <div id="project-workspace-page" class="h-screen w-screen font-sans overflow-hidden bg-[var(--el-bg-color-page)] text-[var(--el-text-color-primary)]">
+  <div id="project-workspace-page" class="h-screen w-screen font-sans overflow-hidden bg-[var(--el-bg-color-page)] text-[var(--el-text-color-primary)] relative">
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- WORKSPACE INITIAL LOADING OVERLAY                                       -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <Transition name="fade">
+      <div
+        v-if="isWorkspaceLoading"
+        class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[var(--el-bg-color-page)]/95 backdrop-blur-xl pointer-events-auto"
+      >
+        <div class="flex flex-col items-center gap-5 p-8 rounded-3xl border border-[var(--el-border-color)] bg-[var(--el-bg-color-overlay)] shadow-2xl max-w-sm text-center">
+          <div class="relative w-16 h-16 flex items-center justify-center">
+            <div class="w-16 h-16 rounded-full border-4 border-emerald-500/20 border-t-emerald-500 animate-spin absolute inset-0"></div>
+            <el-icon class="text-emerald-500 !text-2xl flex items-center justify-center"><VideoPlay /></el-icon>
+          </div>
+          <div class="space-y-1.5">
+            <h3 class="font-bold text-base text-[var(--el-text-color-primary)] tracking-wide">{{ seriesTitle || 'Shine AI Studio' }}</h3>
+            <p class="text-xs text-[var(--el-text-color-secondary)] animate-pulse">{{ workspaceLoadingText }}</p>
+          </div>
+          <el-progress
+            :indeterminate="true"
+            :percentage="80"
+            :show-text="false"
+            :stroke-width="3"
+            color="var(--el-color-primary)"
+            class="w-48 !m-0"
+          />
+        </div>
+      </div>
+    </Transition>
+
     <el-splitter>
       <el-splitter-panel size="75%">
         <el-container class="h-screen w-full flex flex-col">
@@ -874,29 +1040,29 @@ onUnmounted(() => {
               <!-- Collapsed Mini View -->
               <div v-if="isLeftSidebarCollapsed" class="p-2 flex-1 flex flex-col items-center overflow-hidden">
                 <el-button
-                  circle plain size="small"
-                  icon="Expand"
+                  circle plain size="large"
+                  icon="Menu"
                   class="mb-3"
                   @click="isLeftSidebarCollapsed = false"
                   :title="t('workspace.expandSidebar', 'Expand Episode Library')"
                 />
 
-                <el-button
-                  circle plain size="small"
+                <!-- <el-button
+                  circle plain size="large"
                   type="primary"
                   icon="Plus"
                   class="mb-3 !ml-0"
-                  @click="isAddEpisodeModalOpen = true"
+                  @click="isAddEpisodeModalOpen = true" :disabled="true"
                   :title="t('workspace.addEpisode', 'Add Episode')"
-                />
+                /> -->
 
                 <!-- Mini Episodes List -->
-                <div class="flex-1 overflow-y-auto space-y-2.5 w-full flex flex-col items-center custom-scrollbar">
+                <div class="flex-1 overflow-y-auto space-y-2.5 w-full flex flex-col items-center custom-scrollbar" style="margin-right: -10px">
                   <div
                     v-for="(ep, idx) in episodesList"
                     :key="ep.id"
                     @click="selectEpisode(ep, idx)"
-                    class="w-11 h-14 rounded-xl border transition-all cursor-pointer relative overflow-hidden shrink-0 group flex items-center justify-center"
+                    class="w-11 h-14 rounded-sm border transition-all cursor-pointer relative overflow-hidden shrink-0 group flex items-center justify-center"
                     :class="activeEpisodeId === ep.id ? 'ring-2 ring-emerald-500 ring-offset-1 ring-offset-neutral-900 border-emerald-500' : 'border-neutral-700 hover:border-neutral-500'"
                     :title="`EP #${ep.number}: ${ep.title}`"
                   >
@@ -905,6 +1071,12 @@ onUnmounted(() => {
                       :alt="ep.title"
                       class="w-full h-full object-cover group-hover:scale-105 transition-transform"
                     />
+                    <div
+                      v-if="activeEpisodeId === ep.id && isEpisodeLoading"
+                      class="absolute inset-0 bg-black/60 flex items-center justify-center z-10"
+                    >
+                      <el-icon class="is-loading text-emerald-400 text-sm"><Loading /></el-icon>
+                    </div>
                     <div class="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-colors flex items-end justify-center pb-0.5">
                       <span class="text-[9px] font-black text-white font-mono drop-shadow">#{{ ep.number }}</span>
                     </div>
@@ -926,8 +1098,8 @@ onUnmounted(() => {
                     {{ t('workspace.episodeLibrary') }}
                   </h2>
                   <div class="flex items-center gap-1">
-                    <el-button circle plain size="small" icon="Plus" type="primary" :disabled="true" @click="isAddEpisodeModalOpen = true" />
-                    <el-button circle plain icon="Fold" size="small" @click="isLeftSidebarCollapsed = true" :title="t('workspace.collapseSidebar', 'Collapse sidebar')" />
+                    <!-- <el-button circle plain size="large" icon="Plus" type="primary" :disabled="true" @click="isAddEpisodeModalOpen = true" /> -->
+                    <el-button circle plain icon="Menu" size="large" @click="isLeftSidebarCollapsed = true" :title="t('workspace.collapseSidebar', 'Collapse sidebar')" />
                   </div>
                 </div>
 
@@ -954,6 +1126,12 @@ onUnmounted(() => {
                   >
                     <div class="w-16 h-20 rounded-xl overflow-hidden relative shrink-0 bg-neutral-900">
                       <img :src="(ep as any).thumbnail_url || (ep as any).cover_image || (ep.scenes && ep.scenes[0] && (ep.scenes[0].storyboard_frame_url || ep.scenes[0].video_url)) || '/images/dashboard/episode-thumb-default.jpg'" :alt="ep.title" class="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      <div
+                        v-if="activeEpisodeId === ep.id && isEpisodeLoading"
+                        class="absolute inset-0 bg-black/60 flex items-center justify-center z-10"
+                      >
+                        <el-icon class="is-loading text-emerald-400 text-base"><Loading /></el-icon>
+                      </div>
                       <div class="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/70 text-white rounded text-[9px] font-mono">
                         #{{ ep.number }}
                       </div>
@@ -993,7 +1171,12 @@ onUnmounted(() => {
             </aside>
 
             <!-- ─── 2. MAIN CENTER AREA: 9:16 PREVIEW & TIMELINE ──────────────────── -->
-            <main class="flex-1 flex flex-col min-w-0 bg-[var(--el-bg-color-page)] relative z-0">
+            <main
+              v-loading="isEpisodeLoading"
+              :element-loading-text="t('workspace.loadingEpisodeTimeline', 'Loading Episode Timeline...')"
+              element-loading-background="rgba(0, 0, 0, 0.65)"
+              class="flex-1 flex flex-col min-w-0 bg-[var(--el-bg-color-page)] relative z-0"
+            >
               
               <!-- Center Preview Area with OpenVideo CanvasPanel -->
               <div ref="previewContainerRef" class="flex-1 flex items-center justify-center p-3 relative overflow-hidden min-h-0">
@@ -1035,6 +1218,7 @@ onUnmounted(() => {
                     @open-cast="openManageCast"
                     @run-pipeline="runPipeline"
                     @view-character="openCharacterDetail"
+                    @open-series-info="isSeriesInfoModalOpen = true"
                   />
                   <ScriptTab
                     v-else-if="rightTab === 'script'"
@@ -1059,7 +1243,7 @@ onUnmounted(() => {
                     <el-button type="primary" round icon="Promotion" size="small" class="flex-1 !font-bold !py-3" @click="triggerBulkPublish">
                       {{ t('workspace.bulkExportPublish') }}
                     </el-button>
-                    <el-button circle plain size="small" icon="Calendar" @click="toast.info(t('toast.calendarScheduling'))" />
+                    <el-button circle plain size="small" icon="Calendar" @click="triggerBulkPublish" />
                   </div>
                 </div>
               </div>
@@ -1075,21 +1259,20 @@ onUnmounted(() => {
                     ]"
                     :key="tab.id"
                     circle
-                    size="large"
-                    :type="rightTab === tab.id ? 'primary' : 'default'"
-                    :plain="rightTab !== tab.id"
-                    class="!ml-0" bg
-                    @click="rightTab = tab.id as any; isTabSidebarCollapsed = false"
+                    :type="rightTab === tab.id ? 'primary' : 'info'"
+                    :text="rightTab !== tab.id" bg
                     :title="tab.label"
+                    class="transition-transform hover:scale-105 !m-0 !p-2.5"
+                    @click="rightTab = (tab.id as any); isTabSidebarCollapsed = false"
                   >
-                    <el-icon><component :is="tab.icon" /></el-icon>
+                    <el-icon :size="16"><component :is="tab.icon" /></el-icon>
                   </el-button>
                 </div>
 
                 <div class="flex flex-col items-center gap-2">
                   <el-button
                     circle plain size="large"
-                    icon="Expand"
+                    icon="Menu"
                     @click="isTabSidebarCollapsed = !isTabSidebarCollapsed"
                     :title="t('workspace.expandTabs', 'Expand Tabs')"
                   />
@@ -1111,6 +1294,7 @@ onUnmounted(() => {
       </el-splitter-panel>
     </el-splitter>
     
+    <!-- ── Modals & Dialogs ────────────────────────────────────────────────── -->
     <!-- 1. Master Script Modal -->
     <MasterScriptModal
       v-model="isMasterScriptModalOpen"
@@ -1129,16 +1313,16 @@ onUnmounted(() => {
       :character="selectedCharacter"
     />
 
-    <!-- 3. Add Episode Modal (Connected to POST /api/series/:id/episodes) -->
-    <el-dialog v-model="isAddEpisodeModalOpen" :title="t('workspace.addEpisode')" width="460px" append-to-body class="rounded-2xl">
+    <!-- Add Episode Modal -->
+    <el-dialog v-model="isAddEpisodeModalOpen" :title="t('workspace.addNewEpisode')" width="460px" class="rounded-2xl">
       <div class="space-y-4">
         <div>
-          <label class="text-xs font-bold text-[var(--el-text-color-secondary)] block mb-1.5 uppercase">{{ t('workspace.episodeTitle') }}</label>
-          <el-input v-model="newEpisodeTitle" placeholder="e.g. The Hidden Truth" size="large" />
+          <label class="text-xs font-semibold block mb-1.5" style="color: var(--el-text-color-secondary);">{{ t('workspace.episodeTitle') }}</label>
+          <el-input v-model="newEpisodeTitle" :placeholder="t('workspace.episodeTitlePlaceholder')" />
         </div>
         <div>
-          <label class="text-xs font-bold text-[var(--el-text-color-secondary)] block mb-1.5 uppercase">{{ t('workspace.synopsisPlotHook') }}</label>
-          <el-input v-model="newEpisodeSynopsis" type="textarea" :rows="3" placeholder="Brief summary of the episode action..." />
+          <label class="text-xs font-semibold block mb-1.5" style="color: var(--el-text-color-secondary);">{{ t('workspace.synopsisHook') }}</label>
+          <el-input v-model="newEpisodeSynopsis" type="textarea" :rows="3" :placeholder="t('workspace.synopsisPlaceholder')" />
         </div>
       </div>
       <template #footer>
@@ -1149,91 +1333,51 @@ onUnmounted(() => {
       </template>
     </el-dialog>
 
-    <!-- 4. Voice Settings Modal (Connected to GET /api/voices/presets) -->
-    <el-dialog v-model="isVoiceSettingsModalOpen" :title="t('workspace.voiceSettings')" width="520px" append-to-body class="rounded-2xl">
+    <!-- Invite Team Member Modal -->
+    <el-dialog v-model="isCollaboratorsModalOpen" :title="t('workspace.inviteTeamMember')" width="420px" class="rounded-2xl">
       <div class="space-y-4">
         <div>
-          <label class="text-xs font-bold text-[var(--el-text-color-secondary)] block mb-1.5 uppercase">Neural TTS Voice Preset</label>
-          <el-select v-model="selectedVoicePreset" class="w-full" size="large">
-            <el-option
-              v-for="voice in voicePresetsList"
-              :key="voice.id"
-              :label="`${voice.name} (${voice.gender || 'Neural'} • ${voice.language || 'en-US'})`"
-              :value="voice.id"
-            />
-          </el-select>
+          <label class="text-xs font-semibold block mb-1.5" style="color: var(--el-text-color-secondary);">{{ t('workspace.colleagueEmail') }}</label>
+          <el-input v-model="inviteEmail" :placeholder="t('workspace.emailPlaceholder')" />
         </div>
-        <div class="p-3 bg-[var(--el-fill-color-light)] rounded-xl border border-[var(--el-border-color)] text-xs space-y-2">
-          <div class="flex justify-between items-center">
-            <span class="font-bold">TTS Model Engine</span>
-            <el-tag size="small" type="success">Gemini Native Audio / ElevenLabs</el-tag>
-          </div>
-          <div class="flex justify-between items-center">
-            <span class="font-bold">Speech Recognition</span>
-            <el-tag size="small" type="primary">Gemini Multimodal Audio STT</el-tag>
-          </div>
+        <div>
+          <label class="text-xs font-semibold block mb-1.5" style="color: var(--el-text-color-secondary);">{{ t('workspace.accessRole') }}</label>
+          <el-select v-model="inviteRole" class="w-full">
+            <el-option label="Editor (Full Pipeline)" value="Editor" />
+            <el-option label="Writer (Script & Dialogue)" value="Writer" />
+            <el-option label="Viewer (Review Only)" value="Viewer" />
+          </el-select>
         </div>
       </div>
       <template #footer>
-        <el-button type="primary" @click="isVoiceSettingsModalOpen = false" size="small" round>Save Voice Settings</el-button>
+        <div class="flex justify-end gap-2">
+          <el-button @click="isCollaboratorsModalOpen = false">{{ t('common.cancel') }}</el-button>
+          <el-button type="primary" @click="inviteTeamMember">{{ t('workspace.sendInvite') }}</el-button>
+        </div>
       </template>
     </el-dialog>
 
-    <!-- 5. Collaborators Modal (Connected to GET & POST /api/admin/team-members) -->
-    <el-dialog v-model="isCollaboratorsModalOpen" :title="t('workspace.collaborators')" width="520px" append-to-body class="rounded-2xl">
+    <!-- AI Command Edit Modal -->
+    <el-dialog v-model="isChatModalOpen" :title="t('workspace.aiDirectorDirectives')" width="580px" class="rounded-2xl">
       <div class="space-y-4">
-        <div class="flex gap-2">
-          <el-input v-model="inviteEmail" placeholder="colleague@shine.ai" size="small" class="flex-1" />
-          <el-select v-model="inviteRole" size="small" class="w-28">
-            <el-option label="Editor" value="Editor" />
-            <el-option label="Viewer" value="Viewer" />
-            <el-option label="Admin" value="Admin" />
-          </el-select>
-          <el-button type="primary" size="small" @click="inviteTeamMember" round>Invite</el-button>
-        </div>
-
-        <div class="max-h-56 overflow-y-auto space-y-2">
-          <div
-            v-for="mem in teamMembersList"
-            :key="mem.id"
-            class="flex items-center justify-between p-2.5 rounded-xl bg-[var(--el-fill-color-light)] border border-[var(--el-border-color)]/60"
-          >
-            <div class="flex items-center gap-3">
-              <img :src="mem.avatar" class="w-8 h-8 rounded-full object-cover" />
-              <div>
-                <div class="text-xs font-bold">{{ mem.name }}</div>
-                <div class="text-[10px] text-[var(--el-text-color-secondary)]">{{ mem.email }}</div>
-              </div>
-            </div>
-            <el-tag size="small" :type="mem.role === 'Owner' ? 'success' : 'info'">{{ mem.role }}</el-tag>
-          </div>
-        </div>
-      </div>
-      <template #footer>
-        <el-button type="primary" @click="isCollaboratorsModalOpen = false" size="small" round>Done</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 6. Chat Assistant Modal (Connected to POST /api/ai/assistant/command-edit) -->
-    <el-dialog v-model="isChatModalOpen" :title="t('workspace.chatAssistant')" width="540px" append-to-body class="rounded-2xl">
-      <div class="space-y-4">
-        <div class="h-72 overflow-y-auto p-3 rounded-xl border text-xs space-y-3 custom-scrollbar" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color);">
+        <div class="h-64 overflow-y-auto space-y-3 p-3 rounded-xl border" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
           <div
             v-for="(msg, i) in chatMessages"
             :key="i"
-            class="p-3 rounded-xl max-w-[85%] border"
-            :style="msg.role === 'user'
-              ? 'margin-left: auto; background-color: var(--el-color-primary); color: white; border-color: var(--el-color-primary);'
-              : 'background-color: var(--el-card-bg-color); border-color: var(--el-border-color); color: var(--el-text-color-primary);'"
+            :class="msg.role === 'user' ? 'text-right' : 'text-left'"
           >
-            <div class="flex items-center justify-between gap-4 mb-1">
-              <span class="font-bold text-[10px] uppercase opacity-75">{{ msg.role === 'user' ? 'You' : 'AI Director' }}</span>
-              <span class="text-[9px] opacity-60">{{ msg.time }}</span>
+            <div
+              class="inline-block max-w-[85%] rounded-2xl px-4 py-2.5 text-xs shadow-soft"
+              :style="msg.role === 'user'
+                ? 'background-color: var(--el-color-primary); color: #ffffff;'
+                : 'background-color: var(--el-card-bg-color); color: var(--el-text-color-primary); border: 1px solid var(--el-border-color-light);'"
+            >
+              <div class="font-bold text-[10px] opacity-70 mb-0.5">{{ msg.role === 'user' ? 'You' : 'AI Director' }} • {{ msg.time }}</div>
+              <div>{{ msg.text }}</div>
             </div>
-            <p class="leading-relaxed">{{ msg.text }}</p>
           </div>
-          <div v-if="isChatSending" class="p-2.5 rounded-xl border text-xs flex items-center gap-2" style="background-color: var(--el-card-bg-color); border-color: var(--el-border-color);">
-            <el-icon class="is-loading" style="color: var(--el-color-primary);"><Loading /></el-icon>
+          <div v-if="isChatSending" class="text-left text-xs flex items-center gap-2" style="color: var(--el-text-color-secondary);">
+            <el-icon class="is-loading"><Loading /></el-icon>
             <span>AI Director is executing edits on timeline...</span>
           </div>
         </div>
@@ -1249,42 +1393,16 @@ onUnmounted(() => {
       </div>
     </el-dialog>
 
-    <!-- 7. Bulk Export & Publish Modal (Connected to POST /api/publish/multi-platform) -->
-    <el-dialog v-model="isPublishModalOpen" :title="t('workspace.bulkExportPublish')" width="540px" append-to-body class="rounded-2xl">
-      <div class="space-y-4">
-        <p class="text-xs" style="color: var(--el-text-color-secondary);">
-          Select target distribution channels for simultaneous multi-platform publishing:
-        </p>
-        <el-checkbox-group v-model="selectedPublishPlatforms" class="grid grid-cols-3 gap-3 w-full">
-          <el-checkbox label="tiktok" border class="!m-0 !h-auto !p-3 rounded-xl flex flex-col items-center">
-            <div class="flex flex-col items-center gap-1.5 py-1">
-              <el-tag size="large" effect="dark" round class="font-bold">TikTok</el-tag>
-              <span class="text-[11px]" style="color: var(--el-text-color-secondary);">9:16 Feed</span>
-            </div>
-          </el-checkbox>
-          <el-checkbox label="youtube" border class="!m-0 !h-auto !p-3 rounded-xl flex flex-col items-center">
-            <div class="flex flex-col items-center gap-1.5 py-1">
-              <el-tag size="large" type="danger" effect="dark" round class="font-bold">Shorts</el-tag>
-              <span class="text-[11px]" style="color: var(--el-text-color-secondary);">YouTube</span>
-            </div>
-          </el-checkbox>
-          <el-checkbox label="instagram" border class="!m-0 !h-auto !p-3 rounded-xl flex flex-col items-center">
-            <div class="flex flex-col items-center gap-1.5 py-1">
-              <el-tag size="large" type="warning" effect="dark" round class="font-bold">Reels</el-tag>
-              <span class="text-[11px]" style="color: var(--el-text-color-secondary);">Instagram</span>
-            </div>
-          </el-checkbox>
-        </el-checkbox-group>
-      </div>
-      <template #footer>
-        <div class="flex justify-end gap-2">
-          <el-button @click="isPublishModalOpen = false">Cancel</el-button>
-          <el-button type="primary" :loading="isPublishing" icon="Promotion" @click="executeBulkPublish">
-            Start Export &amp; Publish
-          </el-button>
-        </div>
-      </template>
-    </el-dialog>
+    <!-- ── 1. Series Master Plan & Info Dialog ──────────────────────────────── -->
+    <SeriesMasterPlanDialog
+      v-model="isSeriesInfoModalOpen"
+      @select-episode="(epId) => { const ep = seriesStore.episodesList.find(e => e.id === epId); if (ep) selectEpisode(ep, seriesStore.episodesList.indexOf(ep)); }"
+    />
+
+    <!-- ── 2. Bulk Export & Social Publishing Center ──────────────────────── -->
+    <BulkExportPublishDialog
+      v-model="isBulkPublishModalOpen"
+    />
 
     <!-- ── B8: Local Browser Export Modal ─────────────────────────────────── -->
     <ExportModal

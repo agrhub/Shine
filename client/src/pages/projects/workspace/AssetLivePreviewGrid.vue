@@ -227,7 +227,7 @@ const displayedToolCalls = computed(() => {
             />
             <div class="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-xs text-[9px] font-mono text-emerald-300 flex items-center gap-1">
               <el-icon><Check /></el-icon>
-              <span>Preview</span>
+              <span>{{ t('common.preview') }}</span>
             </div>
           </div>
 
@@ -239,7 +239,7 @@ const displayedToolCalls = computed(() => {
                 <el-icon :size="18"><VideoPlay /></el-icon>
               </div>
             </div>
-            <span class="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/70 text-[9px] font-mono text-white">9:16 Video</span>
+            <span class="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/70 text-[9px] font-mono text-white">{{ t('common.verticalVideo') }}</span>
           </div>
 
           <!-- Audio Asset Preview -->

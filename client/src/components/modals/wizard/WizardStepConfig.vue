@@ -3,8 +3,7 @@ import { ref, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useVisualStyleStore } from '@/stores/useVisualStyleStore';
 import { GENRE_OPTIONS } from '@/constants/genres';
-import { WORLD_COUNTRIES, findCountry } from '@/constants/countries';
-import { getLanguageByCode } from '@/constants/geminiLanguages';
+import { GEMINI_SPEECH_LANGUAGES, getLanguageByCode } from '@/constants/geminiLanguages';
 import CountryFlag from '@/components/common/CountryFlag.vue';
 import { WizardFormData } from './types';
 import { Check, UploadFilled } from '@element-plus/icons-vue';
@@ -18,15 +17,11 @@ const visualStyleStore = useVisualStyleStore();
 
 const ratioOptions = ['9:16', '16:9', '4:3', '1:1'];
 
-const allCountries = WORLD_COUNTRIES;
-const selectedCountryObj = computed(() => findCountry(props.formData.country));
+const allLanguages = GEMINI_SPEECH_LANGUAGES;
 const selectedLanguageObj = computed(() => getLanguageByCode(props.formData.language));
-
-function onCountrySelectChange(countryName: string) {
-  const c = findCountry(countryName);
-  // props.formData.country = c.name;
-  // props.formData.countryCode = c.code;
-  props.formData.language = c.primaryLang || 'en-US';
+const flagCode = computed(() => getLanguageByCode(props.formData.language));
+function onLanguageSelectChange(langCode: string) {
+  props.formData.language = langCode;
 }
 
 function formatDuration(totalSeconds: number): string {
@@ -327,24 +322,24 @@ const genresList = computed(() => {
           class="w-full"
           size="large"
           filterable
-          @change="onCountrySelectChange"
+          @change="onLanguageSelectChange"
         >
           <template #prefix>
-            <CountryFlag :code="selectedCountryObj.code" :flag="selectedCountryObj.flag" size="small" class="mr-1.5 shrink-0" />
+            <CountryFlag :code="flagCode?.countryCode" :flag="flagCode?.flag" size="small" class="mr-1.5 shrink-0" />
           </template>
           <el-option
-            v-for="c in allCountries"
-            :key="c.code"
-            :label="`${c.name} (${c.nativeName})`"
-            :value="c.name"
+            v-for="l in allLanguages"
+            :key="l.code"
+            :label="`${l.language} - ${l.nativeName}`"
+            :value="l.code"
           >
             <div class="flex items-center justify-between w-full">
               <span class="flex items-center gap-2">
-                <CountryFlag :code="c.code" :flag="c.flag" size="small" />
-                <span class="font-medium text-xs">{{ c.name }}</span>
-                <span class="text-[11px] text-gray-400">({{ c.nativeName }})</span>
+                <CountryFlag :code="l.countryCode" :flag="l.flag" size="small" />
+                <span class="font-medium text-xs">{{ l.language }}</span>
+                <span class="text-[11px] text-gray-400">({{ l.nativeName }})</span>
               </span>
-              <span class="text-xs font-mono font-bold" style="color: var(--el-color-primary);">{{ c.primaryLang }}</span>
+              <span class="text-xs font-mono font-bold" style="color: var(--el-color-primary);">{{ l.code }}</span>
             </div>
           </el-option>
         </el-select>
@@ -359,7 +354,7 @@ const genresList = computed(() => {
     </div>
 
     <!-- Reference Assets Upload -->
-    <div class="space-y-3">
+    <!-- <div class="space-y-3">
       <h3 class="text-xs font-black uppercase tracking-wider" style="color: var(--el-text-color-secondary);">{{ t('wizard.referenceAssets') }}</h3>
       <p class="text-xs" style="color: var(--el-text-color-placeholder);">{{ t('wizard.referenceAssetsDesc') }}</p>
       <el-upload drag multiple action="#" :auto-upload="false" accept=".jpg,.jpeg,.png,.webp,.mp4,.txt,.pdf,.docx" class="w-full">
@@ -373,6 +368,6 @@ const genresList = computed(() => {
           </div>
         </template>
       </el-upload>
-    </div>
+    </div> -->
   </div>
 </template>

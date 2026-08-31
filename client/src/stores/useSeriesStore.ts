@@ -2,8 +2,10 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import http from '@/utils/http';
 import { core } from '@/utils/project';
-import { GEMINI_LANGUAGE_DEFAULTS, getLanguageByCode } from '@/constants/geminiLanguages';
-import type { Series, Episode, Character, SceneTranslation, CaptionCue, LanguageTrack } from '../types/api';
+import { GEMINI_LANGUAGE_DEFAULTS, getLanguageByCode, getMainLanguageForCountry } from '@/constants/geminiLanguages';
+import { sanitizeTimelineData } from '@/components/editor/data';
+import { generateUUID } from '@/utils/id';
+import type { Series, Episode, Character, Scene, SceneDialogue, SceneTranslation, CaptionCue, LanguageTrack, CaptionsData } from '../types/api';
 
 export const useSeriesStore = defineStore('series', () => {
   const seriesList = ref<Series[]>([]);
@@ -11,7 +13,7 @@ export const useSeriesStore = defineStore('series', () => {
   const episodesList = ref<Episode[]>([]);
   const charactersList = ref<Character[] | []>([]);
   const activeEpisodeId = ref<string>('');
-  const activeLanguageCode = ref<string>('en-US');
+  const activeLanguageCode = ref<string>('');
   const activeScript = ref<Episode | null>(null);
   const isLoading = ref(false);
   const isScriptLoading = ref(false);
@@ -108,28 +110,36 @@ export const useSeriesStore = defineStore('series', () => {
 
         // 2. Sync Episodes
         if (res.data.episodes && Array.isArray(res.data.episodes)) {
-          episodesList.value = res.data.episodes.map((ep: Episode, idx: number) => ({
-            id: ep.id,
-            number: Number(ep.episode_number) || idx + 1,
-            episode_number: Number(ep.episode_number) || idx + 1,
-            title: ep.title || `Episode ${idx + 1}`,
-            synopsis: ep.synopsis || '',
-            screenplay: ep.screenplay || ep.script || '',
-            script: ep.script || ep.screenplay || '',
-            scene_core: ep.scene_core || '',
-            conflict_escalation: ep.conflict_escalation || '',
-            cliffhanger_hook: ep.cliffhanger_hook || '',
-            duration: ep.duration_seconds ? formatTime(ep.duration_seconds) : '1:30',
-            duration_seconds: ep.duration_seconds || 90,
-            scenes_count: `${ep.scenes?.length || 3} scenes`,
-            status: ep.status === 'PUBLISHED' ? 'PUBLISHED' : ep.status === 'REVIEW' ? 'REVIEWING' : 'LIVE EDITING',
-            status_class: ep.status === 'PUBLISHED' ? 'text-green-500 bg-green-500/10' : 'text-[var(--el-color-primary)] bg-[var(--el-color-primary-light-9)]',
-            cover_image: ep.cover_image || (Array.isArray(ep.scenes) && (ep.scenes[0]?.storyboard_frame_url)) || '/images/dashboard/episode-thumb-default.jpg',
-            scenes: ep.scenes || [],
-            characters: ep.characters || res.data.series?.characters || [],
-            locations: ep.locations || res.data.series?.locations || [],
-            props: ep.props || res.data.series?.props || [],
-          }));
+          episodesList.value = res.data.episodes.map((ep: any, idx: number): Episode => {
+            const scenes = Array.isArray(ep.scenes) ? ep.scenes : [];
+            const scenesTotalDuration = scenes.reduce((sum: number, sc: any) => sum + (Number(sc.duration_seconds) || 0), 0);
+            const rawDur = Number(ep.duration_seconds) || Number(ep.duration) || 0;
+            const durSeconds = scenesTotalDuration > 0
+              ? scenesTotalDuration
+              : (rawDur > 0 ? rawDur : (Number(res.data.series?.episode_duration) || 90));
+
+            return {
+              id: ep.id,
+              number: Number(ep.episode_number) || idx + 1,
+              episode_number: Number(ep.episode_number) || idx + 1,
+              title: ep.title || `Episode ${idx + 1}`,
+              synopsis: ep.synopsis || '',
+              screenplay: ep.screenplay || ep.script || '',
+              script: ep.script || ep.screenplay || '',
+              scene_core: ep.scene_core || '',
+              conflict_escalation: ep.conflict_escalation || '',
+              cliffhanger_hook: ep.cliffhanger_hook || '',
+              duration: formatTime(durSeconds),
+              duration_seconds: durSeconds,
+              scenes_count: `${scenes.length || 3} scenes`,
+              status: ep.status === 'PUBLISHED' ? 'PUBLISHED' : ep.status === 'REVIEW' ? 'REVIEWING' : 'LIVE EDITING',
+              cover_image: ep.cover_image || (Array.isArray(ep.scenes) && (ep.scenes[0]?.storyboard_frame_url)) || '/images/dashboard/episode-thumb-default.jpg',
+              scenes,
+              characters: ep.characters || res.data.series?.characters || [],
+              locations: ep.locations || res.data.series?.locations || [],
+              props: ep.props || res.data.series?.props || [],
+            };
+          });
 
           if (episodesList.value.length > 0) {
             const exists = episodesList.value.some(e => e.id === activeEpisodeId.value);
@@ -175,6 +185,18 @@ export const useSeriesStore = defineStore('series', () => {
           if (res.data.scenes) {
             targetEp.scenes = res.data.scenes;
             targetEp.scenes_count = `${res.data.scenes.length} scenes`;
+            const scenesTotal = res.data.scenes.reduce((sum: number, sc: any) => sum + (Number(sc.duration_seconds) || 0), 0);
+            if (scenesTotal > 0) {
+              targetEp.duration_seconds = scenesTotal;
+              targetEp.duration = formatTime(scenesTotal);
+            }
+          }
+          if (res.data.total_duration_seconds || res.data.duration_seconds || res.data.duration) {
+            const d = Number(res.data.total_duration_seconds || res.data.duration_seconds || res.data.duration);
+            if (d > 0) {
+              targetEp.duration_seconds = d;
+              targetEp.duration = formatTime(d);
+            }
           }
           if (res.data.dubbing_settings) {
             targetEp.dubbing_settings = res.data.dubbing_settings;
@@ -182,15 +204,20 @@ export const useSeriesStore = defineStore('series', () => {
           if (res.data.caption_settings) {
             targetEp.caption_settings = res.data.caption_settings;
           }
+          const primaryCode = currentSeries.value?.language || (currentSeries.value?.country ? getMainLanguageForCountry(currentSeries.value.country)?.code : '') || 'en-US';
           const capLangs = (res.data.caption_languages) as string[] | undefined;
           if (capLangs?.length) {
             captionLanguages.value = [...new Set<string>(capLangs)];
+          } else {
+            captionLanguages.value = [primaryCode];
           }
           const dubLangs = (res.data.dubbing_languages) as string[] | undefined;
           if (dubLangs?.length) {
             dubbingLanguages.value = [...new Set<string>(dubLangs)];
+          } else {
+            dubbingLanguages.value = [primaryCode];
           }
-          (targetEp.scenes || []).forEach((sc: any) => {
+          (targetEp.scenes || []).forEach((sc: Scene) => {
             if (sc.translations && typeof sc.translations === 'object') {
               Object.keys(sc.translations).forEach((code: string) => {
                 if (!captionLanguages.value.includes(code)) captionLanguages.value.push(code);
@@ -198,6 +225,12 @@ export const useSeriesStore = defineStore('series', () => {
               });
             }
           });
+          if (!activePreviewCaptionLang.value || !captionLanguages.value.includes(activePreviewCaptionLang.value)) {
+            activePreviewCaptionLang.value = primaryCode;
+          }
+          if (!activePreviewVoiceLang.value || !dubbingLanguages.value.includes(activePreviewVoiceLang.value)) {
+            activePreviewVoiceLang.value = primaryCode;
+          }
         }
       }
       return activeScript.value;
@@ -263,8 +296,9 @@ export const useSeriesStore = defineStore('series', () => {
     if (char) {
       char.avatar = avatarUrl;
     }
-    if (activeEpisode.value?.characters) {
-      const epChar = activeEpisode.value.characters.find((c: any) => c.id === charId || c.name?.toLowerCase() === charId?.toLowerCase());
+    const epChars = activeEpisode.value?.characters as any[] | undefined;
+    if (epChars && Array.isArray(epChars)) {
+      const epChar = epChars.find((c: any) => c.id === charId || c.name?.toLowerCase() === charId?.toLowerCase());
       if (epChar && epChar.wardrobe_variants?.length > 0) {
         epChar.wardrobe_variants[0].image_url = avatarUrl;
       }
@@ -366,10 +400,10 @@ export const useSeriesStore = defineStore('series', () => {
   // ─── Language Track Mutations & Sync ──────────────────────────────────────────
   const LANGUAGE_DEFAULTS: Record<string, { label: string }> = GEMINI_LANGUAGE_DEFAULTS;
 
-  const activePreviewCaptionLang = ref<string>('en-US');
-  const activePreviewVoiceLang = ref<string>('en-US');
-  const captionLanguages = ref<string[]>(['en-US']);
-  const dubbingLanguages = ref<string[]>(['en-US']);
+  const activePreviewCaptionLang = ref<string>('');
+  const activePreviewVoiceLang = ref<string>('');
+  const captionLanguages = ref<string[]>([]);
+  const dubbingLanguages = ref<string[]>([]);
 
   function setCaptionLanguages(langs: string[]) {
     captionLanguages.value = [...new Set(langs)];
@@ -427,293 +461,264 @@ export const useSeriesStore = defineStore('series', () => {
     removeLanguage(langCode);
   }
 
-  function setPreviewCaptionLanguage(langCode: string | 'off') {
-    activePreviewCaptionLang.value = langCode;
+  const masterTracks = ref<any[]>([]);
+  const masterClips = ref<Record<string, any>>({});
+
+  function isMatchingLang(langA?: string | null, langB?: string | null): boolean {
+    if (!langA || !langB) return false;
+    const cleanA = langA.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanB = langB.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return cleanA === cleanB || cleanA.startsWith(cleanB) || cleanB.startsWith(cleanA);
+  }
+
+  function extractTrackLanguage(track: any): string | null {
+    if (track.languageCode) return track.languageCode;
+    if (track.id?.startsWith('track_caption_')) {
+      return track.id.replace('track_caption_', '');
+    }
+    if (track.id?.startsWith('track_captions_')) {
+      return track.id.replace('track_captions_', '');
+    }
+    if (track.id?.startsWith('track_voiceover_')) {
+      return track.id.replace('track_voiceover_', '');
+    }
+    if (track.id?.startsWith('track_voice_')) {
+      return track.id.replace('track_voice_', '');
+    }
+    return null;
+  }
+
+  function initTimelineTracks(rawTracks: any[], rawClips: Record<string, any>) {
+    const safeTracks = Array.isArray(rawTracks)
+      ? rawTracks.filter(Boolean).map((t) => ({ ...t, clipIds: Array.isArray(t.clipIds) ? t.clipIds : [] }))
+      : [];
+    masterTracks.value = JSON.parse(JSON.stringify(safeTracks));
+    masterClips.value = JSON.parse(JSON.stringify(rawClips || {}));
+    applyLanguageTrackFilter();
+  }
+
+  function applyLanguageTrackFilter() {
     try {
       const state = core.store.getState();
-      const tracks = [...((state.tracks as any[]) || [])];
-      const clips = { ...(state.clips || {}) };
-      const safeLang = langCode !== 'off' ? langCode.replace(/[^a-zA-Z0-9_-]/g, '_') : '';
-      const targetCaptionTrackId = safeLang ? `track_caption_${safeLang}` : '';
+      const allTracks = masterTracks.value.length > 0 ? masterTracks.value : ((state.tracks as any[]) || []);
+      const allClips = Object.keys(masterClips.value).length > 0 ? masterClips.value : (state.clips || {});
 
-      tracks.forEach((track: any) => {
-        if (track.type === 'Caption' || track.id?.startsWith('track_caption_')) {
-          const isTarget = langCode !== 'off' && track.id === targetCaptionTrackId;
-          track.visible = isTarget;
+      const capLang = activePreviewCaptionLang.value; // e.g. 'en-US' or 'vi-VN' or 'off'
+      const voiceLang = activePreviewVoiceLang.value; // e.g. 'en-US' or 'vi-VN' or 'mute'
+
+      const safeCapLang = capLang !== 'off' ? capLang.replace(/[^a-zA-Z0-9_-]/g, '_') : '';
+      const targetCaptionTrackId = safeCapLang ? `track_caption_${safeCapLang}` : '';
+
+      const safeVoiceLang = voiceLang !== 'mute' ? voiceLang.replace(/[^a-zA-Z0-9_-]/g, '_') : '';
+      const targetVoiceTrackId = safeVoiceLang ? `track_voiceover_${safeVoiceLang}` : '';
+
+      // Filter tracks: Keep only selected caption & voiceover tracks + base tracks (video, effects, bgm)
+      const filteredTracks = allTracks.filter((track: any) => {
+        if (!track || typeof track !== 'object') return false;
+        if (!Array.isArray(track.clipIds)) track.clipIds = [];
+
+        const isCaptionTrack = track.type === 'Caption' || track.id?.startsWith('track_caption') || track.id?.startsWith('track_captions');
+        const isVoiceTrack = track.type === 'Audio' && (track.id?.startsWith('track_voiceover') || track.id?.startsWith('track_voice'));
+
+        if (isCaptionTrack) {
+          if (capLang === 'off') return false;
+          if (targetCaptionTrackId && track.id === targetCaptionTrackId) return true;
+          const trackLang = extractTrackLanguage(track);
+          return isMatchingLang(trackLang, capLang);
+        }
+
+        if (isVoiceTrack) {
+          if (voiceLang === 'mute') return false;
+          if (targetVoiceTrackId && track.id === targetVoiceTrackId) return true;
+          const trackLang = extractTrackLanguage(track);
+          return isMatchingLang(trackLang, voiceLang);
+        }
+
+        return true;
+      });
+
+      // Update visibility & muting on filtered tracks
+      filteredTracks.forEach((track: any) => {
+        if (!Array.isArray(track.clipIds)) {
+          track.clipIds = [];
+        }
+        const isCaptionTrack = track.type === 'Caption' || track.id?.startsWith('track_caption') || track.id?.startsWith('track_captions');
+        const isVoiceTrack = track.type === 'Audio' && (track.id?.startsWith('track_voiceover') || track.id?.startsWith('track_voice'));
+
+        if (isCaptionTrack) {
+          track.visible = true;
+        }
+        if (isVoiceTrack) {
+          track.muted = false;
+          track.visible = true;
         }
       });
 
-      Object.keys(clips).forEach((clipId) => {
-        const clip = clips[clipId];
-        if (clip && (clip.type === 'Caption' || clip.trackId?.startsWith('track_caption_'))) {
-          const isTarget = langCode !== 'off' && clip.trackId === targetCaptionTrackId;
-          clip.visible = isTarget;
+      // Filter clips: include clips that belong to the active tracks
+      const activeTrackIds = new Set(filteredTracks.map((t: any) => t.id));
+      const filteredClips: Record<string, any> = {};
+
+      Object.keys(allClips).forEach((clipId) => {
+        const clip = allClips[clipId];
+        if (!clip) return;
+        if (!clip.trackId || activeTrackIds.has(clip.trackId)) {
+          filteredClips[clipId] = {
+            ...clip,
+            visible: true,
+          };
         }
       });
 
-      core.store.setState({ ...state, tracks, clips });
+      core.store.setState({
+        ...state,
+        tracks: filteredTracks,
+        clips: filteredClips,
+      });
     } catch (err) {
-      console.warn('[setPreviewCaptionLanguage] Failed:', err);
+      console.warn('[applyLanguageTrackFilter] Failed:', err);
     }
+  }
+
+  function setPreviewCaptionLanguage(langCode: string | 'off') {
+    activePreviewCaptionLang.value = langCode;
+    applyLanguageTrackFilter();
   }
 
   function setPreviewVoiceLanguage(langCode: string | 'mute') {
     activePreviewVoiceLang.value = langCode;
-    try {
-      const state = core.store.getState();
-      const tracks = [...((state.tracks as any[]) || [])];
-      const clips = { ...(state.clips || {}) };
-      const safeLang = langCode !== 'mute' ? langCode.replace(/[^a-zA-Z0-9_-]/g, '_') : '';
-      const targetVoiceTrackId = safeLang ? `track_voiceover_${safeLang}` : '';
-
-      tracks.forEach((track: any) => {
-        if (track.type === 'Audio' && track.id?.startsWith('track_voiceover_')) {
-          const isTarget = langCode !== 'mute' && track.id === targetVoiceTrackId;
-          track.muted = !isTarget;
-          track.visible = isTarget;
-        }
-      });
-
-      Object.keys(clips).forEach((clipId) => {
-        const clip = clips[clipId];
-        if (clip && clip.trackId?.startsWith('track_voiceover_')) {
-          const isTarget = langCode !== 'mute' && clip.trackId === targetVoiceTrackId;
-          clip.visible = isTarget;
-        }
-      });
-
-      core.store.setState({ ...state, tracks, clips });
-    } catch (err) {
-      console.warn('[setPreviewVoiceLanguage] Failed:', err);
-    }
+    applyLanguageTrackFilter();
   }
 
-  function syncVoiceoverTrackToTimeline(epId: string, langCode: string) {
-    const safeLang = langCode.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const voiceTrackId = `track_voiceover_${safeLang}`;
-    const ep = episodesList.value.find(e => e.id === epId);
-    const scenes = ep?.scenes || activeScript.value?.scenes || [];
+  let lastLoadedTimelineEpId = '';
 
-    try {
-      const state = core.store.getState();
-      const tracks = [...((state.tracks as any[]) || [])];
-      const clips = { ...(state.clips || {}) };
+  function applyTimelineUpdate(projectData: any, isNewEpisode = false) {
+    const currentState = core.store.getState();
+    const currentClips = currentState.clips || {};
+    const incomingClips = projectData.clips || {};
+    const incomingTracks = projectData.tracks || [];
 
-      let targetTrack = tracks.find((t: any) => t.id === voiceTrackId);
-      const isVoiceActive = activePreviewVoiceLang.value === langCode;
+    const hasExistingClips = Object.keys(currentClips).length > 0;
 
-      if (!targetTrack) {
-        targetTrack = {
-          id: voiceTrackId,
-          name: `Voiceover (${langCode})`,
-          type: 'Audio',
-          languageCode: langCode,
-          muted: !isVoiceActive,
-          visible: isVoiceActive,
-          clipIds: [],
-        };
-        tracks.push(targetTrack);
-      } else {
-        targetTrack.muted = !isVoiceActive;
-        targetTrack.visible = isVoiceActive;
-        targetTrack.clipIds = targetTrack.clipIds || [];
-      }
-
-      const mainLang = currentSeries.value?.language || 'en-US';
-      let currentUs = 0;
-      for (let i = 0; i < scenes.length; i++) {
-        const sc = scenes[i];
-        const scIdx = sc.index || (i + 1);
-        const vClipId = `clip_v_${epId}_s${scIdx}`;
-        const vClip: any = clips[vClipId] || Object.values(clips).find((c: any) =>
-          c.id === vClipId || ((c.type === 'Video' || c.type === 'Image') && (c.name?.includes(`Scene ${scIdx}`) || c.label?.includes(`Scene ${scIdx}`)))
-        );
-        const sceneFromUs = vClip?.timing?.display?.from ?? (vClip?.display?.from ?? currentUs);
-        const sceneDurUs = vClip?.timing?.duration ?? (vClip?.duration ?? ((sc.duration_seconds || 6) * 1_000_000));
-
-        const trans = sc.translations?.[langCode];
-        const voiceUrl = (langCode === mainLang ? sc.voiceover_url : trans?.voiceover_url) || trans?.voiceover_url;
-        const cues = (langCode === mainLang ? sc.captions_data : trans?.captions_data) || trans?.captions_data || sc.captions_data || [];
-        const firstCue = cues[0];
-        const lastCue = cues[cues.length - 1];
-
-        let voiceOffsetUs = 200_000;
-        let voiceDurationUs = trans?.voice_duration_us || Math.min(sceneDurUs - voiceOffsetUs, 3_500_000);
-
-        if (firstCue) {
-          voiceOffsetUs = firstCue.fromUs !== undefined && firstCue.fromUs > 0
-            ? firstCue.fromUs
-            : (firstCue.startMs !== undefined ? Math.round(firstCue.startMs * 1000) : 200_000);
-          if (lastCue) {
-            const lastCueEndUs = lastCue.toUs !== undefined && lastCue.toUs > 0
-              ? lastCue.toUs
-              : (lastCue.endMs !== undefined ? Math.round(lastCue.endMs * 1000) : (voiceOffsetUs + 3_000_000));
-            voiceDurationUs = Math.max(500_000, lastCueEndUs - voiceOffsetUs);
-          }
-        }
-
-        voiceDurationUs = Math.min(Math.max(100_000, voiceDurationUs), Math.max(500_000, sceneDurUs - voiceOffsetUs));
-        const fromUs = sceneFromUs + voiceOffsetUs;
-        const toUs = fromUs + voiceDurationUs;
-
-        if (voiceUrl) {
-          const clipId = `clip_vo_${epId}_s${scIdx}_${safeLang}`;
-          clips[clipId] = {
-            id: clipId,
-            trackId: voiceTrackId,
-            type: 'Audio',
-            name: `Voice #${scIdx} (${langCode})`,
-            src: voiceUrl,
-            timing: {
-              display: { from: fromUs, to: toUs },
-              trim: { from: 0, to: voiceDurationUs },
-              duration: voiceDurationUs,
-              playbackRate: 1,
-            },
-            display: { from: fromUs, to: toUs },
-            duration: voiceDurationUs,
-            visible: isVoiceActive,
-            volume: 1,
-            style: {},
-            locked: false,
-            effects: [],
-            animations: [],
-            transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
-          } as any;
-          if (!targetTrack.clipIds.includes(clipId)) {
-            targetTrack.clipIds.push(clipId);
-          }
-        }
-        currentUs = sceneFromUs + sceneDurUs;
-      }
-
-      core.store.setState({ ...state, tracks, clips });
-    } catch (err) {
-      console.warn('[syncVoiceoverTrackToTimeline] Error:', err);
+    // If loading a completely different episode or initial empty state, perform a clean full reset
+    if (isNewEpisode || !hasExistingClips) {
+      core.reset(projectData);
+      initTimelineTracks(projectData.tracks, projectData.clips);
+      return;
     }
+
+    // --- Differential in-place property updates ---
+    // If the resource (src) of Video, Audio, or Image has NOT changed, we update properties
+    // in-place so the canvas engine preserves existing textures, video decoders, and audio elements.
+    const clipUpdates: Array<{ id: string; updates: Partial<any> }> = [];
+    const clipsToAdd: any[] = [];
+    const incomingClipIds = new Set(Object.keys(incomingClips));
+    const currentClipIds = new Set(Object.keys(currentClips));
+
+    // 1. Process incoming clips
+    for (const [id, incomingClip] of Object.entries<any>(incomingClips)) {
+      const existing = currentClips[id];
+      if (existing) {
+        // Existing clip: update properties in-place
+        clipUpdates.push({
+          id,
+          updates: incomingClip,
+        });
+      } else {
+        // New clip to add
+        clipsToAdd.push(incomingClip);
+      }
+    }
+
+    // 2. Identify removed clips
+    const clipIdsToRemove = [...currentClipIds].filter((id) => !incomingClipIds.has(id));
+
+    // Remove deleted clips if any
+    if (clipIdsToRemove.length > 0) {
+      core.execute({
+        id: generateUUID(),
+        type: 'clip.remove',
+        payload: { ids: clipIdsToRemove },
+      });
+    }
+
+    // Apply batch in-place property updates
+    if (clipUpdates.length > 0) {
+      core.execute({
+        id: generateUUID(),
+        type: 'clip.update',
+        payload: clipUpdates,
+      });
+    }
+
+    // Add newly created clips
+    for (const newClip of clipsToAdd) {
+      core.execute({
+        id: generateUUID(),
+        type: 'clip.add',
+        payload: { clip: newClip },
+      });
+    }
+
+    // 3. Update tracks layout/structure
+    core.execute({
+      id: generateUUID(),
+      type: 'track.set',
+      payload: incomingTracks,
+    });
+
+    // 4. Update settings if changed
+    if (projectData.settings) {
+      core.store.getState().updateSettings(projectData.settings);
+    }
+
+    // 5. Update master tracks and clips in store cache
+    initTimelineTracks(projectData.tracks, projectData.clips);
   }
 
-  function syncCaptionTrackToTimeline(epId: string, langCode: string, styleOpts?: any) {
-    const safeLang = langCode.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const capTrackId = `track_caption_${safeLang}`;
-    const ep = episodesList.value.find(e => e.id === epId);
-    const scenes = ep?.scenes || activeScript.value?.scenes || [];
-
+  async function loadEpisodeTimeline(epId: string, silent = false, forceReset = false) {
+    if (!epId) return null;
     try {
-      const state = core.store.getState();
-      const tracks = [...((state.tracks as any[]) || [])];
-      const clips = { ...(state.clips || {}) };
+      const res: any = await http.get(`/episodes/${epId}/timeline`);
+      if (res?.data) {
+        const rawTimeline = res.data?.data || res.data;
+        const projectData = sanitizeTimelineData(rawTimeline);
+        const isNewEpisode = forceReset || (lastLoadedTimelineEpId !== epId);
+        lastLoadedTimelineEpId = epId;
+        applyTimelineUpdate(projectData, isNewEpisode);
 
-      let targetTrack = tracks.find((t: any) => t.id === capTrackId);
-      const isCapActive = activePreviewCaptionLang.value === langCode;
-
-      if (!targetTrack) {
-        const langInfo = getLanguageByCode(langCode);
-        const label = LANGUAGE_DEFAULTS[langCode]?.label || langInfo?.nativeName || langCode;
-        targetTrack = {
-          id: capTrackId,
-          name: `Captions (${label})`,
-          type: 'Caption',
-          languageCode: langCode,
-          visible: isCapActive,
-          clipIds: [],
-        };
-        tracks.push(targetTrack);
-      } else {
-        targetTrack.visible = isCapActive;
-        targetTrack.clipIds = targetTrack.clipIds || [];
-      }
-
-      const mainLang = currentSeries.value?.language || 'en-US';
-      let currentUs = 0;
-      for (let i = 0; i < scenes.length; i++) {
-        const sc = scenes[i];
-        const scIdx = sc.index || (i + 1);
-        const vClipId = `clip_v_${epId}_s${scIdx}`;
-        const vClip: any = clips[vClipId] || Object.values(clips).find((c: any) =>
-          c.id === vClipId || ((c.type === 'Video' || c.type === 'Image') && (c.name?.includes(`Scene ${scIdx}`) || c.label?.includes(`Scene ${scIdx}`)))
-        );
-        const sceneFromUs = vClip?.timing?.display?.from ?? (vClip?.display?.from ?? currentUs);
-        const sceneDurUs = vClip?.timing?.duration ?? (vClip?.duration ?? ((sc.duration_seconds || 6) * 1_000_000));
-
-        const trans = sc.translations?.[langCode];
-        const cues = (langCode === mainLang ? sc.captions_data : trans?.captions_data) || trans?.captions_data || sc.captions_data || [];
-        const words = trans?.words || sc.words;
-        const firstCue = cues[0];
-        const lastCue = cues[cues.length - 1];
-
-        let capOffsetUs = 200_000;
-        let capDurationUs = trans?.voice_duration_us || Math.min(sceneDurUs - capOffsetUs, 3_500_000);
-
-        if (firstCue) {
-          capOffsetUs = firstCue.fromUs !== undefined && firstCue.fromUs > 0
-            ? firstCue.fromUs
-            : (firstCue.startMs !== undefined ? Math.round(firstCue.startMs * 1000) : 200_000);
-          if (lastCue) {
-            const lastCueEndUs = lastCue.toUs !== undefined && lastCue.toUs > 0
-              ? lastCue.toUs
-              : (lastCue.endMs !== undefined ? Math.round(lastCue.endMs * 1000) : (capOffsetUs + 3_000_000));
-            capDurationUs = Math.max(500_000, lastCueEndUs - capOffsetUs);
+        const targetEp = episodesList.value.find(e => e.id === epId);
+        if (targetEp && projectData.settings?.duration) {
+          const durSec = Math.round(projectData.settings.duration / 1_000_000);
+          if (durSec > 0) {
+            targetEp.duration_seconds = durSec;
+            targetEp.duration = formatTime(durSec);
+          }
+          if (Array.isArray(projectData.tracks)) {
+            const vTrack = projectData.tracks.find((t: any) => t.id === 'track_video' || t.type === 'video');
+            if (vTrack && Array.isArray(vTrack.clipIds) && vTrack.clipIds.length > 0) {
+              targetEp.scenes_count = `${vTrack.clipIds.length} scenes`;
+            }
           }
         }
 
-        capDurationUs = Math.min(Math.max(100_000, capDurationUs), Math.max(500_000, sceneDurUs - capOffsetUs));
-        const fromUs = sceneFromUs + capOffsetUs;
-        const toUs = fromUs + capDurationUs;
-
-        const lineText = Array.isArray(cues) && cues.length > 0
-          ? cues.map((c: any) => c.text).join(' ')
-          : (trans?.dialogue || trans?.translated_dialogue || (Array.isArray(sc.dialogue) ? sc.dialogue.map((d: any) => d.line).join(' ') : (sc.dialogue || '')));
-
-        if (lineText) {
-          const clipId = `clip_cap_${epId}_s${scIdx}_${safeLang}`;
-          clips[clipId] = {
-            id: clipId,
-            trackId: capTrackId,
-            type: 'Caption',
-            name: `Sub #${scIdx} (${langCode})`,
-            text: lineText,
-            mediaId: clipId,
-            wordsPerLine: 'multiple',
-            timing: {
-              display: { from: fromUs, to: toUs },
-              trim: { from: 0, to: capDurationUs },
-              duration: capDurationUs,
-              playbackRate: 1,
-            },
-            display: { from: fromUs, to: toUs },
-            duration: capDurationUs,
-            visible: isCapActive,
-            fontSize: styleOpts?.fontSize || 44,
-            fontFamily: styleOpts?.fontFamily || 'Bangers-Regular',
-            color: styleOpts?.color || '#FFFFFF',
-            outlineColor: styleOpts?.outlineColor || '#000000',
-            outlineWeight: styleOpts?.outlineWeight || 4,
-            style: {
-              fontFamily: styleOpts?.fontFamily || 'Bangers-Regular',
-              fontSize: styleOpts?.fontSize || 44,
-              color: styleOpts?.color || '#FFFFFF',
-            },
-            caption: {
-              colors: {
-                active: { color: '#FFD700' },
-                keyword: { color: '#FFD700' },
-              },
-              words: Array.isArray(words) && words.length > 0 ? words : undefined,
-            },
-            transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
-          } as any;
-          if (!targetTrack.clipIds.includes(clipId)) {
-            targetTrack.clipIds.push(clipId);
-          }
-        }
-        currentUs = sceneFromUs + sceneDurUs;
+        return projectData;
       }
-
-      core.store.setState({ ...state, tracks, clips });
     } catch (err) {
-      console.warn('[syncCaptionTrackToTimeline] Error:', err);
+      console.error('[useSeriesStore] Failed to load episode timeline from backend:', err);
     }
+    return null;
+  }
+
+  async function syncVoiceoverTrackToTimeline(epId: string, langCode: string) {
+    activePreviewVoiceLang.value = langCode;
+    await loadEpisodeTimeline(epId, true);
+    applyLanguageTrackFilter();
+  }
+
+  async function syncCaptionTrackToTimeline(epId: string, langCode: string, _styleOpts?: any) {
+    activePreviewCaptionLang.value = langCode;
+    await loadEpisodeTimeline(epId, true);
+    applyLanguageTrackFilter();
   }
 
   function updateSceneTranslation(epId: string, sceneIndex: number, langCode: string, translationData: Partial<SceneTranslation>) {
@@ -741,22 +746,22 @@ export const useSeriesStore = defineStore('series', () => {
     return scene?.translations?.[langCode];
   }
 
-  function updateLanguageTrackVoiceover(epId: string, langCode: string, sceneIndex: number, url: string) {
-    const mainLang = currentSeries.value?.language || 'en-US';
+  async function updateLanguageTrackVoiceover(epId: string, langCode: string, sceneIndex: number, url: string) {
+    const mainLang = currentSeries.value?.language || '';
     updateSceneTranslation(epId, sceneIndex, langCode, { voiceover_url: url });
     if (langCode === mainLang) {
       updateSceneAssets(epId, sceneIndex, { voiceoverUrl: url });
     }
-    syncVoiceoverTrackToTimeline(epId, langCode);
+    await syncVoiceoverTrackToTimeline(epId, langCode);
   }
 
-  function updateLanguageTrackCaptions(epId: string, langCode: string, sceneIndex: number, cues: CaptionCue[], words?: any[]) {
-    const mainLang = currentSeries.value?.language || 'en-US';
+  async function updateLanguageTrackCaptions(epId: string, langCode: string, sceneIndex: number, cues: CaptionCue[], words?: any[]) {
+    const mainLang = currentSeries.value?.language;
     updateSceneTranslation(epId, sceneIndex, langCode, { captions_data: cues, ...(words ? { words } : {}) });
     if (langCode === mainLang) {
       updateSceneAssets(epId, sceneIndex, { captionsData: cues, ...(words ? { words } : {}) });
     }
-    syncCaptionTrackToTimeline(epId, langCode);
+    await syncCaptionTrackToTimeline(epId, langCode);
   }
 
   function updateLanguageTrackDialogue(epId: string, langCode: string, sceneIndex: number, text: string) {
@@ -765,7 +770,13 @@ export const useSeriesStore = defineStore('series', () => {
 
   function getLanguageTrackDialogue(epId: string, langCode: string, sceneIndex: number): string | null {
     const trans = getSceneTranslation(epId, sceneIndex, langCode);
-    return trans?.dialogue || trans?.translated_dialogue || null;
+    if (!trans) return null;
+    if (typeof trans.translated_dialogue === 'string' && trans.translated_dialogue.trim()) return trans.translated_dialogue;
+    if (typeof trans.dialogue === 'string' && trans.dialogue.trim()) return trans.dialogue;
+    if (Array.isArray(trans.dialogue) && trans.dialogue.length > 0) {
+      return trans.dialogue.map((d: any) => d.line || d.text || '').filter(Boolean).join(' ');
+    }
+    return null;
   }
 
   function updateEpisodeDubbingSettings(epId: string, settings: any) {
@@ -795,22 +806,26 @@ export const useSeriesStore = defineStore('series', () => {
       const sceneCaptions: Record<number, any[]> = {};
       const sceneDialogues: Record<number, string> = {};
 
-      scenes.forEach((sc: any) => {
+      scenes.forEach((sc: Scene) => {
         const scIdx = sc.index;
         if (langCode === mainLang) {
-          const vUrl = sc.voiceover_url || sc.voiceoverUrl;
-          const cData = sc.captions_data || sc.captionsData;
-          if (vUrl) sceneVoiceovers[scIdx] = vUrl;
-          if (cData) sceneCaptions[scIdx] = cData;
-          if (sc.dialogue) sceneDialogues[scIdx] = Array.isArray(sc.dialogue) ? sc.dialogue.map((d: any) => d.line).join(' ') : sc.dialogue;
+          if (sc.voiceover_url) sceneVoiceovers[scIdx] = sc.voiceover_url;
+          if (sc.captions_data) sceneCaptions[scIdx] = sc.captions_data;
+          if (sc.dialogue) {
+            sceneDialogues[scIdx] = Array.isArray(sc.dialogue)
+              ? sc.dialogue.map((d: SceneDialogue) => d.line).join(' ')
+              : String(sc.dialogue);
+          }
         } else if (sc.translations?.[langCode]) {
           const trans = sc.translations[langCode];
-          const vUrl = trans.voiceover_url || trans.voiceoverUrl;
-          const cData = trans.captions_data || trans.captionsData;
-          if (vUrl) sceneVoiceovers[scIdx] = vUrl;
-          if (cData) sceneCaptions[scIdx] = cData;
-          if (trans.dialogue || trans.translated_dialogue || trans.translatedDialogue) {
-            sceneDialogues[scIdx] = trans.dialogue || trans.translated_dialogue || trans.translatedDialogue;
+          if (trans.voiceover_url) sceneVoiceovers[scIdx] = trans.voiceover_url;
+          if (trans.captions_data) sceneCaptions[scIdx] = trans.captions_data;
+          if (typeof trans.translated_dialogue === 'string' && trans.translated_dialogue.trim()) {
+            sceneDialogues[scIdx] = trans.translated_dialogue;
+          } else if (typeof trans.dialogue === 'string' && trans.dialogue.trim()) {
+            sceneDialogues[scIdx] = trans.dialogue;
+          } else if (Array.isArray(trans.dialogue) && trans.dialogue.length > 0) {
+            sceneDialogues[scIdx] = trans.dialogue.map((d: any) => d.line || d.text || '').filter(Boolean).join(' ');
           }
         }
       });
@@ -956,7 +971,12 @@ export const useSeriesStore = defineStore('series', () => {
     removeDubbingLanguage,
     setPreviewCaptionLanguage,
     setPreviewVoiceLanguage,
+    loadEpisodeTimeline,
     syncVoiceoverTrackToTimeline,
     syncCaptionTrackToTimeline,
+    masterTracks,
+    masterClips,
+    initTimelineTracks,
+    applyLanguageTrackFilter,
   };
 });

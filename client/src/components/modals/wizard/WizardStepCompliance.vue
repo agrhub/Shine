@@ -75,14 +75,14 @@ function formatDuration(totalSeconds: number): string {
               d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
               fill="none"
               stroke="currentColor"
-              :stroke-dasharray="`${complianceResult.overallScore || 98}, 100`"
+              :stroke-dasharray="`${complianceResult.overall_score || 0}, 100`"
               stroke-linecap="round"
               stroke-width="3"
             ></path>
           </svg>
           <div class="absolute inset-0 flex flex-col items-center justify-center">
-            <span class="text-3xl font-black" style="color: var(--el-text-color-primary);">{{ complianceResult.overallScore || 98 }}%</span>
-            <span class="text-[10px] font-bold uppercase" style="color: var(--el-color-primary);">{{ complianceResult.isCompliant !== false ? t('wizard.safe') : t('wizard.attention') }}</span>
+            <span class="text-3xl font-black" style="color: var(--el-text-color-primary);">{{ complianceResult.overall_score || 0 }}%</span>
+            <span class="text-[10px] font-bold uppercase" style="color: var(--el-color-primary);">{{ complianceResult.is_compliant !== false ? t('wizard.safe') : t('wizard.attention') }}</span>
           </div>
         </div>
         <div class="flex-1 space-y-4 w-full">
@@ -108,7 +108,7 @@ function formatDuration(totalSeconds: number): string {
           </div>
           <ul class="space-y-3 text-xs">
             <li
-              v-for="item in (complianceResult.copyrightChecks || [])"
+              v-for="item in (complianceResult.copyright_checks || [])"
               :key="item.label"
               class="flex items-center justify-between pb-2 border-b last:border-0 last:pb-0"
               style="border-color: var(--el-border-color-light);"

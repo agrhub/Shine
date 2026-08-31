@@ -53,6 +53,26 @@ export function useWebSocket() {
     socketRef.value.on('patch:receive', callback);
   };
 
+  const onPipelineJobUpdated = (callback: (job: any) => void) => {
+    if (!socketRef.value) return;
+    socketRef.value.on('pipeline_job:updated', callback);
+  };
+
+  const onPipelineJobCompleted = (callback: (job: any) => void) => {
+    if (!socketRef.value) return;
+    socketRef.value.on('pipeline_job:completed', callback);
+  };
+
+  const onEpisodeUpdated = (callback: (episode: any) => void) => {
+    if (!socketRef.value) return;
+    socketRef.value.on('episode:updated', callback);
+  };
+
+  const onChatMessage = (callback: (data: { sessionId: string; message: any }) => void) => {
+    if (!socketRef.value) return;
+    socketRef.value.on('chat:message', callback);
+  };
+
   const disconnect = (seriesId?: string) => {
     if (socketRef.value) {
       if (seriesId) {
@@ -74,6 +94,10 @@ export function useWebSocket() {
     connect,
     broadcastPatch,
     onPatchReceive,
+    onPipelineJobUpdated,
+    onPipelineJobCompleted,
+    onEpisodeUpdated,
+    onChatMessage,
     disconnect,
   };
 }

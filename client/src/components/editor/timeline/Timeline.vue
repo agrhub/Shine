@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
+import { ref, shallowRef, markRaw, onMounted, onUnmounted, watch, computed } from 'vue';
 import TimelineHeader from './TimelineHeader.vue';
 import TimelineRuler from './TimelineRuler.vue';
 import TimelinePlayhead from './TimelinePlayhead.vue';
@@ -55,7 +55,7 @@ const scrollLeft = ref(0);
 const scale = ref<ITimelineScaleState>({ zoom: 1, unit: 1, segments: 1, index: 0 });
 const canvasElRef = ref<HTMLCanvasElement | null>(null);
 const timelineContainerRef = ref<HTMLDivElement | null>(null);
-const canvasRef = ref<CanvasTimeline | null>(null);
+const canvasRef = shallowRef<CanvasTimeline | null>(null);
 
 const durationUs = computed(() => (playbackState.value.duration || 10) * 1_000_000);
 const currentTimeUs = computed(() => (playbackState.value.currentTime || 0) * 1_000_000);
@@ -93,7 +93,7 @@ onMounted(() => {
   const containerHeight = (timelineContainerEl.clientHeight || 320) - 75;
 
   const isDark = theme.value === 'dark';
-  const canvas = new CanvasTimeline(canvasEl, {
+  const canvas = markRaw(new CanvasTimeline(canvasEl, {
     width: containerWidth,
     height: containerHeight,
     bounding: {
@@ -143,7 +143,7 @@ onMounted(() => {
     },
     guideLineColor: isDark ? '#ffffff' : '#000000',
     withTransitions: ['image', 'video'],
-  });
+  }));
 
   scrollbars = new TimelineScrollbars({
     canvas,
@@ -256,10 +256,34 @@ const handleWheel = (e: WheelEvent) => {
 };
 
 onUnmounted(() => {
-  if (resizeObserver) resizeObserver.disconnect();
-  if (bridge) bridge.dispose();
-  if (scrollbars) scrollbars.dispose();
-  if (canvasRef.value) (canvasRef.value as any).purge();
+  if (resizeObserver) {
+    try {
+      resizeObserver.disconnect();
+    } catch (_) {}
+    resizeObserver = null;
+  }
+  if (bridge) {
+    try {
+      bridge.dispose?.();
+    } catch (_) {}
+    bridge = null;
+  }
+  if (scrollbars) {
+    try {
+      scrollbars.dispose?.();
+    } catch (_) {}
+    scrollbars = null;
+  }
+  if (canvasRef.value) {
+    const c = canvasRef.value as any;
+    try {
+      c.purge?.();
+    } catch (_) {}
+    try {
+      c.dispose?.();
+    } catch (_) {}
+    canvasRef.value = null;
+  }
 });
 </script>
 

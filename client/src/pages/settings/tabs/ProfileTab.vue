@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { toast } from 'vue-sonner';
 import http from '@/utils/http';
+import { PlatformAccount } from '@/types';
 
 const { t } = useI18n();
 const authStore = useAuthStore();
@@ -97,18 +98,8 @@ const apiKeyHidden = ref(true);
 const daysRotated = ref(12);
 
 // ─── Multi-Channel Platform Connect ──────────────────────────────────────────
-export interface ConnectedChannel {
-  id: string;
-  provider: 'youtube' | 'tiktok' | 'facebook' | string;
-  channelId: string;
-  channelName: string;
-  handle?: string;
-  channelAvatar?: string;
-  connectedAt: string;
-  status: string;
-}
 
-const connectedChannels = ref<ConnectedChannel[]>([]);
+const connectedChannels = ref<PlatformAccount[]>([]);
 const enabledPlatforms = ref({
   youtube: true,
   tiktok: true,
@@ -167,7 +158,7 @@ async function handleDisconnectChannel(channelId: string) {
     if (res?.data?.connected_channels) {
       connectedChannels.value = res.data.connected_channels;
     } else {
-      connectedChannels.value = connectedChannels.value.filter((c) => c.id !== channelId && c.channelId !== channelId);
+      connectedChannels.value = connectedChannels.value.filter((c) => c.id !== channelId && c.channel_id !== channelId);
     }
     if (authStore.user) {
       authStore.user.connected_channels = connectedChannels.value;
@@ -487,12 +478,12 @@ onUnmounted(() => {
               >
                 <div class="flex items-center gap-2.5 overflow-hidden">
                   <img
-                    :src="ch.channelAvatar || '/images/avatars/avatar-default.jpg'"
+                    :src="ch.channel_avatar || '/images/avatars/avatar-default.jpg'"
                     alt="Channel"
                     class="w-7 h-7 rounded-full object-cover flex-shrink-0"
                   />
                   <div class="min-w-0">
-                    <p class="text-xs font-bold text-[var(--el-text-color-primary)] truncate">{{ ch.channelName }}</p>
+                    <p class="text-xs font-bold text-[var(--el-text-color-primary)] truncate">{{ ch.channel_name }}</p>
                     <p class="text-[10px] text-emerald-500 font-medium truncate">{{ ch.handle || '@connected' }}</p>
                   </div>
                 </div>
@@ -503,9 +494,9 @@ onUnmounted(() => {
                   text
                   circle
                   title="Disconnect Channel"
+                  icon="Link"
                   @click="handleDisconnectChannel(ch.id)"
                 >
-                  <el-icon class="text-xs"><Link /></el-icon>
                 </el-button>
               </div>
             </div>
@@ -516,10 +507,10 @@ onUnmounted(() => {
               size="small"
               type="primary"
               class="w-full"
+			  icon="Plus"
               :loading="isConnectingProvider === platform.id"
               @click="connectPlatformPopup(platform.id)"
             >
-              <el-icon class="mr-1.5 text-xs"><Plus /></el-icon>
               {{ getChannelsForProvider(platform.id).length > 0 ? (t('settings.addAnotherChannel') || 'Add Channel') : (t('settings.connectChannel') || 'Connect Channel') }}
             </el-button>
           </div>

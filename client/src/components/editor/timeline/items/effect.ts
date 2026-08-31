@@ -1,10 +1,11 @@
 import { Control, Resizable, ResizableProps } from "@openvideo/timeline";
-import { editorFont } from "@/components/editor/constants";
 import { createResizeControls } from "../controls";
 import {
   TIMELINE_SELECTED_BORDER_COLOR,
   TIMELINE_BORDER_WIDTH,
   TIMELINE_ITEM_BORDER_RADIUS,
+  SECONDARY_FONT,
+  SECONDARY_FONT_URL
 } from "../../constants/constants";
 
 interface EffectProps extends ResizableProps {
@@ -59,7 +60,7 @@ class Effect extends Resizable {
     ctx.restore();
 
     // 2. Draw text second
-    ctx.font = `600 11px ${editorFont.fontFamily}`;
+    ctx.font = `600 11px ${SECONDARY_FONT}`;
     ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";

@@ -102,7 +102,7 @@ const mainTargetLang = computed<GeminiSpeechLanguage>(() => {
 });
 
 // Selected active language track
-const activeVoiceLang = ref<string>('en-US');
+const activeVoiceLang = ref<string>(mainTargetLang.value?.code);
 // Multi-select languages for batch voiceover generation
 const selectedBatchLangs = ref<string[]>([]);
 const isBatchMode = ref(false);
@@ -144,20 +144,40 @@ watch([isEnableDubbing, autoDucking, selectedVoicePreset, voiceIntensity, voiceP
 // Auto-sync main language when active series changes
 watch(mainTargetLang, (newMain) => {
   if (newMain) {
-    seriesStore.addDubbingLanguage(newMain.code);
-    // Set default active voice language to target market's main language
-    if (!activeVoiceLang.value || (activeVoiceLang.value === 'en-US' && newMain.code !== 'en-US')) {
-      activeVoiceLang.value = newMain.code;
+    if (seriesStore.dubbingLanguages.length <= 1) {
+      seriesStore.setDubbingLanguages([newMain.code]);
+    } else if (!seriesStore.dubbingLanguages.includes(newMain.code)) {
+      seriesStore.addDubbingLanguage(newMain.code);
     }
+    activeVoiceLang.value = newMain.code;
   }
 }, { immediate: true });
 
 const isDubbingLoading = ref(false);
 
 function getSceneDialogueList(scene: any, langCode: string) {
-  if (langCode === mainTargetLang.value?.code || !langCode) {
+  if (!langCode || langCode === mainTargetLang.value?.code) {
     return Array.isArray(scene.dialogue) ? scene.dialogue : [{ character: scene.character || 'Character', line: scene.dialogue || '' }];
   }
+  const trans = scene.translations?.[langCode];
+  if (trans) {
+    if (Array.isArray(trans.dialogue) && trans.dialogue.length > 0) {
+      return trans.dialogue;
+    }
+    if (typeof trans.translated_dialogue === 'string' && trans.translated_dialogue.trim()) {
+      const speaker = (Array.isArray(scene.dialogue) && scene.dialogue[0]?.character) || scene.character || 'Character';
+      return [{ character: speaker, line: trans.translated_dialogue }];
+    }
+    if (typeof trans.dialogue === 'string' && trans.dialogue.trim()) {
+      const speaker = (Array.isArray(scene.dialogue) && scene.dialogue[0]?.character) || scene.character || 'Character';
+      return [{ character: speaker, line: trans.dialogue }];
+    }
+    if (Array.isArray(trans.captions_data) && trans.captions_data.length > 0) {
+      const speaker = (Array.isArray(scene.dialogue) && scene.dialogue[0]?.character) || scene.character || 'Character';
+      return [{ character: speaker, line: trans.captions_data.map((c: any) => c.text).join(' ') }];
+    }
+  }
+
   const epId = seriesStore.activeEpisodeId;
   const translated = epId ? seriesStore.getLanguageTrackDialogue(epId, langCode, scene.index) : null;
   if (translated) {
@@ -182,82 +202,30 @@ async function handleTranslateAndDubLanguage(targetLang: string) {
   isDubbingLoading.value = true;
   try {
     toast.info(t('toast.dubbingStarted'));
+    const scenes = seriesStore.activeEpisode?.scenes || [];
 
-    const scenesToDub = scenes.value.map(s => {
-      let dialogueText = '';
-      let speaker = '';
-      if (Array.isArray(s.dialogue)) {
-        dialogueText = s.dialogue.map((d: any) => d.line || d.text || '').join(' ');
-        speaker = s.dialogue[0]?.character || '';
-      } else {
-        dialogueText = s.dialogue || '';
-      }
-      return {
-        sceneIndex: s.index,
-        character: speaker,
-        dialogue: dialogueText,
-      };
-    }).filter(s => s.dialogue.trim().length > 0);
-
-    // 1. Translate dialogue to target language if not main
-    let translatedScenes = scenesToDub;
+    // 1. Translate dialogue to target language if not main language
     if (targetLang !== mainTargetLang.value.code) {
-      const transRes: any = await http.post('/captions/batch-translate', {
-        episodeId: epId,
-        targetLanguage: targetLang,
-        scenes: scenesToDub,
+      await http.post('/captions/batch-translate', {
+        series_id: seriesId,
+        episode_id: epId,
+        target_language: targetLang,
+        scenes,
       });
-      const transData = transRes?.data?.translatedScenes || transRes?.translatedScenes || [];
-      if (transData.length > 0) {
-        translatedScenes = scenesToDub.map(s => {
-          const matched = transData.find((t: any) => (t.sceneIndex || t.index) === s.sceneIndex);
-          return {
-            ...s,
-            translatedDialogue: matched?.translatedDialogue || s.dialogue,
-          };
-        });
-      }
     }
 
-    // 2. Generate TTS Audio for translated lines (backend automatically resolves character voices from database)
-    const dubRes: any = await http.post('/captions/batch-dubbing', {
-      seriesId,
-      episodeId: epId,
-      targetLanguage: targetLang,
-      scenes: translatedScenes,
+    // 2. Generate TTS Audio & Word-Level Captions on the backend (Single Source of Truth)
+    await http.post('/captions/batch-dubbing', {
+      series_id: seriesId,
+      episode_id: epId,
+      target_language: targetLang,
+      scenes,
     });
 
-    const voiceovers = dubRes?.data?.voiceovers || dubRes?.voiceovers || {};
-    Object.keys(voiceovers).forEach((scIdxStr) => {
-      const scIdx = Number(scIdxStr);
-      const vo = voiceovers[scIdx];
-      if (vo?.audioUrl) {
-        seriesStore.updateLanguageTrackVoiceover(epId, targetLang, scIdx, vo.audioUrl);
-      }
-    });
-
-    // 3. Save translated dialogue and synced caption cues for target language
-    translatedScenes.forEach((ts: any) => {
-      const scIdx = ts.scene_index || ts.sceneIndex || ts.index;
-      const text = ts.translated_dialogue || ts.translatedDialogue || ts.dialogue || '';
-      if (text) {
-        seriesStore.updateLanguageTrackDialogue(epId, targetLang, scIdx, text);
-        const originalScene = scenes.value.find(s => s.index === scIdx);
-        const durMs = (originalScene?.duration_seconds || 6) * 1000;
-        seriesStore.updateLanguageTrackCaptions(epId, targetLang, scIdx, [{
-          id: `cue_${scIdx}_${targetLang}_0`,
-          text: text,
-          start_ms: 0,
-          end_ms: durMs,
-          from_us: 0,
-          to_us: durMs * 1000,
-        }]);
-      }
-    });
-
+    // 3. Reload authoritative episode data & timeline from backend
+    await seriesStore.loadEpisodeScript(seriesId, epId);
     seriesStore.syncVoiceoverTrackToTimeline(epId, targetLang);
     seriesStore.syncCaptionTrackToTimeline(epId, targetLang);
-    if (seriesId) await seriesStore.saveEpisodeScenes(seriesId, epId);
     toast.success(t('toast.dubbingSuccess'));
   } catch (err: any) {
     toast.error(t('toast.dubbingFailed'));

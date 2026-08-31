@@ -6,7 +6,7 @@ export const TIMELINE_OFFSET_CANVAS_LEFT = 16;
 export const TIMELINE_OFFSET_CANVAS_RIGHT = 80;
 export const DEFAULT_FONT = "Roboto";
 export const DEFAULT_WEIGHT = "Regular";
-export const SECONDARY_FONT_URL = "https://fonts.gstatic.com/s/outfit/v15/QGYvz_MVcBeNP4NJuktqQ4E.woff2";
+export const SECONDARY_FONT_URL = "https://fonts.gstatic.com/s/quicksand/v37/6xKtdSZaM9iE8KbpRA_hJFQNcOM.woff2";
 export const SECONDARY_FONT = "Quicksand";
 
 export const LARGER_FONT_SIZE = 30;

@@ -65,7 +65,7 @@ const selectedLangToAdd = ref<string>('');
 watch(() => seriesStore.activeEpisode?.caption_settings, (settings) => {
   if (settings) {
     if (settings.isEnableCaption !== undefined) isEnableCaption.value = settings.isEnableCaption;
-    if (settings.selectedCaptionStyle) selectedCaptionStyle.value = settings.selectedCaptionStyle;
+    if (settings.selectedCaptionStyle) selectedCaptionStyle.value = settings.selectedCaptionStyle as any;
     if (settings.selectedFontFamily) selectedFontFamily.value = settings.selectedFontFamily;
     if (settings.captionFontSize !== undefined) captionFontSize.value = settings.captionFontSize;
     if (settings.captionTextColor) captionTextColor.value = settings.captionTextColor;
@@ -73,10 +73,10 @@ watch(() => seriesStore.activeEpisode?.caption_settings, (settings) => {
     if (settings.captionOutlineColor) captionOutlineColor.value = settings.captionOutlineColor;
     if (settings.captionOutlineWeight !== undefined) captionOutlineWeight.value = settings.captionOutlineWeight;
     if (settings.captionVerticalPos !== undefined) captionVerticalPos.value = settings.captionVerticalPos;
-    if (settings.selectedVerticalAlign) selectedVerticalAlign.value = settings.selectedVerticalAlign;
-    if (settings.selectedTextAlign) selectedTextAlign.value = settings.selectedTextAlign;
-    if (settings.selectedWordsPerLine) selectedWordsPerLine.value = settings.selectedWordsPerLine;
-    if (settings.selectedTextCase) selectedTextCase.value = settings.selectedTextCase;
+    if (settings.selectedVerticalAlign) selectedVerticalAlign.value = settings.selectedVerticalAlign as any;
+    if (settings.selectedTextAlign) selectedTextAlign.value = settings.selectedTextAlign as any;
+    if (settings.selectedWordsPerLine) selectedWordsPerLine.value = settings.selectedWordsPerLine as any;
+    if (settings.selectedTextCase) selectedTextCase.value = settings.selectedTextCase as any;
     if (settings.enableBackgroundBox !== undefined) enableBackgroundBox.value = settings.enableBackgroundBox;
     if (settings.captionBgColor) captionBgColor.value = settings.captionBgColor;
     if (settings.aiHighlightAnimate !== undefined) aiHighlightAnimate.value = settings.aiHighlightAnimate;
@@ -419,10 +419,21 @@ function applyAllCaptions() {
 
 // Get cues for active language + scene
 function getSceneCues(sceneIndex: number) {
+  const langCode = activeCapLang.value;
+  const sc = scenes.value.find((s: any) => s.index === sceneIndex);
+  if (sc) {
+    if (langCode === mainTargetLang.value?.code && Array.isArray(sc.captions_data) && sc.captions_data.length > 0) {
+      return sc.captions_data;
+    }
+    const trans = sc.translations?.[langCode];
+    if (trans && Array.isArray(trans.captions_data) && trans.captions_data.length > 0) {
+      return trans.captions_data;
+    }
+  }
   const epId = seriesStore.activeEpisodeId;
   if (!epId) return [];
   const tracks = seriesStore.getLanguageTracks(epId);
-  return tracks.find(t => t.language_code === activeCapLang.value)?.scene_captions[sceneIndex] || [];
+  return tracks.find(t => t.language_code === langCode)?.scene_captions[sceneIndex] || [];
 }
 
 function hasCaptions(sceneIndex: number) {

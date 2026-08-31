@@ -26,9 +26,9 @@ export interface PlanChatMessage {
 }
 
 export interface ComplianceResult {
-  overallScore?: number;
-  isCompliant?: boolean;
+  overall_score?: number;
+  is_compliant?: boolean;
   categories?: Record<string, { label: string; status: string; score: number; safe: boolean; notes?: string }>;
-  copyrightChecks?: Array<{ label: string; status: string; safe: boolean }>;
+  copyright_checks?: Array<{ label: string; status: string; safe: boolean }>;
   recommendations?: string[];
 }

@@ -35,21 +35,26 @@ const fallbackImages = [
 
 const allSeriesList = computed(() => {
   if (Array.isArray(seriesStore.seriesList) && seriesStore.seriesList.length > 0) {
-    return seriesStore.seriesList.map((s: Series, idx: number) => ({
-      id: s.id,
-      title: s.title,
-      genre: s.genre || 'Drama',
-      episode_count: s.episode_count || 1,
-      status: s.status || 'DRAFT',
-      subtitle: `${t('dashboard.statEpisodes')}: ${s.episode_count || 1} · ${s.genre || 'Drama'}`,
-      tag: s.status === 'PUBLISHED' ? t('series.published') : s.status === 'ACTIVE' ? t('series.active') : s.status === 'ARCHIVED' ? 'Archived' : t('series.draft'),
-      tagClass: s.status === 'ACTIVE'
-        ? 'bg-[var(--el-color-primary)] text-[var(--el-color-primary-foreground,#002112)]'
-        : s.status === 'ARCHIVED'
-        ? 'bg-neutral-500/20 text-neutral-400 border border-neutral-500/30'
-        : 'bg-[var(--el-bg-color)] text-[var(--el-text-color-primary)]',
-      image: fallbackImages[idx % fallbackImages.length],
-    }));
+    return seriesStore.seriesList.map((s: Series, idx: number) => {
+      const totalEps = s.episode_count || 1;
+      const pubEps = typeof s.published_episode_count === 'number' ? s.published_episode_count : 0;
+      return {
+        id: s.id,
+        title: s.title,
+        genre: s.genre || 'Drama',
+        episode_count: totalEps,
+        published_episode_count: pubEps,
+        status: s.status || 'DRAFT',
+        subtitle: `${t('dashboard.statEpisodes')}: ${totalEps} · ${s.genre || 'Drama'}`,
+        tag: s.status === 'PUBLISHED' ? t('series.published') : s.status === 'ACTIVE' ? t('series.active') : s.status === 'ARCHIVED' ? 'Archived' : t('series.draft'),
+        tagClass: s.status === 'ACTIVE'
+          ? 'bg-[var(--el-color-primary)] text-[var(--el-color-primary-foreground,#002112)]'
+          : s.status === 'ARCHIVED'
+          ? 'bg-neutral-500/20 text-neutral-400 border border-neutral-500/30'
+          : 'bg-[var(--el-bg-color)] text-[var(--el-text-color-primary)]',
+        image: s.cover_image || fallbackImages[idx % fallbackImages.length],
+      };
+    });
   }
   return [];
 });
@@ -282,7 +287,13 @@ function handleSeriesAction(command: string, series: any) {
           </div>
         </div>
         <div class="px-5 pb-5 pt-0 flex items-center justify-between text-xs text-[var(--el-text-color-secondary)] border-t border-[var(--el-border-color)]/40 mt-auto pt-3">
-          <span>{{ series.status === 'PUBLISHED' ? '100% ' + t('dashboard.completeLabel') : '75% ' + t('dashboard.completeLabel') }}</span>
+          <div class="flex items-center gap-1.5 font-medium">
+            <span
+              class="inline-block w-2 h-2 rounded-full"
+              :class="series.published_episode_count > 0 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-neutral-400/60'"
+            ></span>
+            <span>{{ series.published_episode_count }}/{{ series.episode_count }} {{ t('dashboard.statPublished') }}</span>
+          </div>
           <span class="font-semibold text-[var(--el-color-primary)] group-hover:underline flex items-center gap-1">
             {{ t('dashboard.openStudioBtn') }} <el-icon class="text-[10px]"><Right /></el-icon>
           </span>

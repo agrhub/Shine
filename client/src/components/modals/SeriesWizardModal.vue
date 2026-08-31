@@ -135,12 +135,12 @@ async function executeAgenticStream(
       context: {
         title: formData.value.title || formData.value.selectedTrend?.topic || '',
         genre: formData.value.genre,
-        visualStyle: formData.value.visualStyle,
-        visualStylePrompt: (formData.value as any).visualStylePrompt || '',
+        visual_style: formData.value.visualStyle,
+        visual_style_prompt: (formData.value as any).visualStylePrompt || '',
         country: formData.value.country,
         language: formData.value.language,
-        targetEpisodes: formData.value.targetEpisodes,
-        episodeDurationSeconds: formData.value.episodeDurationSeconds,
+        target_episodes: formData.value.targetEpisodes,
+        episode_duration_seconds: formData.value.episodeDurationSeconds,
         synopsis: formData.value.synopsis || formData.value.selectedTrend?.description || '',
         ratio: formData.value.ratio,
         currentPlan: masterPlan.value,
@@ -352,15 +352,15 @@ function retryPlanChat(failedPrompt: string, errorIdx: number) {
 const isVerifyingCompliance = ref(false);
 const complianceError = ref('');
 const complianceResult = ref<ComplianceResult>({
-  overallScore: 0,
-  isCompliant: false,
+  overall_score: 0,
+  is_compliant: false,
   categories: {
     violence: { label: t('compliance.violenceGore'), score: 0, status: 'Failed', safe: false, notes: 'No prohibited violence' },
-    adultContent: { label: t('compliance.adultContent'), score: 0, status: 'Failed', safe: false, notes: 'Compliant with commercial standards' },
-    culturalSensitivity: { label: t('compliance.culturalSensitivity'), score: 0, status: 'Failed', safe: false, notes: 'Aligned with regional norms' },
-    copyrightIP: { label: t('compliance.copyrightIP'), score: 0, status: 'Failed', safe: false, notes: 'Original tropes' },
+    adult_content: { label: t('compliance.adultContent'), score: 0, status: 'Failed', safe: false, notes: 'Compliant with commercial standards' },
+    cultural_sensitivity: { label: t('compliance.culturalSensitivity'), score: 0, status: 'Failed', safe: false, notes: 'Aligned with regional norms' },
+    copyright_ip: { label: t('compliance.copyrightIP'), score: 0, status: 'Failed', safe: false, notes: 'Original tropes' },
   },
-  copyrightChecks: [
+  copyright_checks: [
     { label: t('compliance.scriptOrigin'), status: 'Failed', safe: false },
     { label: t('compliance.generatedVisualAssets'), status: 'Failed', safe: false },
     { label: t('compliance.audioFoleyLibrary'), status: 'Failed', safe: false },
@@ -373,20 +373,13 @@ async function runComplianceVerification() {
   isVerifyingCompliance.value = true;
   complianceError.value = '';
   try {
-    const prompt = `Verify compliance, platform safety, and copyright for the following master plan in ${formData.value.country} (${formData.value.ratio}): ${JSON.stringify(masterPlan.value)}`;
-    await executeAgenticStream(prompt, (type, data) => {
-      if (type === 'compliance_verified') {
-        complianceResult.value = data;
-      }
+    const res: any = await http.post('/ai/verify-compliance', {
+      master_plan: masterPlan.value,
+      country: formData.value.country || 'United States',
+      ratio: formData.value.ratio || '9:16',
     });
-
-    if (!complianceResult.value?.overallScore) {
-      const res: any = await http.post('/ai/verify-compliance', {
-        masterPlan: masterPlan.value,
-        country: formData.value.country || 'Vietnam',
-        ratio: formData.value.ratio || '9:16',
-      });
-      if (res?.data) complianceResult.value = res.data;
+    if (res?.data) {
+      complianceResult.value = res.data;
     }
   } catch (err: any) {
     complianceError.value = err?.response?.data?.message || err?.message || t('wizard.complianceErrorMsg');
@@ -418,9 +411,9 @@ async function refineMasterPlanFromSuggestions(specificSuggestion?: string) {
     await executeAgenticStream(prompt, (type, data) => {
       if (type === 'master_plan_updated') {
         masterPlan.value = data;
-        if (data.totalEpisodes) formData.value.targetEpisodes = data.totalEpisodes;
+        if (data.total_episodes) formData.value.targetEpisodes = data.total_episodes;
         if (data.title) formData.value.title = data.title;
-        if (data.totalDurationSeconds) formData.value.episodeDurationSeconds = data.totalDurationSeconds;
+        if (data.total_duration_seconds) formData.value.episodeDurationSeconds = data.total_duration_seconds;
       }
     });
 
@@ -467,17 +460,16 @@ async function handleFinish() {
       const finalPayload = {
         title: formData.value.title,
         genre: formData.value.genre,
-        visualStyle: currentStyle,
-        visualStylePrompt: styleObj.promptModifier,
+        visual_style: currentStyle,
+        visual_style_prompt: styleObj.promptModifier,
         country: formData.value.country,
         language: formData.value.language,
         ratio: formData.value.ratio,
-        episodeCount: masterPlan.value?.totalEpisodes || formData.value.targetEpisodes,
-        episodeDurationSeconds: masterPlan.value?.totalDurationSeconds || formData.value.episodeDurationSeconds,
-        episodeDurationMinutes: masterPlan.value?.episodeDurationMinutes || formData.value.episodeDurationMinutes || 1.5,
-        userId: authStore.user?.id,
-        synopsis: formData.value.synopsis || masterPlan.value?.synopsis || masterPlan.value?.description || masterPlan.value?.storyCore?.coreAttraction,
-        masterPlan: masterPlan.value,
+        episode_count: masterPlan.value?.total_episodes || formData.value.targetEpisodes,
+        episode_duration_seconds: masterPlan.value?.total_duration_seconds || formData.value.episodeDurationSeconds,
+        episode_duration_minutes: masterPlan.value?.episode_duration_minutes || formData.value.episodeDurationMinutes || 1,
+        synopsis: formData.value.synopsis || masterPlan.value?.synopsis || masterPlan.value?.description || masterPlan.value?.story_core?.core_attraction,
+        master_plan: masterPlan.value,
         characters: masterPlan.value?.characters || [],
         locations: masterPlan.value?.locations || [],
         props: masterPlan.value?.props || [],

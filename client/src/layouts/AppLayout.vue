@@ -2,11 +2,14 @@
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
+import { Bot } from 'lucide-vue-next';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useChatStore } from '@/stores/chatStore';
 import LanguageSelect from '@/components/shared/LanguageSelect.vue';
 import SeriesWizardModal from '@/components/modals/SeriesWizardModal.vue';
 import ShineAssistantSidebar from '@/components/assistant/ShineAssistantSidebar.vue';
+import JobStatusPopover from '@/components/workspace/JobStatusPopover.vue';
+import { usePipelineStore } from '@/stores/usePipelineStore';
 import { Sunny, Moon, User, Lock, SwitchButton, Fold, Expand, Plus, Right, Bell, Cpu } from '@element-plus/icons-vue';
 import { storeToRefs } from 'pinia';
 
@@ -15,6 +18,7 @@ const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const chatStore = useChatStore();
+const pipelineStore = usePipelineStore();
 const { isDark } = storeToRefs(authStore);
 const { isSidebarOpen } = storeToRefs(chatStore);
 
@@ -33,7 +37,7 @@ function toggleTheme() {
 }
 
 function goToProfile() {
-  router.push('/billing');
+  router.push('/settings');
 }
 
 function goToChangePassword() {
@@ -80,13 +84,12 @@ function handleWizardCreated(id: string) {
               <span class="w-1.5 h-1.5 rounded-full bg-[var(--el-color-primary)] ring-4 ring-[var(--el-color-primary)]/20"></span>
             </div>
             <!-- Collapse Button (Expanded) -->
-            <button
+            <el-button
               @click="toggleSidebar"
-              class="w-7 h-7 rounded-lg flex items-center justify-center text-[var(--el-text-color-secondary)] hover:text-[var(--el-text-color-primary)] hover:bg-[var(--el-fill-color-light)] transition-colors cursor-pointer"
+              icon="Menu"
               :title="t('common.collapse')"
-            >
-              <el-icon :size="16"><Fold /></el-icon>
-            </button>
+              size="large" circle text bg
+            />
           </div>
 
           <div v-if="!isCollapsed">
@@ -98,13 +101,12 @@ function handleWizardCreated(id: string) {
 
           <!-- Collapsed Header -->
           <div v-else class="flex flex-col items-center gap-3">
-            <button
+            <el-button
               @click="toggleSidebar"
-              class="w-10 h-10 rounded-xl flex items-center justify-center text-[var(--el-text-color-secondary)] hover:text-[var(--el-text-color-primary)] hover:bg-[var(--el-fill-color-light)] transition-colors cursor-pointer"
               :title="t('common.expand')"
+              icon="Menu" circle text bg size="large"
             >
-              <el-icon :size="18"><Expand /></el-icon>
-            </button>
+            </el-button>
             <router-link to="/dashboard" class="flex items-center justify-center hover:opacity-90 transition-opacity" title="Shine Studio">
               <img src="/logo.png" alt="Shine Logo" class="h-9 w-9 object-contain rounded-lg" />
             </router-link>
@@ -213,13 +215,8 @@ function handleWizardCreated(id: string) {
             <el-icon :size="16"><Sunny v-if="!isDark" /><Moon v-else /></el-icon>
           </button>
 
-          <!-- Notifications button -->
-          <button
-            class="w-10 h-10 rounded-full bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] flex items-center justify-center text-[var(--el-text-color-regular)] hover:text-[var(--el-text-color-primary)] transition-colors shadow-soft hover:shadow cursor-pointer"
-            title="Notifications"
-          >
-            <el-icon :size="16"><Bell /></el-icon>
-          </button>
+          <!-- Global Pipeline Task & Background Job Monitor -->
+          <JobStatusPopover />
 
           <!-- Shine Assistant Right Sidebar Toggle Button -->
           <button
@@ -230,7 +227,7 @@ function handleWizardCreated(id: string) {
               : 'bg-[var(--el-card-bg-color)] border-[var(--el-border-color)] text-[var(--el-text-color-regular)] hover:text-[var(--el-text-color-primary)] hover:border-emerald-500/30'"
             title="Toggle Dedicated Shine Assistant"
           >
-            <el-icon :size="15" class="text-emerald-400"><Cpu /></el-icon>
+            <el-icon :size="15" class="text-emerald-400"><Bot /></el-icon>
             <span class="hidden sm:inline">Assistant</span>
             <span class="w-2 h-2 rounded-full bg-emerald-500" :class="isSidebarOpen ? 'animate-pulse' : 'opacity-60'"></span>
           </button>

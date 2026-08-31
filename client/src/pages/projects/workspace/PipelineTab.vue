@@ -9,6 +9,7 @@ const emit = defineEmits<{
   (e: 'open-cast'): void;
   (e: 'run-pipeline', stepId?: string): void;
   (e: 'view-character', char: any): void;
+  (e: 'open-series-info'): void;
 }>();
 
 const { t } = useI18n();
@@ -19,12 +20,6 @@ const series = computed(() => seriesStore.currentSeries);
 const castMembers = computed(() => seriesStore.charactersList);
 
 async function runStep(stepId: string) {
-  // const step = pipelineStore.pipelineSteps.find(s => s.id === stepId);
-  // if (!step) {
-  //   toast.error(t('toast.unknownPipelineStepError'));
-  //   return;
-  // };
-  // Generic step run for other steps — emit up to parent
   emit('run-pipeline', stepId);
   return;
 }
@@ -35,20 +30,25 @@ async function runStep(stepId: string) {
     <!-- Viral Trend Analysis Box -->
     <div class="p-4 rounded-2xl border shadow-soft" style="background-color: var(--el-card-bg-color); border-color: var(--el-border-color);">
       <div class="flex items-center justify-between mb-2">
-        <div class="flex items-center gap-2" style="color: var(--el-color-primary);">
+        <div class="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity" style="color: var(--el-color-primary);" @click="emit('open-series-info')">
           <el-icon :size="16"><TrendCharts /></el-icon>
           <h3 class="text-xs font-bold uppercase tracking-wider">{{ t('workspace.viralTrendAnalysis') }}</h3>
         </div>
-        <el-tag type="primary" size="small" effect="plain" round class="font-bold tracking-widest uppercase">
+        <el-tag type="primary" size="small" effect="plain" round class="font-bold tracking-widest uppercase cursor-pointer" @click="emit('open-series-info')">
           {{ t('workspace.live') }}
         </el-tag>
       </div>
-      <div class="w-full rounded-xl p-3 flex items-center justify-between border mb-3" style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);">
+      <div
+        class="w-full rounded-xl p-3 flex items-center justify-between border mb-3 cursor-pointer hover:border-primary transition-all hover:scale-[1.01]"
+        style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);"
+        :title="t('workspace.viewMasterPlan', 'Click to view Series Master Plan & Details')"
+        @click="emit('open-series-info')"
+      >
         <div>
           <div class="font-bold text-xs" style="color: var(--el-text-color-primary);">#{{ (series?.title || 'Series').replace(/\s+/g, '') }}</div>
-          <div class="text-[10px] mt-0.5" style="color: var(--el-text-color-secondary);">{{ t('workspace.socialTrending') }}</div>
+          <div class="text-[10px] mt-0.5" style="color: var(--el-text-color-secondary);">{{ t('workspace.socialTrending') }} • {{ t('workspace.viewMasterPlan') }}</div>
         </div>
-        <el-icon :size="12" style="color: var(--el-text-color-secondary);"><ArrowRight /></el-icon>
+        <el-icon :size="14" style="color: var(--el-color-primary);"><ArrowRight /></el-icon>
       </div>
       <p class="text-[11px] leading-relaxed" style="color: var(--el-text-color-secondary);">
         {{ t('workspace.aiRetentionActive') }} <span class="font-semibold" style="color: var(--el-text-color-primary);">{{ series?.title }}</span>.
@@ -123,11 +123,12 @@ async function runStep(stepId: string) {
             : 'primary'"
             :loading="step.status === 'running'"
             plain round bg @click="runStep(step.id)" size="small"
-            class="w-full !ml-0 !mt-0">
-            <div class="flex items-center gap-2">
+            class="w-full !ml-0 !mt-0" :icon="step.icon">
+            <!-- <div class="flex items-center gap-2">
               <el-icon><component :is="step.icon" /></el-icon>
               <span>{{ step.label }}</span>
-            </div>
+            </div> -->
+            <span>{{ step.label }}</span>
           </el-button>
         </template>
         <!-- <div v-loading="step.status === 'running'"

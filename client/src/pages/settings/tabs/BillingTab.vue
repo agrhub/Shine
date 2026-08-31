@@ -10,12 +10,36 @@ const authStore = useAuthStore();
 
 const billingData = ref({
   tier: 'creator',
-  creditBalance: 0,
-  creditQuota: 99990,
-  monthlyPriceUsd: 29,
+  credit_balance: 0,
+  credit_quota: 99990,
+  monthly_price_usd: 29,
 });
 const usageHistory = ref<any[]>([]);
 const isUpgrading = ref(false);
+const isLoadingHistory = ref(false);
+
+// ─── Pagination & Filtering ──────────────────────────────────────────────────
+const currentPage = ref(1);
+const pageSize = ref(10);
+const searchQuery = ref('');
+
+const filteredHistory = computed(() => {
+  if (!searchQuery.value.trim()) return usageHistory.value;
+  const q = searchQuery.value.toLowerCase().trim();
+  return usageHistory.value.filter((item) => {
+    return (
+      (item.type && item.type.toLowerCase().includes(q)) ||
+      (item.detail && item.detail.toLowerCase().includes(q)) ||
+      (item.date && item.date.toLowerCase().includes(q)) ||
+      (item.status && item.status.toLowerCase().includes(q))
+    );
+  });
+});
+
+const paginatedHistory = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  return filteredHistory.value.slice(start, start + pageSize.value);
+});
 
 const tiersList = computed(() => [
   { id: 'free', name: t('settings.freeTier'), price: 0, credits: 100, desc: 'Casual testing & learning' },
@@ -25,6 +49,7 @@ const tiersList = computed(() => [
 ]);
 
 async function loadBilling() {
+  isLoadingHistory.value = true;
   try {
     const [tierRes, historyRes]: any = await Promise.all([
       http.get('/billing/tier'),
@@ -40,6 +65,8 @@ async function loadBilling() {
     if (historyRes?.data) usageHistory.value = historyRes.data;
   } catch (err) {
     console.error('Failed to fetch billing info', err);
+  } finally {
+    isLoadingHistory.value = false;
   }
 }
 
@@ -91,10 +118,10 @@ onMounted(() => {
       <div class="w-full md:w-64 space-y-2">
         <div class="flex justify-between text-xs font-semibold">
           <span class="text-[var(--el-text-color-secondary)]">{{ t('settings.creditsUsed') }}</span>
-          <span class="text-[var(--el-text-color-primary)]">{{ billingData.creditBalance }} / {{ billingData.creditQuota }}</span>
+          <span class="text-[var(--el-text-color-primary)]">{{ billingData.credit_balance }} / {{ billingData.credit_quota }}</span>
         </div>
         <el-progress
-          :percentage="Math.min(100, Math.round((billingData.creditBalance / (billingData.creditQuota || 1)) * 100))"
+          :percentage="Math.min(100, Math.round((billingData.credit_balance / (billingData.credit_quota || 1)) * 100))"
           color="var(--el-color-primary)"
           :stroke-width="8"
         />
@@ -143,18 +170,108 @@ onMounted(() => {
 
     <!-- Usage & Invoices History -->
     <div class="space-y-4">
-      <h3 class="text-sm font-semibold text-[var(--el-text-color-primary)]">{{ t('settings.invoicesHistory') }}</h3>
-      <div class="bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-2xl overflow-hidden shadow-soft">
-        <el-table :data="usageHistory" style="width: 100%">
-          <el-table-column prop="date" :label="t('common.date')" width="140" />
-          <el-table-column prop="description" :label="t('common.description')" />
-          <el-table-column prop="amount" :label="t('common.amount')" width="130" />
-          <el-table-column prop="status" :label="t('common.status')" width="110">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <h3 class="text-sm font-semibold text-[var(--el-text-color-primary)]">
+            {{ t('settings.invoicesHistory') }}
+          </h3>
+          <el-tag size="small" round effect="plain" class="font-bold">
+            {{ filteredHistory.length }} {{ t('common.records') || 'records' }}
+          </el-tag>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <el-input
+            v-model="searchQuery"
+            :placeholder="t('common.search') || 'Search transactions...'"
+            size="small"
+            clearable
+            prefix-icon="Search"
+            class="!w-60"
+          />
+          <el-button
+            size="small"
+            plain
+            round
+            icon="Refresh"
+            :loading="isLoadingHistory"
+            @click="loadBilling"
+          >
+            {{ t('common.refresh') || 'Refresh' }}
+          </el-button>
+        </div>
+      </div>
+
+      <div class="bg-[var(--el-card-bg-color)] border border-[var(--el-border-color)] rounded-2xl overflow-hidden shadow-soft flex flex-col">
+        <el-table
+          :data="paginatedHistory"
+          v-loading="isLoadingHistory"
+          style="width: 100%"
+          empty-text="No billing transactions recorded yet"
+        >
+          <el-table-column prop="date" :label="t('common.date') || 'Date'" width="160" />
+          <el-table-column prop="type" :label="t('common.type') || 'Type'" min-width="160">
             <template #default="{ row }">
-              <el-tag size="small" type="success" round effect="plain">{{ row.status }}</el-tag>
+              <span class="font-medium text-xs text-[var(--el-text-color-primary)]">{{ row.type }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="detail" :label="t('common.description') || 'Description'" min-width="220">
+            <template #default="{ row }">
+              <span class="text-xs text-[var(--el-text-color-secondary)]">{{ row.detail }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="credits" :label="t('settings.creditsUsed') || 'Credits Used'" width="130">
+            <template #default="{ row }">
+              <span :class="Number(row.credits) < 0 ? 'text-rose-500 font-bold' : 'text-emerald-500 font-bold'">
+                {{ row.credits }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="balance_after" :label="t('common.amount') || 'Balance After'" width="130">
+            <template #default="{ row }">
+              <span class="font-semibold text-xs text-[var(--el-text-color-primary)]">{{ row.balance_after }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="status" :label="t('common.status') || 'Status'" width="110">
+            <template #default="{ row }">
+              <el-tag
+                size="small"
+                :type="row.status === 'Success' || row.status === 'COMPLETED' ? 'success' : 'info'"
+                round
+                effect="plain"
+              >
+                {{ row.status }}
+              </el-tag>
             </template>
           </el-table-column>
         </el-table>
+
+        <!-- Pagination Controls -->
+        <div class="px-5 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-[var(--el-border-color)] bg-[var(--el-bg-color-page)]">
+          <span class="text-xs text-[var(--el-text-color-secondary)]">
+            {{ t('common.showing') || 'Showing' }}
+            <span class="font-semibold text-[var(--el-text-color-primary)]">
+              {{ filteredHistory.length > 0 ? (currentPage - 1) * pageSize + 1 : 0 }}
+            </span>
+            -
+            <span class="font-semibold text-[var(--el-text-color-primary)]">
+              {{ Math.min(currentPage * pageSize, filteredHistory.length) }}
+            </span>
+            {{ t('common.of') || 'of' }}
+            <span class="font-semibold text-[var(--el-text-color-primary)]">{{ filteredHistory.length }}</span>
+            {{ t('common.records') || 'records' }}
+          </span>
+
+          <el-pagination
+            v-model:current-page="currentPage"
+            v-model:page-size="pageSize"
+            :page-sizes="[5, 10, 20, 50]"
+            :total="filteredHistory.length"
+            layout="sizes, prev, pager, next, jumper"
+            size="small"
+            background
+          />
+        </div>
       </div>
     </div>
   </div>

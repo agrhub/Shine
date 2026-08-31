@@ -119,6 +119,14 @@ export interface CharacterCostumes {
   variant_id?: string;
 }
 
+export interface SceneDialogue {
+  character: string;
+  emotion?: string;
+  line: string;
+  speech_tone?: string;
+  speed?: number;
+}
+
 export interface Scene {
   id: string;
   scene_number?: number;
@@ -138,7 +146,7 @@ export interface Scene {
   video_url?: string;
   voiceover_url?: string;
   bgm_url?: string;
-  dialogue?: any;
+  dialogue?: SceneDialogue[];
   characters?: Character[] | string[];
   props?: string[];
   end_frame_prompt?: string;
@@ -259,6 +267,63 @@ export interface LanguageTrack {
   scene_dialogues?: Record<number, string>;      // sceneIndex -> translated dialogue text
 }
 
+export interface RenderVersionEntity {
+  id?: string;
+  version_id?: string;
+  episode_id?: string;
+  episode_number?: number;
+  episode_title?: string;
+  language: string;
+  languages?: string[];
+  voice?: string;
+  subtitles?: string[];
+  resolution?: string;
+  video_url?: string;
+  url?: string;
+  thumbnail_url?: string;
+  duration?: number;
+  file_size?: string;
+  rendered_at?: string;
+  status?: 'ready' | 'draft' | 'rendering' | 'failed' | string;
+}
+
+export interface DubbingSettings {
+  voice_name?: string;
+  voice_id?: string;
+  speed?: number;
+  target_languages?: string[];
+  primary_language?: string;
+  is_enable_bubbing?: boolean;
+  auto_ducking?: boolean;
+  selected_voice_preset?: string;
+  voice_intensity?: number;
+  voice_pacing?: number;
+  [key: string]: any;
+}
+
+export interface CaptionSettings {
+  languages?: string[];
+  burn_in?: boolean;
+  style_preset?: string;
+  is_enable_caption?: boolean;
+  selected_caption_style?: string;
+  selected_font_family?: string;
+  caption_font_size?: number;
+  caption_text_color?: string;
+  active_word_highlight_color?: string;
+  caption_outline_color?: string;
+  caption_outline_weight?: number;
+  caption_vertical_pos?: number;
+  selected_vertical_align?: string;
+  selected_text_align?: string;
+  selected_words_per_line?: number;
+  selected_text_case?: string;
+  enable_background_box?: boolean;
+  caption_bg_color?: string;
+  ai_highlight_animate?: boolean;
+  [key: string]: any;
+}
+
 export interface Episode {
   id: string;
   number: number;
@@ -270,19 +335,40 @@ export interface Episode {
   scene_core?: string;
   conflict_escalation?: string;
   cliffhanger_hook?: string;
-  duration?: string;//duration in minute string
+  duration?: string; // duration in minute string
   duration_seconds?: number;
   scenes_count: string;
   status: string;
   scenes?: Scene[];
   cover_image?: string;
-  dubbing_settings?: any;
-  caption_settings?: any;
+  thumbnail_url?: string;
+  dubbing_settings?: DubbingSettings;
+  caption_settings?: CaptionSettings;
   caption_languages?: string[];
   dubbing_languages?: string[];
+  characters?: Character[] | string[];
+  locations?: LocationAsset[] | string[];
+  props?: PropAsset[] | string[];
   video_url?: string;
   video_urls?: Record<string, string>;
-  render_versions?: any[];
+  render_versions?: RenderVersionEntity[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PublishMetadataResponse {
+  titles: string[];
+  selected_title?: string;
+  description: string;
+  hashtags: string[];
+}
+
+export interface PublishResultPayload {
+  type: 'publish' | 'schedule';
+  data?: unknown;
+  platforms: string[];
+  published_urls?: Record<string, string>;
+  scheduled_time?: string;
 }
 
 export interface Series {
@@ -296,14 +382,18 @@ export interface Series {
   country?: string;
   language?: string;
   ratio?: string;
+  cover_image?: string;
   viral_hook?: string;
   master_plan?: any;
   characters?: Character[];
   locations?: any[];
   props?: any[];
   episode_count: number;
+  published_episode_count?: number;
   episodes_count?: number;
   total_episodes?: number;
+  episode_duration?: number;
+  target_duration_seconds?: number;
   status: 'DRAFT' | 'ACTIVE' | 'PUBLISHED' | 'ARCHIVED';
   created_at?: string;
   updated_at?: string;
@@ -621,6 +711,20 @@ export interface Asset {
   created_at?: string;
 }
 
+export interface PlatformAccount {
+  id: string; 
+  provider: "youtube" | "facebook" | "tiktok" | "instagram" | "threads"; 
+  channel_id: string; 
+  channel_name: string; 
+  channel_avatar?: string; 
+  handle?: string;
+  access_token?: string;
+  refresh_token?: string;
+  connected_at: string; 
+  status: string;
+  expires_at?: number;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -632,7 +736,7 @@ export interface User {
   theme?: 'dark' | 'light' | string;
   language?: string;
   two_factor_enabled?: boolean;
-  connected_channels?: any;
+  connected_channels?: PlatformAccount[];
 }
 
 
@@ -664,6 +768,49 @@ export interface GeneratedAsset {
 
 export type ActiveTab = 'uploads' | 'pexels' | 'text' | 'audio' | 'elements' | 'assistant' | 'captions' | 'assets' | 'images' | 'videos' | 'music' | 'effects' | 'voiceovers' | 'sfx' | 'transitions';
 export type EditorMode = 'editor' | 'agent' | 'playground';
+
+export interface AssetJobItem {
+  id: string;
+  name: string;
+  type: 'character' | 'wardrobe' | 'location' | 'prop' | 'storyboard' | 'video' | 'voice' | 'subtitle' | 'render' | 'bgm' | 'sfx' | string;
+  status: 'pending' | 'completed' | 'failed';
+  url?: string;
+  thumbnail?: string;
+  scene_index?: number;
+  shot_number?: number;
+  metadata?: Record<string, any>;
+  created_at?: string;
+}
+
+export interface PipelineJobStepProgress {
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+  progress: number;
+  message?: string;
+  started_at?: string;
+  completed_at?: string;
+  assets?: AssetJobItem[];
+}
+
+export interface PipelineJobEntity {
+  id: string;
+  user_id: string;
+  series_id: string;
+  episode_id: string;
+  session_id?: string;
+  type: 'full_pipeline' | 'step_b1' | 'step_b2' | 'step_b3' | 'step_b4' | 'step_b5' | 'step_b6' | 'render' | string;
+  title: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  progress: number;
+  current_step: string;
+  step_progress?: Record<string, PipelineJobStepProgress>;
+  outputs?: Record<string, any>;
+  logs: Array<{ timestamp: string; level: 'info' | 'warn' | 'error'; message: string }>;
+  error?: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
+}
+
 
 
 

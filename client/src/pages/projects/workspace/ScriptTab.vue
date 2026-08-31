@@ -607,8 +607,11 @@ async function handleRenderAllAssetsAndStoryboard() {
                 style="background-color: var(--el-fill-color-light); border-color: var(--el-border-color-light);"
               >
                 <!-- 2-in-1 Preview / Placeholder -->
-                <div class="w-full aspect-[16/9] relative rounded-lg border overflow-hidden relative flex items-center justify-center" style="border-color: var(--el-border-color);">
-                  <el-image :src="getActiveCharacterImage(char)" :preview-src-list="[getActiveCharacterImage(char)]" :alt="char.name" class="w-full h-full object-cover">
+                <div class="w-full aspect-[4/3] relative rounded-lg border overflow-hidden relative flex items-center justify-center" style="border-color: var(--el-border-color);">
+                  <el-image 
+                    :src="getActiveCharacterImage(char)" 
+                    :preview-src-list="[getActiveCharacterImage(char)]" 
+                    :alt="char.name" class="w-full h-full" fit="contain">
                     <template #error>
                       <div class="flex flex-col items-center justify-center p-2 text-center h-full">
                         <el-icon :size="24"><User /></el-icon>

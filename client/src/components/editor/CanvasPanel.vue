@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, reactive, watch } from 'vue';
+import { onMounted, onUnmounted, ref, shallowRef, markRaw, reactive, watch } from 'vue';
 import { Studio, fontManager, registerCustomTransition, registerCustomEffect } from '@openvideo/engine-pixi';
 import { useStudioStore } from '@/composables/useStudioStore';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { useTheme } from '@/composables/useTheme';
 import { core } from '@/utils/project';
 import { generateUUID } from '@/utils/id';
-import { editorFont } from '@/components/editor/constants';
 import { CUSTOM_TRANSITIONS } from './transition-custom';
 import { CUSTOM_EFFECTS } from './effect-custom';
 import StudioCanvasContextMenu from './StudioCanvasContextMenu.vue';
 import type { ContextMenuState } from './StudioCanvasContextMenu.vue';
+import { SECONDARY_FONT, SECONDARY_FONT_URL } from './constants/constants.ts';
 
 const STUDIO_CONFIG = {
   fps: 30,
@@ -23,7 +23,7 @@ const props = defineProps<{
 }>();
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
-const studioRef = ref<Studio | null>(null);
+const studioRef = shallowRef<Studio | null>(null);
 const { setStudio } = useStudioStore();
 const projectStore = useProjectStore();
 const { theme } = useTheme();
@@ -88,7 +88,7 @@ const initializeStudio = async () => {
 
   // Create studio instance
   const initialEditorBg = theme.value === 'dark' ? '#18181b' : '#f4f4f5';
-  studioRef.value = new Studio({
+  const instance = markRaw(new Studio({
     width: projectStore.canvasSize.width,
     height: projectStore.canvasSize.height,
     ...STUDIO_CONFIG,
@@ -97,29 +97,30 @@ const initializeStudio = async () => {
     canvas: canvasRef.value,
     core: core,
     previewScale: 0.75,
-  });
+  }));
+  studioRef.value = instance;
 
   try {
     await Promise.all([
       fontManager.loadFonts([
         {
-          name: editorFont.fontFamily,
-          url: editorFont.fontUrl,
+          name: SECONDARY_FONT,
+          url: SECONDARY_FONT_URL,
         },
       ]),
-      studioRef.value.ready,
+      instance.ready,
     ]);
     props.onReady?.();
   } catch (error) {
     console.error('Failed to initialize studio:', error);
   }
 
-  setStudio(studioRef.value as any);
+  setStudio(instance as any);
 
   // Subscribe to core store setting updates (Artboard Background Color ONLY)
   unsubCore = core.store.subscribe((state) => {
-    const s = state.settings as any;
-    const color = s.artboardColor || s.bgColor;
+    const s = (state as any)?.settings || {};
+    const color = s.artboardColor || s.bgColor || s.backgroundColor || "#000000";
     if (color && studioRef.value) {
       (studioRef.value as any).setArtboardColor?.(color);
       (studioRef.value as any).requestRender?.();
@@ -145,32 +146,33 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (unsubCore) {
-    try{
+    try {
       unsubCore();
-    }catch(err){
-
+    } catch (err) {
+      // ignore
     }
     unsubCore = null;
   }
 
   if (resizeObserver) {
-    try{
+    try {
       resizeObserver.disconnect();
-    }catch(err){
-
+    } catch (err) {
+      // ignore
     }
-    
     resizeObserver = null;
   }
 
-  if (studioRef.value) {
+  const instance = studioRef.value;
+  studioRef.value = null;
+  setStudio(null);
+
+  if (instance) {
     try {
-      studioRef.value.destroy();
+      instance.destroy();
     } catch (err) {
       console.error('Failed to destroy studio:', err);
     }
-    studioRef.value = null;
-    setStudio(null);
   }
 });
 </script>

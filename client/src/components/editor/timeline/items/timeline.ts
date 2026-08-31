@@ -41,6 +41,17 @@ class Timeline extends TimelineBase {
     // Cleanup event listener for Shift key
     window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("keyup", this.handleKeyUp);
+
+    try {
+      if (this.onScrollChange && typeof (this.onScrollChange as any).cancel === 'function') {
+        (this.onScrollChange as any).cancel();
+      }
+      (this.emitter as any)?.removeAllListeners?.();
+      (this as any).off?.();
+      if (typeof (this as any).dispose === 'function') {
+        (this as any).dispose();
+      }
+    } catch (_) {}
   }
 
   public setViewportPos(posX: number, posY: number) {

@@ -58,7 +58,13 @@ const duration = computed(() => playbackState.value.duration);
 
 const activePreviewCaptionLang = computed(() => seriesStore.activePreviewCaptionLang);
 const activePreviewVoiceLang = computed(() => seriesStore.activePreviewVoiceLang);
-const mainLang = computed(() => getMainLanguageForCountry(seriesStore.currentSeries?.country));
+const mainLang = computed(() => {
+  const langCode = seriesStore.currentSeries?.language;
+  if (langCode) {
+    return getLanguageByCode(langCode);
+  }
+  return getMainLanguageForCountry(seriesStore.currentSeries?.country);
+});
 
 const availableCaptionLanguages = computed(() => {
   const codes = new Set<string>();
@@ -222,88 +228,78 @@ const setZoom = (val: number) => emit('update:zoomLevel', val);
       <!-- Right preview language & zoom controls -->
       <div class="flex items-center justify-end gap-2 px-2">
         <!-- CC Subtitles Selector -->
-        <DropdownMenu>
-          <DropdownMenuTrigger as-child>
-            <button
-              class="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold hover:bg-muted/80 transition-colors border shadow-2xs cursor-pointer"
-              :class="activePreviewCaptionLang !== 'off'
-                ? 'bg-primary/10 border-primary/40 text-primary'
-                : 'bg-muted/50 border-border text-muted-foreground'"
-              :title="`Subtitle (CC): ${activePreviewCaptionLang === 'off' ? 'Off' : getLanguageByCode(activePreviewCaptionLang).nativeName}`"
+        <el-dropdown>
+          <el-button size="small"
+            text round bg
+            :icon="MessageSquare"
+            :title="`Subtitle (CC): ${activePreviewCaptionLang === 'off' ? 'Off' : getLanguageByCode(activePreviewCaptionLang).nativeName}`"
+            :type="activePreviewCaptionLang !== 'off' ? 'primary' : ''"
             >
-              <MessageSquare class="size-3.5" />
-              <span class="text-[10px] font-bold">{{ t('editor.ccLabel') }}</span>
-              <span class="text-[10px] font-medium">
-                {{ activePreviewCaptionLang === 'off' ? 'Off' : getLanguageByCode(activePreviewCaptionLang).countryCode.toUpperCase() }}
-              </span>
-              <ChevronDown class="size-3 opacity-60 ml-0.5" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" class="w-48 max-h-64 overflow-y-auto text-xs">
-            <DropdownMenuItem @click="selectCaptionLanguage('off')" :class="{ 'font-bold bg-primary/10': activePreviewCaptionLang === 'off' }">
-              <div class="flex items-center gap-2">
-                <EyeOff class="size-3.5 text-muted-foreground" />
-                <span>{{ t('editor.offHideSubtitles') }}</span>
-              </div>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              v-for="l in availableCaptionLanguages"
-              :key="`cc_${l.code}`"
-              @click="selectCaptionLanguage(l.code)"
-              :class="{ 'font-bold bg-primary/10': l.code === activePreviewCaptionLang }"
-            >
-              <div class="flex items-center justify-between gap-2 w-full">
+            <span class="text-[10px] font-bold">{{ t('editor.ccLabel') }}</span>
+            <span class="text-[10px] font-medium">
+              {{ activePreviewCaptionLang === 'off' ? 'Off' : getLanguageByCode(activePreviewCaptionLang).countryCode.toUpperCase() }}
+            </span>
+            <ChevronDown class="size-3 opacity-60 ml-0.5" />
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item @click="selectCaptionLanguage('off')">
                 <div class="flex items-center gap-2">
-                  <CountryFlag :code="l.countryCode" :flag="l.flag" size="small" />
-                  <span>{{ l.nativeName }}</span>
+                  <EyeOff class="size-3.5 text-muted-foreground" />
+                  <span>{{ t('editor.offHideSubtitles') }}</span>
                 </div>
-                <span v-if="l.code === mainLang?.code" class="text-[9px] px-1 py-0.2 bg-emerald-500/10 text-emerald-600 rounded">{{ t('editor.mainTrack') }}</span>
-              </div>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              </el-dropdown-item>
+              <el-dropdown-item v-for="l in availableCaptionLanguages"
+                :key="`cc_${l.code}`"
+                @click="selectCaptionLanguage(l.code)">
+                <div class="flex items-center justify-between gap-2 w-full">
+                  <div class="flex items-center gap-2">
+                    <CountryFlag :code="l.countryCode" :flag="l.flag" size="small" />
+                    <span>{{ l.nativeName }}</span>
+                  </div>
+                  <span v-if="l.code === mainLang?.code" class="text-[9px] px-1 py-0.2 bg-emerald-500/10 text-emerald-600 rounded">{{ t('editor.mainTrack') }}</span>
+                </div>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
 
         <!-- Voice Dubbing Selector -->
-        <DropdownMenu>
-          <DropdownMenuTrigger as-child>
-            <button
-              class="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold hover:bg-muted/80 transition-colors border shadow-2xs cursor-pointer"
-              :class="activePreviewVoiceLang !== 'mute'
-                ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-600'
-                : 'bg-muted/50 border-border text-muted-foreground'"
-              :title="`Voiceover: ${activePreviewVoiceLang === 'mute' ? 'Mute' : getLanguageByCode(activePreviewVoiceLang).nativeName}`"
+        <el-dropdown>
+          <el-button size="small"
+            text round bg
+            icon="Mic"
+            :title="`Voiceover: ${activePreviewVoiceLang === 'mute' ? 'Mute' : getLanguageByCode(activePreviewVoiceLang).nativeName}`"
+            :type="activePreviewCaptionLang !== 'off' ? 'primary' : ''"
             >
-              <Mic class="size-3.5" />
-              <span class="text-[10px] font-bold">{{ t('editor.voiceLabel') }}</span>
-              <span class="text-[10px] font-medium">
-                {{ activePreviewVoiceLang === 'mute' ? 'Mute' : getLanguageByCode(activePreviewVoiceLang).countryCode.toUpperCase() }}
-              </span>
-              <ChevronDown class="size-3 opacity-60 ml-0.5" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" class="w-48 max-h-64 overflow-y-auto text-xs">
-            <DropdownMenuItem @click="selectVoiceLanguage('mute')" :class="{ 'font-bold bg-emerald-500/10': activePreviewVoiceLang === 'mute' }">
-              <div class="flex items-center gap-2">
-                <VolumeX class="size-3.5 text-muted-foreground" />
-                <span>{{ t('editor.muteVoiceTrack') }}</span>
-              </div>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              v-for="l in availableVoiceLanguages"
-              :key="`vo_${l.code}`"
-              @click="selectVoiceLanguage(l.code)"
-              :class="{ 'font-bold bg-emerald-500/10': l.code === activePreviewVoiceLang }"
-            >
-              <div class="flex items-center justify-between gap-2 w-full">
+            <span class="text-[10px] font-bold">{{ t('editor.voiceLabel') }}</span>
+            <span class="text-[10px] font-medium">
+              {{ activePreviewVoiceLang === 'mute' ? 'Mute' : getLanguageByCode(activePreviewVoiceLang).countryCode.toUpperCase() }}
+            </span>
+            <ChevronDown class="size-3 opacity-60 ml-0.5" />
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item @click="selectVoiceLanguage('mute')">
                 <div class="flex items-center gap-2">
-                  <CountryFlag :code="l.countryCode" :flag="l.flag" size="small" />
-                  <span>{{ l.nativeName }}</span>
+                  <VolumeX class="size-3.5 text-muted-foreground" />
+                  <span>{{ t('editor.muteVoiceTrack') }}</span>
                 </div>
-                <span v-if="l.code === mainLang?.code" class="text-[9px] px-1 py-0.2 bg-emerald-500/10 text-emerald-600 rounded">{{ t('editor.mainTrack') }}</span>
-              </div>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              </el-dropdown-item>
+              <el-dropdown-item v-for="l in availableVoiceLanguages"
+                :key="`vo_${l.code}`"
+                @click="selectVoiceLanguage(l.code)">
+                <div class="flex items-center justify-between gap-2 w-full">
+                  <div class="flex items-center gap-2">
+                    <CountryFlag :code="l.countryCode" :flag="l.flag" size="small" />
+                    <span>{{ l.nativeName }}</span>
+                  </div>
+                  <span v-if="l.code === mainLang?.code" class="text-[9px] px-1 py-0.2 bg-emerald-500/10 text-emerald-600 rounded">{{ t('editor.mainTrack') }}</span>
+                </div>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
 
         <!-- Zoom controls -->
         <div class="flex items-center gap-1 border-l pl-2 ml-1">

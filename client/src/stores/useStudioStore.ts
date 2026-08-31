@@ -1,20 +1,20 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { ref, shallowRef, markRaw } from 'vue';
 import type { IClip } from '@/types/timeline';
 
 export const useStudioStore = defineStore('studio', () => {
-  const studio = ref<any | null>(null);
-  const selectedClips = ref<IClip[]>([]);
+  const studio = shallowRef<any | null>(null);
+  const selectedClips = shallowRef<IClip[]>([]);
   const currentTime = ref<number>(0); // Microseconds or Seconds
   const isPlaying = ref<boolean>(false);
   const zoomLevel = ref<number>(1);
 
   function setStudio(instance: any) {
-    studio.value = instance;
+    studio.value = instance ? markRaw(instance) : null;
   }
 
   function setSelectedClips(clips: IClip[]) {
-    selectedClips.value = clips;
+    selectedClips.value = clips.map((c) => markRaw(c) as any);
   }
 
   function setCurrentTime(time: number) {

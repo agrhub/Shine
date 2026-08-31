@@ -102,8 +102,8 @@ onMounted(() => {
 
       <div class="grid grid-cols-12 text-[10px] font-medium text-[var(--el-text-color-secondary)] tracking-widest uppercase px-2 pb-3 border-b border-[var(--el-border-color)]/70">
         <div class="col-span-5">{{ t('editor.assetName') }}</div>
-        <div class="col-span-3">Type</div>
-        <div class="col-span-2">Size</div>
+        <div class="col-span-3">{{ t('common.type') }}</div>
+        <div class="col-span-2">{{ t('editor.size') }}</div>
         <div class="col-span-2 text-right">{{ t('dashboard.tableStatus') }}</div>
       </div>
 
