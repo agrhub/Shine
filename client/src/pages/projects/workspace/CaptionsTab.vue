@@ -64,22 +64,23 @@ const selectedLangToAdd = ref<string>('');
 // Hydrate caption settings from active episode
 watch(() => seriesStore.activeEpisode?.caption_settings, (settings) => {
   if (settings) {
-    if (settings.isEnableCaption !== undefined) isEnableCaption.value = settings.isEnableCaption;
-    if (settings.selectedCaptionStyle) selectedCaptionStyle.value = settings.selectedCaptionStyle as any;
-    if (settings.selectedFontFamily) selectedFontFamily.value = settings.selectedFontFamily;
-    if (settings.captionFontSize !== undefined) captionFontSize.value = settings.captionFontSize;
-    if (settings.captionTextColor) captionTextColor.value = settings.captionTextColor;
-    if (settings.activeWordHighlightColor) activeWordHighlightColor.value = settings.activeWordHighlightColor;
-    if (settings.captionOutlineColor) captionOutlineColor.value = settings.captionOutlineColor;
-    if (settings.captionOutlineWeight !== undefined) captionOutlineWeight.value = settings.captionOutlineWeight;
-    if (settings.captionVerticalPos !== undefined) captionVerticalPos.value = settings.captionVerticalPos;
-    if (settings.selectedVerticalAlign) selectedVerticalAlign.value = settings.selectedVerticalAlign as any;
-    if (settings.selectedTextAlign) selectedTextAlign.value = settings.selectedTextAlign as any;
-    if (settings.selectedWordsPerLine) selectedWordsPerLine.value = settings.selectedWordsPerLine as any;
-    if (settings.selectedTextCase) selectedTextCase.value = settings.selectedTextCase as any;
-    if (settings.enableBackgroundBox !== undefined) enableBackgroundBox.value = settings.enableBackgroundBox;
-    if (settings.captionBgColor) captionBgColor.value = settings.captionBgColor;
-    if (settings.aiHighlightAnimate !== undefined) aiHighlightAnimate.value = settings.aiHighlightAnimate;
+    if (settings.enable_caption !== undefined) isEnableCaption.value = settings.enable_caption;
+    if (settings.caption_style) selectedCaptionStyle.value = settings.caption_style;
+    if (settings.font_family) selectedFontFamily.value = settings.font_family;
+    if (settings.font_size !== undefined) captionFontSize.value = settings.font_size;
+    if (settings.text_color) captionTextColor.value = settings.text_color;
+    if (settings.word_highlight_color) activeWordHighlightColor.value = settings.word_highlight_color;
+    if (settings.outline_color) captionOutlineColor.value = settings.outline_color;
+    if (settings.outline_weight !== undefined) captionOutlineWeight.value = settings.outline_weight;
+    if (settings.vertical_pos !== undefined) captionVerticalPos.value = settings.vertical_pos;
+    if (settings.vertical_align) selectedVerticalAlign.value = settings.vertical_align;
+    if (settings.text_align) selectedTextAlign.value = settings.text_align;
+    if (settings.words_per_line) selectedWordsPerLine.value = settings.words_per_line;
+    if (settings.text_case) selectedTextCase.value = settings.text_case;
+    if (settings.enable_background_box !== undefined) enableBackgroundBox.value = settings.enable_background_box;
+    if (settings.bg_color) captionBgColor.value = settings.bg_color;
+    if (settings.highlight_animate !== undefined) aiHighlightAnimate.value = settings.highlight_animate;
+    applyStyleToTimeline();
   }
 }, { immediate: true, deep: true });
 
@@ -88,22 +89,22 @@ function persistCaptionSettings() {
   const sId = seriesStore.currentSeries?.id;
   if (!epId) return;
   seriesStore.updateEpisodeCaptionSettings(epId, {
-    isEnableCaption: isEnableCaption.value,
-    selectedCaptionStyle: selectedCaptionStyle.value,
-    selectedFontFamily: selectedFontFamily.value,
-    captionFontSize: captionFontSize.value,
-    captionTextColor: captionTextColor.value,
-    activeWordHighlightColor: activeWordHighlightColor.value,
-    captionOutlineColor: captionOutlineColor.value,
-    captionOutlineWeight: captionOutlineWeight.value,
-    captionVerticalPos: captionVerticalPos.value,
-    selectedVerticalAlign: selectedVerticalAlign.value,
-    selectedTextAlign: selectedTextAlign.value,
-    selectedWordsPerLine: selectedWordsPerLine.value,
-    selectedTextCase: selectedTextCase.value,
-    enableBackgroundBox: enableBackgroundBox.value,
-    captionBgColor: captionBgColor.value,
-    aiHighlightAnimate: aiHighlightAnimate.value,
+    enable_caption: isEnableCaption.value,
+    caption_style: selectedCaptionStyle.value,
+    font_family: selectedFontFamily.value,
+    font_size: captionFontSize.value,
+    text_color: captionTextColor.value,
+    word_highlight_color: activeWordHighlightColor.value,
+    outline_color: captionOutlineColor.value,
+    outline_weight: captionOutlineWeight.value,
+    vertical_pos: captionVerticalPos.value,
+    vertical_align: selectedVerticalAlign.value,
+    text_align: selectedTextAlign.value,
+    words_per_line: selectedWordsPerLine.value,
+    text_case: selectedTextCase.value,
+    enable_background_box: enableBackgroundBox.value,
+    bg_color: captionBgColor.value,
+    highlight_animate: aiHighlightAnimate.value,
   });
   if (sId) seriesStore.saveEpisodeScenes(sId, epId);
 }
@@ -127,6 +128,7 @@ watch([
   aiHighlightAnimate
 ], () => {
   persistCaptionSettings();
+  applyStyleToTimeline();
 });
 
 // Auto-sync main language when active series changes
@@ -139,6 +141,19 @@ watch(mainTargetLang, (newMain) => {
     translateSourceLang.value = newMain.code;
   }
 }, { immediate: true });
+
+// Bi-directional sync between activeCapLang and seriesStore.activePreviewCaptionLang
+watch(activeCapLang, (newLang) => {
+  if (newLang && newLang !== seriesStore.activePreviewCaptionLang) {
+    seriesStore.setPreviewCaptionLanguage(newLang);
+  }
+});
+
+watch(() => seriesStore.activePreviewCaptionLang, (newLang) => {
+  if (newLang && newLang !== 'off' && newLang !== activeCapLang.value) {
+    activeCapLang.value = newLang;
+  }
+});
 
 function handleAddLanguage(code: string) {
   if (!code) return;
@@ -259,6 +274,7 @@ async function applyStyleToTimeline() {
     fontSize: captionFontSize.value,
     color: captionTextColor.value,
     textAlign: selectedTextAlign.value,
+    align: selectedTextAlign.value,
     textCase: selectedTextCase.value,
     backgroundColor: enableBackgroundBox.value ? captionBgColor.value : undefined,
     padding: enableBackgroundBox.value ? 10 : undefined,
@@ -267,6 +283,7 @@ async function applyStyleToTimeline() {
       color: captionOutlineColor.value,
       width: captionOutlineWeight.value,
     } : undefined,
+    fontUrl: font?.url,
   };
 
   const colorsObj: any = {
@@ -278,21 +295,76 @@ async function applyStyleToTimeline() {
     },
   };
 
-  // Broadcast through core command API
-  core.caption.setStyle(styleObj);
-  core.caption.setColors(colorsObj);
+  const calculatedTop = Math.round((videoHeight * (captionVerticalPos.value / 100)) - 120 / 2);
 
-  // Directly update all Caption clips with transform and word animations
-  const clips = { ...(state.clips || {}) };
-  let hasChanges = false;
+  // 1. Update masterTracks in seriesStore (All language subtitle tracks)
+  if (Array.isArray(seriesStore.masterTracks)) {
+    seriesStore.masterTracks.forEach((t: any) => {
+      if (t.type === 'Caption' || t.id?.startsWith('track_caption')) {
+        t.config = {
+          ...(t.config || {}),
+          captions: {
+            ...(t.config?.captions || {}),
+            style: {
+              ...(t.config?.captions?.style || {}),
+              ...styleObj,
+            },
+            colors: {
+              ...(t.config?.captions?.colors || {}),
+              ...colorsObj,
+            },
+            wordsPerLine: selectedWordsPerLine.value,
+          },
+        };
+      }
+    });
+  }
 
-  Object.keys(clips).forEach((clipId) => {
-    const clip = clips[clipId];
-    if (clip && clip.type === 'Caption') {
-      hasChanges = true;
-      const calculatedTop = Math.round((videoHeight * (captionVerticalPos.value / 100)) - (clip.height || 120) / 2);
+  // 2. Update masterClips in seriesStore (All language subtitle clips across ALL tracks)
+  if (seriesStore.masterClips && typeof seriesStore.masterClips === 'object') {
+    Object.keys(seriesStore.masterClips).forEach((clipId) => {
+      const clip = seriesStore.masterClips[clipId];
+      if (clip && (clip.type === 'Caption' || clip.trackId?.startsWith('track_caption'))) {
+        clip.left = Math.round((videoWidth - captionWidth) / 2);
+        clip.top = calculatedTop;
+        clip.visible = isEnableCaption.value;
+        clip.transform = {
+          ...(clip.transform || {}),
+          x: clip.left,
+          y: calculatedTop,
+          width: captionWidth,
+          height: clip.height || 120,
+        };
+        clip.wordsPerLine = selectedWordsPerLine.value;
+        clip.textCase = selectedTextCase.value;
+        clip.style = {
+          ...(clip.style || {}),
+          ...styleObj,
+        };
+        clip.caption = {
+          ...(clip.caption || {}),
+          colors: {
+            ...(clip.caption?.colors || {}),
+            ...colorsObj,
+          },
+          wordAnimation: aiHighlightAnimate.value ? {
+            type: 'scale',
+            application: 'active',
+            value: 1.15,
+          } : undefined,
+        };
+      }
+    });
+  }
+
+  // 3. Update current active clips in core store
+  const currentClips = { ...(state.clips || {}) };
+  Object.keys(currentClips).forEach((clipId) => {
+    const clip = currentClips[clipId];
+    if (clip && (clip.type === 'Caption' || clip.trackId?.startsWith('track_caption'))) {
       clip.left = Math.round((videoWidth - captionWidth) / 2);
       clip.top = calculatedTop;
+      clip.visible = isEnableCaption.value;
       clip.transform = {
         ...(clip.transform || {}),
         x: clip.left,
@@ -321,9 +393,44 @@ async function applyStyleToTimeline() {
     }
   });
 
-  if (hasChanges) {
-    core.store.setState({ ...state, clips });
-  }
+  const currentTracks = (state.tracks || []).map((t: any) => {
+    if (t.type === 'Caption' || t.id?.startsWith('track_caption')) {
+      return {
+        ...t,
+        config: {
+          ...(t.config || {}),
+          captions: {
+            ...(t.config?.captions || {}),
+            style: {
+              ...(t.config?.captions?.style || {}),
+              ...styleObj,
+            },
+            colors: {
+              ...(t.config?.captions?.colors || {}),
+              ...colorsObj,
+            },
+            wordsPerLine: selectedWordsPerLine.value,
+          },
+        },
+      };
+    }
+    return t;
+  });
+
+  core.store.setState({
+    ...state,
+    clips: currentClips,
+    tracks: currentTracks,
+  });
+
+  // Re-apply language filter to keep preview tracks in sync
+  seriesStore.applyLanguageTrackFilter();
+
+  // Force Pixi canvas redraw at current playhead position
+  try {
+    const curTime = core.store.getState().currentTime || 0;
+    core.playback.seek(curTime);
+  } catch (_) {}
 }
 
 // Vertical align slot quick-setter
@@ -421,23 +528,68 @@ function applyAllCaptions() {
 function getSceneCues(sceneIndex: number) {
   const langCode = activeCapLang.value;
   const sc = scenes.value.find((s: any) => s.index === sceneIndex);
+  const cleanTarget = langCode ? langCode.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+
   if (sc) {
     if (langCode === mainTargetLang.value?.code && Array.isArray(sc.captions_data) && sc.captions_data.length > 0) {
       return sc.captions_data;
     }
-    const trans = sc.translations?.[langCode];
-    if (trans && Array.isArray(trans.captions_data) && trans.captions_data.length > 0) {
-      return trans.captions_data;
+    if (sc.translations && typeof sc.translations === 'object') {
+      for (const [k, trans] of Object.entries(sc.translations as Record<string, any>)) {
+        const cleanKey = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanKey === cleanTarget || cleanKey.startsWith(cleanTarget) || cleanTarget.startsWith(cleanKey)) {
+          if (trans && Array.isArray(trans.captions_data) && trans.captions_data.length > 0) {
+            return trans.captions_data;
+          }
+          const line = trans.translated_dialogue
+            || (typeof trans.dialogue === 'string' ? trans.dialogue : (Array.isArray(trans.dialogue) ? trans.dialogue.map((d: any) => d.line).join(' ') : ''));
+          if (line) {
+            const durMs = (sc.duration_seconds || 6) * 1000;
+            return [{
+              id: `cue_${sc.index}_${langCode}_0`,
+              text: line,
+              start_ms: 0,
+              end_ms: durMs,
+              from_us: 0,
+              to_us: durMs * 1000,
+              duration_ms: durMs,
+            }];
+          }
+        }
+      }
     }
   }
+
   const epId = seriesStore.activeEpisodeId;
   if (!epId) return [];
   const tracks = seriesStore.getLanguageTracks(epId);
-  return tracks.find(t => t.language_code === langCode)?.scene_captions[sceneIndex] || [];
+  const track = tracks.find(t => {
+    const cleanT = t.language_code ? t.language_code.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+    return cleanT === cleanTarget || cleanT.startsWith(cleanTarget) || cleanTarget.startsWith(cleanT);
+  });
+  return track?.scene_captions[sceneIndex] || [];
 }
 
 function hasCaptions(sceneIndex: number) {
   return getSceneCues(sceneIndex).length > 0;
+}
+
+function getSceneDialogueLine(scene: any, langCode: string) {
+  if (langCode === mainTargetLang.value?.code) {
+    return scene.dialogue?.[0]?.line || '';
+  }
+  const cleanTarget = langCode ? langCode.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+  if (scene.translations && typeof scene.translations === 'object') {
+    for (const [k, trans] of Object.entries(scene.translations as Record<string, any>)) {
+      const cleanKey = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanKey === cleanTarget || cleanKey.startsWith(cleanTarget) || cleanTarget.startsWith(cleanKey)) {
+        if (typeof trans.translated_dialogue === 'string' && trans.translated_dialogue.trim()) return trans.translated_dialogue;
+        if (typeof trans.dialogue === 'string' && trans.dialogue.trim()) return trans.dialogue;
+        if (Array.isArray(trans.dialogue) && trans.dialogue[0]?.line) return trans.dialogue[0].line;
+      }
+    }
+  }
+  return scene.dialogue?.[0]?.line || '';
 }
 
 // AI Auto Translate Subtitles for active language tab
@@ -453,6 +605,10 @@ async function handleTranslateActiveLanguage() {
   try {
     toast.info(t('toast.translatingCaptions', `Translating subtitles from ${getLanguageByCode(sourceLang).nativeName} to ${getLanguageByCode(targetLang).nativeName}...`));
     await pipelineStore.generateCaptionsForLanguage(targetLang, sourceLang);
+    if (seriesStore.activeEpisodeId) {
+      await seriesStore.loadEpisodeScript(seriesStore.currentSeries!.id, seriesStore.activeEpisodeId);
+      await seriesStore.loadEpisodeTimeline(seriesStore.activeEpisodeId, true);
+    }
     emit('apply-captions');
     applyStyleToTimeline();
     toast.success(t('toast.captionsTranslated', `Subtitles translated to ${getLanguageByCode(targetLang).nativeName} successfully!`));
@@ -644,7 +800,7 @@ function handleRemoveLanguage(lang: TabPaneName) {
                       </div>
 
                       <div v-if="!hasCaptions(scene.index)" class="text-[10px] italic p-1" style="color: var(--el-text-color-placeholder);">
-                        {{ scene.dialogue?.[0]?.character }}: {{ scene.dialogue?.[0]?.line }}
+                        {{ scene.dialogue?.[0]?.character }}: {{ getSceneDialogueLine(scene, activeCapLang) }}
                       </div>
                     </div>
                   </div>
@@ -873,7 +1029,7 @@ function handleRemoveLanguage(lang: TabPaneName) {
             </div>
 
             <!-- Apply to Timeline Button -->
-            <el-button
+            <!-- <el-button
               type="primary"
               round
               size="small"
@@ -883,7 +1039,7 @@ function handleRemoveLanguage(lang: TabPaneName) {
               @click="applyAllCaptions"
             >
               {{ t('workspace.applyToTimeline', 'Apply Style & Sync to Timeline') }}
-            </el-button>
+            </el-button> -->
           </div>
         </el-tab-pane>
       </el-tabs>

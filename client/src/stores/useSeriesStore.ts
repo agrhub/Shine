@@ -5,7 +5,7 @@ import { core } from '@/utils/project';
 import { GEMINI_LANGUAGE_DEFAULTS, getLanguageByCode, getMainLanguageForCountry } from '@/constants/geminiLanguages';
 import { sanitizeTimelineData } from '@/components/editor/data';
 import { generateUUID } from '@/utils/id';
-import type { Series, Episode, Character, Scene, SceneDialogue, SceneTranslation, CaptionCue, LanguageTrack, CaptionsData } from '../types/api';
+import type { Series, Episode, Character, Scene, SceneDialogue, SceneTranslation, CaptionCue, LanguageTrack, CaptionsData, CaptionSettings, DubbingSettings, RenderVersionEntity } from '../types/api';
 
 export const useSeriesStore = defineStore('series', () => {
   const seriesList = ref<Series[]>([]);
@@ -397,6 +397,64 @@ export const useSeriesStore = defineStore('series', () => {
     }
   }
 
+  // ─── Render Version Operations ───────────────────────────────────────────
+  async function addRenderVersion(seriesId: string, epId: string, versionData: Partial<RenderVersionEntity>, file?: File | Blob) {
+    try {
+      let res: any;
+      if (file) {
+        const formData = new FormData();
+        formData.append('file', file, (file as File).name || `render_${epId}.mp4`);
+        if (versionData.language) formData.append('language', versionData.language);
+        if (versionData.voice) formData.append('voice', versionData.voice);
+        if (versionData.resolution) formData.append('resolution', versionData.resolution);
+        if (versionData.thumbnail_url) formData.append('thumbnail_url', versionData.thumbnail_url);
+        if (versionData.duration) formData.append('duration', String(versionData.duration));
+        if (versionData.subtitles) formData.append('subtitles', JSON.stringify(versionData.subtitles));
+        res = await http.post(`/series/${seriesId}/episodes/${epId}/render-versions`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else {
+        res = await http.post(`/series/${seriesId}/episodes/${epId}/render-versions`, versionData);
+      }
+      const newVer = res?.data?.version;
+      const ep = episodesList.value.find(e => e.id === epId);
+      if (ep && newVer) {
+        if (!Array.isArray(ep.render_versions)) ep.render_versions = [];
+        const idx = ep.render_versions.findIndex((v: any) => (v.version_id === newVer.version_id || v.id === newVer.id));
+        if (idx >= 0) {
+          ep.render_versions[idx] = newVer;
+        } else {
+          ep.render_versions.unshift(newVer);
+        }
+        if (newVer.video_url) ep.video_url = newVer.video_url;
+      }
+      return newVer;
+    } catch (err: any) {
+      console.error('[addRenderVersion] Failed:', err);
+      throw err;
+    }
+  }
+
+  async function removeRenderVersion(seriesId: string, epId: string, versionId: string) {
+    try {
+      const res: any = await http.delete(`/series/${seriesId}/episodes/${epId}/render-versions/${versionId}`);
+      const remaining = res?.data?.render_versions;
+      const ep = episodesList.value.find(e => e.id === epId);
+      if (ep) {
+        ep.render_versions = remaining || (ep.render_versions || []).filter((v: any) => (v.version_id !== versionId && v.id !== versionId));
+        if (ep?.render_versions?.length === 0) {
+          ep.video_url = undefined;
+        } else {
+          ep.video_url = ep?.render_versions?.[0].video_url || ep?.render_versions?.[0].url;
+        }
+      }
+      return remaining;
+    } catch (err: any) {
+      console.error('[removeRenderVersion] Failed:', err);
+      throw err;
+    }
+  }
+
   // ─── Language Track Mutations & Sync ──────────────────────────────────────────
   const LANGUAGE_DEFAULTS: Record<string, { label: string }> = GEMINI_LANGUAGE_DEFAULTS;
 
@@ -474,16 +532,32 @@ export const useSeriesStore = defineStore('series', () => {
   function extractTrackLanguage(track: any): string | null {
     if (track.languageCode) return track.languageCode;
     if (track.id?.startsWith('track_caption_')) {
-      return track.id.replace('track_caption_', '');
+      const suffix = track.id.replace('track_caption_', '');
+      if (suffix !== 'main') return suffix;
     }
     if (track.id?.startsWith('track_captions_')) {
-      return track.id.replace('track_captions_', '');
+      const suffix = track.id.replace('track_captions_', '');
+      if (suffix !== 'main') return suffix;
     }
     if (track.id?.startsWith('track_voiceover_')) {
-      return track.id.replace('track_voiceover_', '');
+      const suffix = track.id.replace('track_voiceover_', '');
+      if (suffix !== 'main') return suffix;
     }
     if (track.id?.startsWith('track_voice_')) {
-      return track.id.replace('track_voice_', '');
+      const suffix = track.id.replace('track_voice_', '');
+      if (suffix !== 'main') return suffix;
+    }
+    if (track.type === 'Caption' || track.id === 'track_captions' || track.id === 'track_captions_main') {
+      return currentSeries.value?.language
+        || (currentSeries.value?.country ? getMainLanguageForCountry(currentSeries.value.country)?.code : 'en-US')
+        || captionLanguages.value[0]
+        || 'en-US';
+    }
+    if (track.id === 'track_voiceover' || track.id === 'track_voiceover_main') {
+      return currentSeries.value?.language
+        || (currentSeries.value?.country ? getMainLanguageForCountry(currentSeries.value.country)?.code : 'en-US')
+        || dubbingLanguages.value[0]
+        || 'en-US';
     }
     return null;
   }
@@ -503,8 +577,13 @@ export const useSeriesStore = defineStore('series', () => {
       const allTracks = masterTracks.value.length > 0 ? masterTracks.value : ((state.tracks as any[]) || []);
       const allClips = Object.keys(masterClips.value).length > 0 ? masterClips.value : (state.clips || {});
 
-      const capLang = activePreviewCaptionLang.value; // e.g. 'en-US' or 'vi-VN' or 'off'
-      const voiceLang = activePreviewVoiceLang.value; // e.g. 'en-US' or 'vi-VN' or 'mute'
+      const primaryCode = currentSeries.value?.language
+        || (currentSeries.value?.country ? getMainLanguageForCountry(currentSeries.value.country)?.code : 'en-US')
+        || captionLanguages.value[0]
+        || 'en-US';
+
+      const capLang = activePreviewCaptionLang.value || primaryCode; // e.g. 'en-US' or 'vi-VN' or 'off'
+      const voiceLang = activePreviewVoiceLang.value || primaryCode; // e.g. 'en-US' or 'vi-VN' or 'mute'
 
       const safeCapLang = capLang !== 'off' ? capLang.replace(/[^a-zA-Z0-9_-]/g, '_') : '';
       const targetCaptionTrackId = safeCapLang ? `track_caption_${safeCapLang}` : '';
@@ -522,14 +601,14 @@ export const useSeriesStore = defineStore('series', () => {
 
         if (isCaptionTrack) {
           if (capLang === 'off') return false;
-          if (targetCaptionTrackId && track.id === targetCaptionTrackId) return true;
+          if (targetCaptionTrackId && (track.id === targetCaptionTrackId || track.id === `track_caption_${capLang}`)) return true;
           const trackLang = extractTrackLanguage(track);
           return isMatchingLang(trackLang, capLang);
         }
 
         if (isVoiceTrack) {
           if (voiceLang === 'mute') return false;
-          if (targetVoiceTrackId && track.id === targetVoiceTrackId) return true;
+          if (targetVoiceTrackId && (track.id === targetVoiceTrackId || track.id === `track_voiceover_${voiceLang}`)) return true;
           const trackLang = extractTrackLanguage(track);
           return isMatchingLang(trackLang, voiceLang);
         }
@@ -574,6 +653,21 @@ export const useSeriesStore = defineStore('series', () => {
         tracks: filteredTracks,
         clips: filteredClips,
       });
+
+      // Emit change event to trigger TimelineBridge synchronization
+      try {
+        (core as any).emit('change', [
+          { op: 'update', path: '/tracks', value: filteredTracks },
+          { op: 'update', path: '/clips', value: filteredClips },
+          { op: 'update', path: '/', value: { ...state, tracks: filteredTracks, clips: filteredClips } },
+        ]);
+      } catch (_) {}
+
+      // Refresh Pixi canvas to redraw the current frame
+      try {
+        const curTime = core.store.getState().currentTime || 0;
+        core.playback.seek(curTime);
+      } catch (_) {}
     } catch (err) {
       console.warn('[applyLanguageTrackFilter] Failed:', err);
     }
@@ -779,14 +873,14 @@ export const useSeriesStore = defineStore('series', () => {
     return null;
   }
 
-  function updateEpisodeDubbingSettings(epId: string, settings: any) {
+  function updateEpisodeDubbingSettings(epId: string, settings: DubbingSettings) {
     const ep = episodesList.value.find(e => e.id === epId);
     if (ep) {
       ep.dubbing_settings = { ...(ep.dubbing_settings || {}), ...settings };
     }
   }
 
-  function updateEpisodeCaptionSettings(epId: string, settings: any) {
+  function updateEpisodeCaptionSettings(epId: string, settings: CaptionSettings) {
     const ep = episodesList.value.find(e => e.id === epId);
     if (ep) {
       ep.caption_settings = { ...(ep.caption_settings || {}), ...settings };
@@ -948,6 +1042,8 @@ export const useSeriesStore = defineStore('series', () => {
     updateSceneVideoUrl,
     updateSceneAssets,
     saveEpisodeScenes,
+    addRenderVersion,
+    removeRenderVersion,
     saveCharacterAvatars,
     updateLanguageTrackVoiceover,
     updateLanguageTrackCaptions,

@@ -6,7 +6,7 @@ export const fonts = [
     postScriptName: "Roboto-Bold",
     preview: "https://ik.imagekit.io/lh/fonts/v2/5zQgS86djScKA0ri67BBCqW7.png",
     style: "bold",
-    url: "https://fonts.gstatic.com/s/roboto/v29/KFOlCnqEu92Fr1MmWUlvAx05IsDqlA.ttf",
+    url: "https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWuYjammT.ttf",
   },
   {
     id: "font_roboto_regular",
@@ -15,7 +15,7 @@ export const fonts = [
     postScriptName: "Roboto-Regular",
     preview: "https://ik.imagekit.io/lh/fonts/v2/5zQgS86djScKA0ri67BBCqW7.png",
     style: "regular",
-    url: "https://fonts.gstatic.com/s/roboto/v29/KFOmCnqEu92Fr1Mu4mxM.ttf",
+    url: "https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWubEbWmT.ttf",
   },
   {
     id: "font_outfit_bold",
@@ -24,7 +24,7 @@ export const fonts = [
     postScriptName: "Outfit-Bold",
     preview: "https://ik.imagekit.io/lh/fonts/v2/5zQgS86djScKA0ri67BBCqW7.png",
     style: "bold",
-    url: "https://fonts.gstatic.com/s/outfit/v11/QGYyz_MVcBeNP4NJtEtq.ttf",
+    url: "https://fonts.gstatic.com/s/outfit/v15/QGYyz_MVcBeNP4NjuGObqx1XmO1I4deyC4E.ttf",
   },
   {
     id: "font_outfit_regular",
@@ -33,7 +33,7 @@ export const fonts = [
     postScriptName: "Outfit-Regular",
     preview: "https://ik.imagekit.io/lh/fonts/v2/5zQgS86djScKA0ri67BBCqW7.png",
     style: "regular",
-    url: "https://fonts.gstatic.com/s/outfit/v11/QGYyz_MVcBeNP4NJtEtq.ttf",
+    url: "https://fonts.gstatic.com/s/outfit/v15/QGYyz_MVcBeNP4NjuGObqx1XmO1I4TC1C4E.ttf",
   },
   {
     id: "font_bangers_regular",
@@ -42,6 +42,6 @@ export const fonts = [
     postScriptName: "Bangers-Regular",
     preview: "https://ik.imagekit.io/lh/fonts/v2/5zQgS86djScKA0ri67BBCqW7.png",
     style: "regular",
-    url: "https://fonts.gstatic.com/s/bangers/v20/FeVQS0BTqACV6KdPB9y5.ttf",
+    url: "https://fonts.gstatic.com/s/bangers/v25/FeVQS0BTqb0h60ACL5k.ttf",
   },
 ];

@@ -1,5 +1,7 @@
 import axios from 'axios';
 import { nanoid } from 'nanoid';
+import { getDatabaseProvider } from '~/database/index.js';
+import type { PlatformAccount } from '@/types.js';
 
 export interface OAuthUserProfile {
   email: string;
@@ -384,5 +386,70 @@ export class OAuthService {
     }
 
     throw new Error(`Unsupported publishing provider: ${provider}`);
+  }
+
+  /**
+   * Automatically refreshes and returns a valid OAuth access token if expired.
+   */
+  public static async getValidAccessToken(
+    account: PlatformAccount,
+    userId?: string
+  ): Promise<string> {
+    if (!account.access_token) {
+      throw new Error(`No access token found for ${account.provider || 'platform'}`);
+    }
+
+    const isExpired = account.expires_at ? (Date.now() >= (account.expires_at - 60_000)) : false;
+
+    if (account.provider === 'youtube') {
+      if (account.refresh_token && (isExpired || !account.access_token)) {
+        try {
+          const db = await getDatabaseProvider();
+          const config = await db.getSystemSetting<any>('studio_config');
+          const clientId = config?.publishing?.youtube?.clientId || process.env.YOUTUBE_CLIENT_ID;
+          const clientSecret = config?.publishing?.youtube?.clientSecret || process.env.YOUTUBE_CLIENT_SECRET;
+
+          if (clientId && clientSecret) {
+            const tokenRes = await axios.post(
+              'https://oauth2.googleapis.com/token',
+              new URLSearchParams({
+                client_id: clientId,
+                client_secret: clientSecret,
+                refresh_token: account.refresh_token,
+                grant_type: 'refresh_token',
+              }).toString(),
+              { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+            );
+
+            const { access_token, expires_in } = tokenRes.data;
+            if (access_token) {
+              account.access_token = access_token;
+              account.expires_at = Date.now() + (expires_in || 3600) * 1000;
+
+              if (userId) {
+                const user = await db.getUserById(userId);
+                if (user) {
+                  const channels = (user.connected_channels || []).map((ch: any) => {
+                    if (ch.id === account.id || ch.channel_id === account.channel_id) {
+                      return { ...ch, access_token, expires_at: account.expires_at };
+                    }
+                    return ch;
+                  });
+                  await db.updateUser({ ...user, connected_channels: channels });
+                }
+              }
+            }
+          }
+        } catch (e: any) {
+          console.warn(`[OAuthService] Failed to auto-refresh YouTube token: ${e?.response?.data?.error_description || e?.message}`);
+        }
+      }
+    }
+
+    if (!account.access_token) {
+      throw new Error(`Failed to obtain a valid access token for ${account.provider || 'platform'}`);
+    }
+
+    return account.access_token;
   }
 }

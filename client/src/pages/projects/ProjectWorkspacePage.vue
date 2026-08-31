@@ -88,6 +88,15 @@ const isAiSidebarOpen = ref(true);
 const isLeftSidebarCollapsed = ref(false);
 const isTabSidebarCollapsed = ref(true);
 
+function toggleTabSidebar(tabId: 'pipeline' | 'script' | 'audio' | 'captions') {
+  if (!isTabSidebarCollapsed.value && rightTab.value === tabId) {
+    isTabSidebarCollapsed.value = true;
+  } else {
+    rightTab.value = tabId;
+    isTabSidebarCollapsed.value = false;
+  }
+}
+
 watch(isAiSidebarOpen, (open) => {
   if (open) {
     isTabSidebarCollapsed.value = true;
@@ -327,6 +336,34 @@ async function queueServerRender() {
   } catch (err: any) {
     pipelineStore.setStepStatus('b8', 'error');
     toast.error(err?.message || 'Server render job failed');
+  }
+}
+
+const isUploadingRenderVersion = ref(false);
+
+async function uploadLocalRenderToVersions() {
+  if (!renderReviewUrl.value || !activeEpisodeId.value) return;
+  isUploadingRenderVersion.value = true;
+  try {
+    let blob: Blob | undefined;
+    if (renderReviewUrl.value.startsWith('blob:')) {
+      const resp = await fetch(renderReviewUrl.value);
+      blob = await resp.blob();
+    }
+    const currentLang = renderReviewSelectedLang.value || seriesStore.currentSeries?.language || 'en-US';
+    await seriesStore.addRenderVersion(seriesId.value, activeEpisodeId.value, {
+      language: currentLang,
+      voice: `Rendered Audio (${currentLang})`,
+      subtitles: [`Caption: ${currentLang} (Burned-in)`],
+      resolution: '1080x1920 (9:16 Vertical HD)',
+      thumbnail_url: renderReviewThumbnail.value,
+      video_url: renderReviewUrl.value.startsWith('blob:') ? '' : renderReviewUrl.value,
+    }, blob);
+    toast.success(t('toast.renderVersionUploaded', 'Rendered video uploaded to Render Versions successfully!'));
+  } catch (err: any) {
+    toast.error(t('toast.uploadFailed', 'Failed to upload render version: ') + (err?.message || ''));
+  } finally {
+    isUploadingRenderVersion.value = false;
   }
 }
 
@@ -999,8 +1036,8 @@ onUnmounted(() => {
                 <el-button circle
                   plan bg 
                   icon="Upload"
-                  :title="t('common.save', 'Save')"
-                  @click="saveAllWorkspaceData">
+                  :title="t('common.export', 'Export Video')"
+                  @click="isExportModalOpen = true">
                 </el-button>
 
                 <el-button 
@@ -1259,11 +1296,11 @@ onUnmounted(() => {
                     ]"
                     :key="tab.id"
                     circle
-                    :type="rightTab === tab.id ? 'primary' : 'info'"
-                    :text="rightTab !== tab.id" bg
+                    :type="(!isTabSidebarCollapsed && rightTab === tab.id) ? 'primary' : 'info'"
+                    :text="isTabSidebarCollapsed || rightTab !== tab.id" bg
                     :title="tab.label"
                     class="transition-transform hover:scale-105 !m-0 !p-2.5"
-                    @click="rightTab = (tab.id as any); isTabSidebarCollapsed = false"
+                    @click="toggleTabSidebar(tab.id as any)"
                   >
                     <el-icon :size="16"><component :is="tab.icon" /></el-icon>
                   </el-button>
@@ -1451,8 +1488,17 @@ onUnmounted(() => {
           <el-icon class="is-loading text-2xl mb-2"><Loading /></el-icon>
           <p>{{ t('workspace.waitingForRender') }}</p>
         </div>
-        <div class="flex gap-2 justify-end">
+        <div class="flex flex-wrap gap-2 justify-end">
           <el-button @click="isRenderReviewOpen = false">{{ t('common.close') }}</el-button>
+          <el-button
+            v-if="renderReviewUrl"
+            type="warning"
+            icon="Upload"
+            :loading="isUploadingRenderVersion"
+            @click="uploadLocalRenderToVersions"
+          >
+            Upload to Render Versions
+          </el-button>
           <el-button
             v-if="renderReviewUrl"
             type="success"

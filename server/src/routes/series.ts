@@ -8,6 +8,12 @@ import { nanoid } from 'nanoid';
 import { getAuthUser, getUserId } from '~/utils/auth.js';
 import { normalizeSceneEntity, normalizeLocationAsset, normalizePropAsset, normalizeCharacterEntity } from '../utils/sceneNormalizer.js';
 import type { LocationAsset, PropAsset, SceneEntity, CharacterSeriesEntity } from '@/types.js';
+import multer from 'multer';
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB max for video renders
+});
 
 const router = Router();
 
@@ -203,7 +209,7 @@ router.put('/:id/characters', async (req: Request, res: Response): Promise<void>
 router.put('/:id/episodes/:epId', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id: seriesId, epId } = req.params;
-    const { scenes, title, synopsis, language_tracks, thumbnail_url, cover_image, status, dubbing_settings, caption_settings, caption_languages, dubbing_languages } = req.body;
+    const { scenes, title, synopsis, language_tracks, thumbnail_url, cover_image, status, dubbing_settings, caption_settings, caption_languages, dubbing_languages, render_versions, video_urls, video_url } = req.body;
     const db = await getDatabaseProvider();
 
     const episodes = await db.getEpisodesBySeriesId(seriesId as string);
@@ -230,6 +236,9 @@ router.put('/:id/episodes/:epId', async (req: Request, res: Response): Promise<v
     if (caption_settings !== undefined) updates.caption_settings = caption_settings;
     if (caption_languages !== undefined) updates.caption_languages = caption_languages;
     if (dubbing_languages !== undefined) updates.dubbing_languages = dubbing_languages;
+    if (render_versions !== undefined) updates.render_versions = render_versions;
+    if (video_urls !== undefined) updates.video_urls = video_urls;
+    if (video_url !== undefined) updates.video_url = video_url;
 
     const updatedEpisode = await db.updateEpisode(ep.id, updates);
     const resultEpisode = {
@@ -239,6 +248,117 @@ router.put('/:id/episodes/:epId', async (req: Request, res: Response): Promise<v
     ok(res, { episode: resultEpisode, message: 'Episode updated successfully' });
   } catch (err: any) {
     fail(res, 500, err.message || 'Internal server error');
+  }
+});
+
+// POST /api/series/:id/episodes/:epId/render-versions — Add / upload a rendered video version
+router.post('/:id/episodes/:epId/render-versions', upload.single('file'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id: seriesId, epId } = req.params;
+    const db = await getDatabaseProvider();
+
+    const episodes = await db.getEpisodesBySeriesId(seriesId as string);
+    const ep = episodes.find(e => e.id === epId || String(e.episode_number) === String(epId));
+    if (!ep) {
+      fail(res, 404, 'Episode not found');
+      return;
+    }
+
+    let finalVideoUrl = req.body.video_url || req.body.url || '';
+    let finalFileSize = req.body.file_size || '';
+
+    // If a video file was uploaded directly via multipart/form-data
+    if (req.file) {
+      const file = req.file;
+      const mime = file.mimetype || 'video/mp4';
+      const ext = file.originalname.split('.').pop() || 'mp4';
+      const s3Result = await StorageFactory.uploadMedia(file.buffer, 'videos', ext, mime);
+      finalVideoUrl = `/api/assets/file/${s3Result.key}`;
+      finalFileSize = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    if (!finalVideoUrl) {
+      fail(res, 400, 'video_url or file is required');
+      return;
+    }
+
+    const lang = req.body.language || 'en-US';
+    const versionId = req.body.version_id || `ver_${ep.id}_${lang}_${nanoid(6)}`;
+    const versionEntity = {
+      id: versionId,
+      version_id: versionId,
+      language: lang,
+      languages: [lang],
+      voice: req.body.voice || `Audio (${lang})`,
+      subtitles: Array.isArray(req.body.subtitles) ? req.body.subtitles : (req.body.subtitles ? [req.body.subtitles] : [`Caption: ${lang} (Burned-in)`]),
+      resolution: req.body.resolution || '1080x1920 (9:16 Vertical HD)',
+      video_url: finalVideoUrl,
+      url: finalVideoUrl,
+      thumbnail_url: req.body.thumbnail_url || ep.cover_image || ep.scenes?.[0]?.storyboard_frame_url || '/images/dashboard/poster-1.jpg',
+      duration: Number(req.body.duration) || (ep.scenes?.reduce((acc: number, sc: any) => acc + (sc.duration_seconds || 5), 0)) || 60,
+      file_size: finalFileSize || req.body.file_size || '24.5 MB',
+      rendered_at: new Date().toISOString(),
+      status: 'ready',
+    };
+
+    const existingVersions = Array.isArray(ep.render_versions) ? [...ep.render_versions] : [];
+    const existingIndex = existingVersions.findIndex((v: any) => (v.version_id === versionId || v.id === versionId));
+    if (existingIndex >= 0) {
+      existingVersions[existingIndex] = versionEntity;
+    } else {
+      existingVersions.unshift(versionEntity);
+    }
+
+    const videoUrls = (typeof ep.video_urls === 'object' && ep.video_urls) ? { ...ep.video_urls } : {};
+    videoUrls[lang] = finalVideoUrl;
+
+    const updatedEpisode = await db.updateEpisode(ep.id, {
+      render_versions: existingVersions,
+      video_urls: videoUrls,
+      video_url: ep.video_url || finalVideoUrl,
+    });
+
+    ok(res, { version: versionEntity, episode: updatedEpisode }, 'Render version added successfully', 201);
+  } catch (err: any) {
+    Logger.error(`[AddRenderVersion] Failed: ${err.message}`);
+    fail(res, 500, err.message || 'Failed to add render version');
+  }
+});
+
+// DELETE /api/series/:id/episodes/:epId/render-versions/:versionId — Remove a rendered version
+router.delete('/:id/episodes/:epId/render-versions/:versionId', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id: seriesId, epId, versionId } = req.params;
+    const db = await getDatabaseProvider();
+
+    const episodes = await db.getEpisodesBySeriesId(seriesId as string);
+    const ep = episodes.find(e => e.id === epId || String(e.episode_number) === String(epId));
+    if (!ep) {
+      fail(res, 404, 'Episode not found');
+      return;
+    }
+
+    const existingVersions = Array.isArray(ep.render_versions) ? [...ep.render_versions] : [];
+    const remainingVersions = existingVersions.filter((v: any) => (v.version_id !== versionId && v.id !== versionId));
+
+    const videoUrls = (typeof ep.video_urls === 'object' && ep.video_urls) ? { ...ep.video_urls } : {};
+    for (const [l, u] of Object.entries(videoUrls)) {
+      const match = existingVersions.find((v: any) => (v.version_id === versionId || v.id === versionId) && (v.video_url === u || v.url === u));
+      if (match) {
+        delete videoUrls[l];
+      }
+    }
+
+    const updatedEpisode = await db.updateEpisode(ep.id, {
+      render_versions: remainingVersions,
+      video_urls: videoUrls,
+      video_url: remainingVersions.length > 0 ? (remainingVersions[0].video_url || remainingVersions[0].url) : undefined,
+    });
+
+    ok(res, { render_versions: remainingVersions, episode: updatedEpisode }, 'Render version deleted successfully');
+  } catch (err: any) {
+    Logger.error(`[DeleteRenderVersion] Failed: ${err.message}`);
+    fail(res, 500, err.message || 'Failed to delete render version');
   }
 });
 

@@ -6,6 +6,7 @@ import { useSeriesStore } from '@/stores/useSeriesStore';
 import { useAuthStore } from '@/stores/useAuthStore';
 import http from '@/utils/http';
 import { toast } from 'vue-sonner';
+import { ElMessageBox } from 'element-plus';
 import type {
   PlatformAccount,
   Series,
@@ -521,6 +522,119 @@ async function copyLink(url: string): Promise<void> {
   }
 }
 
+// ─── Upload Local Video to Render Version ──────────────────────────────
+const isUploadModalOpen = ref(false);
+const isUploadingVersion = ref(false);
+const uploadForm = ref({
+  episodeId: '',
+  language: 'en-US',
+  file: null as File | null,
+});
+
+function openUploadModal() {
+  uploadForm.value = {
+    episodeId: seriesStore.activeEpisodeId || episodes.value[0]?.id || '',
+    language: series.value?.language || 'en-US',
+    file: null,
+  };
+  isUploadModalOpen.value = true;
+}
+
+function onFileSelected(e: Event) {
+  const target = e.target as HTMLInputElement;
+  if (target.files && target.files[0]) {
+    uploadForm.value.file = target.files[0];
+  }
+}
+
+async function submitUploadVersion() {
+  if (!uploadForm.value.episodeId) {
+    toast.error('Please select an episode');
+    return;
+  }
+  if (!uploadForm.value.file) {
+    toast.error('Please select a video file (.mp4)');
+    return;
+  }
+  isUploadingVersion.value = true;
+  try {
+    const sId = series.value?.id;
+    if (!sId) throw new Error('Series ID missing');
+    await seriesStore.addRenderVersion(sId, uploadForm.value.episodeId, {
+      language: uploadForm.value.language,
+      voice: `Uploaded Video (${uploadForm.value.language})`,
+      subtitles: [`Caption: ${uploadForm.value.language}`],
+      resolution: '1080x1920 (9:16 Vertical HD)',
+    }, uploadForm.value.file);
+
+    toast.success('Rendered video uploaded successfully!');
+    isUploadModalOpen.value = false;
+    await loadRenderedVersions();
+  } catch (err: any) {
+    toast.error('Upload failed: ' + (err?.message || 'Unknown error'));
+  } finally {
+    isUploadingVersion.value = false;
+  }
+}
+
+async function handleDeleteVersion(ver: RenderedVideoVersion) {
+  try {
+    await ElMessageBox.confirm(
+      `Are you sure you want to delete this rendered version [EP ${ver.episodeNumber} - ${ver.language}]?`,
+      'Delete Rendered Version',
+      {
+        confirmButtonText: 'Delete',
+        cancelButtonText: 'Cancel',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger',
+      }
+    );
+
+    const sId = series.value?.id;
+    if (!sId) return;
+    await seriesStore.removeRenderVersion(sId, ver.episodeId, ver.id);
+    renderedVersions.value = renderedVersions.value.filter(v => v.id !== ver.id);
+    selectedVersionIds.value = selectedVersionIds.value.filter(id => id !== ver.id);
+    toast.success('Rendered version removed successfully!');
+  } catch (err: any) {
+    if (err !== 'cancel') {
+      toast.error('Failed to delete version: ' + (err?.message || ''));
+    }
+  }
+}
+
+async function handleDeleteSelectedVersions() {
+  if (selectedVersionIds.value.length === 0) return;
+  try {
+    await ElMessageBox.confirm(
+      `Are you sure you want to delete ${selectedVersionIds.value.length} selected rendered version(s)?`,
+      'Delete Selected Versions',
+      {
+        confirmButtonText: 'Delete All Selected',
+        cancelButtonText: 'Cancel',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger',
+      }
+    );
+
+    const sId = series.value?.id;
+    if (!sId) return;
+    for (const verId of [...selectedVersionIds.value]) {
+      const ver = renderedVersions.value.find(v => v.id === verId);
+      if (ver) {
+        await seriesStore.removeRenderVersion(sId, ver.episodeId, ver.id);
+      }
+    }
+    renderedVersions.value = renderedVersions.value.filter(v => !selectedVersionIds.value.includes(v.id));
+    selectedVersionIds.value = [];
+    toast.success('Selected rendered versions removed successfully!');
+  } catch (err: any) {
+    if (err !== 'cancel') {
+      toast.error('Failed to delete versions: ' + (err?.message || ''));
+    }
+  }
+}
+
 // Execute Publish or Schedule
 async function executeDeploy(): Promise<void> {
   if (selectedVersionIds.value.length === 0) {
@@ -720,6 +834,28 @@ watch(isOpen, (open: boolean) => {
             <el-button
               size="small"
               type="primary"
+              round
+              icon="Upload"
+              @click="openUploadModal"
+            >
+              Upload Local Video
+            </el-button>
+
+            <el-button
+              v-if="selectedVersionIds.length > 0"
+              size="small"
+              type="danger"
+              plain
+              round
+              icon="Delete"
+              @click="handleDeleteSelectedVersions"
+            >
+              Delete Selected ({{ selectedVersionIds.length }})
+            </el-button>
+
+            <el-button
+              size="small"
+              type="primary"
               plain
               round
               @click="selectAllVersions"
@@ -819,30 +955,45 @@ watch(isOpen, (open: boolean) => {
                 </div>
               </div>
 
-              <!-- Quick Action Bar: Preview & Download Buttons -->
-              <div class="flex items-center gap-2 pt-2 mt-1 border-t" style="border-color: var(--el-border-color-lighter);" @click.stop>
-                <el-button
-                  size="small"
-                  type="primary"
-                  plain
-                  round
-                  class="!text-[11px] !px-2.5 !py-1 !h-6"
-                  icon="VideoPlay"
-                  @click="openVideoPreview(ver.videoUrl, `[EP ${ver.episodeNumber}] ${ver.episodeTitle}`)"
-                >
-                  Preview
-                </el-button>
+              <!-- Quick Action Bar: Preview, Download, & Delete Buttons -->
+              <div class="flex items-center justify-between pt-2 mt-1 border-t" style="border-color: var(--el-border-color-lighter);" @click.stop>
+                <div class="flex items-center gap-1.5">
+                  <el-button
+                    size="small"
+                    type="primary"
+                    plain
+                    round
+                    class="!text-[11px] !px-2.5 !py-1 !h-6"
+                    icon="VideoPlay"
+                    @click="openVideoPreview(ver.videoUrl, `[EP ${ver.episodeNumber}] ${ver.episodeTitle}`)"
+                  >
+                    Preview
+                  </el-button>
+
+                  <el-button
+                    size="small"
+                    type="success"
+                    plain
+                    round
+                    class="!text-[11px] !px-2.5 !py-1 !h-6"
+                    icon="Download"
+                    @click="downloadVideo(ver.videoUrl, `${series?.title || 'Series'}_EP${ver.episodeNumber}_${ver.language}`)"
+                  >
+                    Download MP4
+                  </el-button>
+                </div>
 
                 <el-button
                   size="small"
-                  type="success"
+                  type="danger"
                   plain
                   round
-                  class="!text-[11px] !px-2.5 !py-1 !h-6"
-                  icon="Download"
-                  @click="downloadVideo(ver.videoUrl, `${series?.title || 'Series'}_EP${ver.episodeNumber}_${ver.language}`)"
+                  class="!text-[11px] !px-2 !py-1 !h-6"
+                  icon="Delete"
+                  title="Delete Rendered Version"
+                  @click="handleDeleteVersion(ver)"
                 >
-                  Download MP4
+                  Delete
                 </el-button>
               </div>
             </div>
@@ -1352,6 +1503,69 @@ watch(isOpen, (open: boolean) => {
           <el-icon><Download /></el-icon>
           <span>Download High-Res Cover</span>
         </a>
+      </div>
+    </template>
+  </el-dialog>
+
+  <!-- ── Quick Upload Local Video Modal ──────────────────────────────── -->
+  <el-dialog
+    v-model="isUploadModalOpen"
+    title="Upload Local Rendered Video"
+    width="480px"
+    append-to-body
+    class="rounded-2xl"
+  >
+    <div class="space-y-4 py-2">
+      <div>
+        <label class="block text-xs font-semibold mb-1.5" style="color: var(--el-text-color-primary);">Select Target Episode</label>
+        <el-select v-model="uploadForm.episodeId" class="w-full" placeholder="Select Episode">
+          <el-option
+            v-for="ep in episodes"
+            :key="ep.id"
+            :label="`Episode ${getEpisodeNumber(ep)}: ${ep.title}`"
+            :value="ep.id"
+          />
+        </el-select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold mb-1.5" style="color: var(--el-text-color-primary);">Audio / Subtitle Language</label>
+        <el-select v-model="uploadForm.language" class="w-full" placeholder="Select Language">
+          <el-option
+            v-for="(name, code) in LANGUAGE_NAMES"
+            :key="code"
+            :label="`${name} (${code})`"
+            :value="code"
+          />
+        </el-select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold mb-1.5" style="color: var(--el-text-color-primary);">Video File (.mp4, .mov, .webm)</label>
+        <input
+          type="file"
+          accept="video/mp4,video/quicktime,video/webm"
+          class="w-full text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90 cursor-pointer p-2 rounded-xl border"
+          style="border-color: var(--el-border-color);"
+          @change="onFileSelected"
+        />
+        <p v-if="uploadForm.file" class="text-[11px] text-emerald-500 mt-1 font-medium">
+          Selected: {{ uploadForm.file.name }} ({{ (uploadForm.file.size / (1024 * 1024)).toFixed(1) }} MB)
+        </p>
+      </div>
+    </div>
+
+    <template #footer>
+      <div class="flex justify-end gap-2">
+        <el-button @click="isUploadModalOpen = false">Cancel</el-button>
+        <el-button
+          type="primary"
+          :loading="isUploadingVersion"
+          :disabled="!uploadForm.file || !uploadForm.episodeId"
+          @click="submitUploadVersion"
+        >
+          Upload &amp; Save Version
+        </el-button>
       </div>
     </template>
   </el-dialog>

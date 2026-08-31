@@ -10,6 +10,8 @@ import {
 import { getDatabaseProvider } from '../database/index.js';
 import { requireAuth } from '../middleware/RequireAuth.js';
 import { aiProviderRouter } from '../integrations/ai/router/AIProviderRouter.js';
+import { OAuthService } from '../services/OAuthService.js';
+import { StorageFactory } from '../services/storage/StorageFactory.js';
 
 export const publishRouter = Router();
 
@@ -490,7 +492,7 @@ publishRouter.post('/multi-platform', requireAuth, async (req: Request, res: Res
         const fullCaption = `${caption || ''} ${(hashtags || []).map((h: string) => (h.startsWith('#') ? h : `#${h}`)).join(' ')}`.trim();
         const db = await getDatabaseProvider();
         const ep = await db.getEpisodeById(episodeId);
-        const targetVideoUrl = videoUrl || (ep?.video_urls && (ep.video_urls[req.body.languageCode || 'en-US'] || Object.values(ep.video_urls)[0]));
+        const targetVideoUrl = videoUrl || req.body.video_url || (ep?.render_versions?.[0]?.video_url || ep?.render_versions?.[0]?.url) || (ep?.video_urls && (ep.video_urls[req.body.languageCode || 'en-US'] || Object.values(ep.video_urls)[0])) || ep?.video_url;
 
         const accounts = rawChannels.filter((a: PlatformAccount) => platforms.some((p: string) => p.toLowerCase() === (a.provider || '').toLowerCase()));
 
@@ -504,10 +506,28 @@ publishRouter.post('/multi-platform', requireAuth, async (req: Request, res: Res
             jobState.progress = Math.round(15 + ((i + 1) / accounts.length) * 80);
           }
 
-          if (platform === 'youtube' && account.access_token) {
-            // YouTube Data API v3 Video Upload
-            const ytRes = await axios.post(
-              'https://www.googleapis.com/youtube/v3/videos?part=snippet,status',
+          const validToken = await OAuthService.getValidAccessToken(account, (req as any).user?.id || (req as any).user?.userId);
+
+          if (platform === 'youtube' && validToken) {
+            let videoId: string | null = null;
+
+            if (!targetVideoUrl) {
+              throw new Error(`No rendered video file available for Episode ${episodeId || ''} to upload.`);
+            }
+
+            const mediaRes = await StorageFactory.getFileBuffer(targetVideoUrl);
+            if (!mediaRes || !mediaRes.buffer || mediaRes.buffer.length === 0) {
+              throw new Error(`Could not load video buffer from ${targetVideoUrl}`);
+            }
+
+            // Always enforce a valid video MIME type for YouTube (never 'text/plain')
+            const videoMime = (mediaRes.mimeType && mediaRes.mimeType.startsWith('video/'))
+              ? mediaRes.mimeType
+              : (targetVideoUrl.includes('.webm') ? 'video/webm' : (targetVideoUrl.includes('.mov') ? 'video/quicktime' : 'video/mp4'));
+
+            // 1. Initiate Resumable Upload
+            const initRes = await axios.post(
+              'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',
               {
                 snippet: {
                   title: caption?.slice(0, 100) || `Shorts Episode ${episodeId}`,
@@ -521,17 +541,39 @@ publishRouter.post('/multi-platform', requireAuth, async (req: Request, res: Res
                 },
               },
               {
-                headers: { Authorization: `Bearer ${account.access_token}` },
+                headers: {
+                  Authorization: `Bearer ${validToken}`,
+                  'Content-Type': 'application/json; charset=UTF-8',
+                  'X-Upload-Content-Length': mediaRes.buffer.length.toString(),
+                  'X-Upload-Content-Type': videoMime,
+                },
                 timeout: 30000,
               }
             );
 
-            const videoId = ytRes.data?.id;
+            const uploadUrl = initRes.headers['location'] || initRes.headers['Location'];
+            if (!uploadUrl) {
+              throw new Error('YouTube Resumable Upload did not return an upload URL location.');
+            }
+
+            // 2. Upload video binary
+            const uploadRes = await axios.put(uploadUrl, mediaRes.buffer, {
+              headers: {
+                'Content-Type': videoMime,
+                'Content-Length': mediaRes.buffer.length.toString(),
+              },
+              maxContentLength: Infinity,
+              maxBodyLength: Infinity,
+              timeout: 300000,
+            });
+
+            videoId = uploadRes.data?.id;
+
             if (!videoId) {
               throw new Error('YouTube API did not return a valid video ID');
             }
             publishedUrls['youtube'] = `https://youtube.com/shorts/${videoId}`;
-          } else if (platform === 'facebook' && account.access_token) {
+          } else if (platform === 'facebook' && validToken) {
             // Facebook Graph API v18.0 Video Post
             const fbRes = await axios.post(
               `https://graph.facebook.com/v18.0/${encodeURIComponent(account.channel_id || account.id)}/videos`,
@@ -541,7 +583,7 @@ publishRouter.post('/multi-platform', requireAuth, async (req: Request, res: Res
                 file_url: targetVideoUrl,
               },
               {
-                params: { access_token: account.access_token },
+                params: { access_token: validToken },
                 timeout: 30000,
               }
             );
@@ -551,7 +593,7 @@ publishRouter.post('/multi-platform', requireAuth, async (req: Request, res: Res
               throw new Error('Facebook API did not return a valid post ID');
             }
             publishedUrls['facebook'] = `https://facebook.com/reel/${postId}`;
-          } else if (platform === 'tiktok' && account.access_token) {
+          } else if (platform === 'tiktok' && validToken) {
             // TikTok Content Posting API v2
             const ttRes = await axios.post(
               'https://open.tiktokapis.com/v2/post/publish/video/init/',
@@ -569,7 +611,7 @@ publishRouter.post('/multi-platform', requireAuth, async (req: Request, res: Res
                 },
               },
               {
-                headers: { Authorization: `Bearer ${account.access_token}` },
+                headers: { Authorization: `Bearer ${validToken}` },
                 timeout: 30000,
               }
             );
@@ -579,7 +621,7 @@ publishRouter.post('/multi-platform', requireAuth, async (req: Request, res: Res
               throw new Error('TikTok API did not return a publish ID');
             }
             publishedUrls['tiktok'] = `https://tiktok.com/@${encodeURIComponent(account.channel_name || 'creator')}/video/${publishId}`;
-          } else if (platform === 'instagram' && account.access_token) {
+          } else if (platform === 'instagram' && validToken) {
             // Instagram Reels Container & Publish
             const igContainer = await axios.post(
               `https://graph.facebook.com/v18.0/${encodeURIComponent(account.channel_id || account.id)}/media`,
@@ -590,7 +632,7 @@ publishRouter.post('/multi-platform', requireAuth, async (req: Request, res: Res
                 share_to_feed: true,
               },
               {
-                params: { access_token: account.access_token },
+                params: { access_token: validToken },
                 timeout: 30000,
               }
             );

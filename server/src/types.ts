@@ -251,17 +251,35 @@ export interface DubbingSettings {
   speed?: number;
   pitch?: number;
   volume?: number;
-  target_languages?: string[];
+  languages?: string[];
+  primary_language?: string;
+  enable_bubbing?: boolean;
+  auto_ducking?: boolean;
+  voice_preset?: string;
+  voice_intensity?: number;
+  voice_pacing?: number;
 }
 
 export interface CaptionSettings {
+  languages?: string[];
+  burn_in?: boolean;
+  enable_caption?: boolean;
+  caption_style?: 'pop' | 'minimal' | 'comic' | 'neon' | 'karaoke';
   font_family?: string;
   font_size?: number;
-  font_color?: string;
-  background_color?: string;
-  position?: 'bottom' | 'top' | 'middle';
-  burned_in?: boolean;
-  languages?: string[];
+  font_url?: string;
+  text_color?: string;
+  word_highlight_color?: string;
+  outline_color?: string;
+  outline_weight?: number;
+  vertical_pos?: number;
+  vertical_align?: 'top' | 'center' | 'bottom';
+  text_align?: 'left' | 'center' | 'right';
+  words_per_line?: 'multiple' | 'single';
+  text_case?: 'none' | 'uppercase' | 'lowercase';
+  enable_background_box?: boolean;
+  bg_color?: string;
+  highlight_animate?: boolean;
 }
 
 export interface EpisodeRenderVersion {

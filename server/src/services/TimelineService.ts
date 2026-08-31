@@ -1,5 +1,5 @@
 import { getDatabaseProvider } from '../database/index.js';
-import { EpisodeEntity, SceneEntity, SeriesEntity } from '../database/IDatabaseProvider.js';
+import { CaptionSettings, EpisodeEntity, SceneEntity, SeriesEntity } from '../database/IDatabaseProvider.js';
 import { Logger } from '../utils/logger.js';
 import { normalizeSceneEntity } from '../utils/sceneNormalizer.js';
 import { cleanDialogueLine } from '../utils/captionAlignment.js';
@@ -395,38 +395,80 @@ export class TimelineService {
         if (!Array.isArray(voTrack.clipIds)) voTrack.clipIds = [];
       }
 
-      // 2. Ensure Caption Track exists
+      // 2. Ensure Caption Track exists with episode caption_settings
+      const capSettings: CaptionSettings | undefined = episode.caption_settings;
       const captionWidth = Math.round(canvasWidth * 0.86);
       const captionHeight = 120;
       const left = Math.round((canvasWidth - captionWidth) / 2);
-      const top = canvasHeight - 450;
+
+      const verticalPosPercent = typeof capSettings?.vertical_pos === 'number'
+        ? capSettings.vertical_pos
+        : (capSettings?.vertical_align === 'top' ? 15 : (capSettings?.vertical_align === 'center' ? 50 : 80));
+      const top = Math.round((canvasHeight * (verticalPosPercent / 100)) - captionHeight / 2);
+
+      const CAPTION_FONT_URL_MAP: Record<string, string> = {
+        'Roboto-Bold': 'https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWuYjammT.ttf',
+        'Roboto-Regular': 'https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWubEbWmT.ttf',
+        'Roboto': 'https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWubEbWmT.ttf',
+        'Outfit-Bold': 'https://fonts.gstatic.com/s/outfit/v15/QGYyz_MVcBeNP4NjuGObqx1XmO1I4deyC4E.ttf',
+        'Outfit-Regular': 'https://fonts.gstatic.com/s/outfit/v15/QGYyz_MVcBeNP4NjuGObqx1XmO1I4TC1C4E.ttf',
+        'Outfit': 'https://fonts.gstatic.com/s/outfit/v15/QGYyz_MVcBeNP4NjuGObqx1XmO1I4TC1C4E.ttf',
+        'Bangers-Regular': 'https://fonts.gstatic.com/s/bangers/v25/FeVQS0BTqb0h60ACL5k.ttf',
+        'Bangers': 'https://fonts.gstatic.com/s/bangers/v25/FeVQS0BTqb0h60ACL5k.ttf',
+        'Inter': 'https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf',
+        'Inter-Regular': 'https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf',
+        'Inter-Bold': 'https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf',
+      };
+
+      const fontFamily = capSettings?.font_family || 'Outfit-Regular';
+      const fontSize = typeof capSettings?.font_size === 'number' ? capSettings.font_size : 44;
+      const textColor = capSettings?.text_color || '#ffffff';
+      const activeColor = capSettings?.word_highlight_color || '#FFD700';
+      const outlineWeight = typeof capSettings?.outline_weight === 'number' ? capSettings.outline_weight : 3;
+      const outlineColor = capSettings?.outline_color || '#000000';
+      const textAlign = capSettings?.text_align || 'center';
+      const textCase = capSettings?.text_case || 'uppercase';
+      const wordsPerLine = capSettings?.words_per_line || 'multiple';
+      const bgBox = Boolean(capSettings?.enable_background_box);
+      const bgColor = capSettings?.bg_color || 'rgba(0, 0, 0, 0.7)';
+      const isVisible = isPrimary && (capSettings?.enable_caption !== false);
+      const fontUrl = CAPTION_FONT_URL_MAP[fontFamily] || CAPTION_FONT_URL_MAP['Outfit-Regular'];
 
       const defaultCaptionConfig = {
         captions: {
           style: {
-            fontSize: 44,
-            fontFamily: 'Inter',
+            fontSize,
+            fontFamily,
             fontWeight: '700',
             fontStyle: 'normal',
-            color: '#ffffff',
-            align: 'center',
+            color: textColor,
+            align: textAlign,
+            textAlign,
+            textCase,
             wordWrap: true,
             wordWrapWidth: captionWidth,
             breakWords: true,
-            fontUrl: 'https://fonts.gstatic.com/s/inter/v20/UcCo3FwrK3iLTcvtYwYL8g.woff2',
-            stroke: { color: '#000000', width: 4 },
+            fontUrl,
+            stroke: outlineWeight > 0 ? { color: outlineColor, width: outlineWeight } : undefined,
             shadow: { color: '#000000', alpha: 0.5, blur: 4, offsetX: 2, offsetY: 2 },
+            background: bgBox ? { color: bgColor } : undefined,
+            backgroundColor: bgBox ? bgColor : undefined,
           },
           colors: {
-            active: { color: '#ffffff', background: '#FF5700' },
-            future: { color: '#ffffff' },
-            keyword: { color: '#ffffff', preserveAfterSpoken: true },
+            active: { color: activeColor, background: '#FF5700' },
+            future: { color: textColor },
+            keyword: { color: activeColor, preserveAfterSpoken: true },
           },
           positioning: {
             videoWidth: canvasWidth,
             videoHeight: canvasHeight,
           },
-          wordsPerLine: 'multiple',
+          wordsPerLine,
+          wordAnimation: capSettings?.highlight_animate !== false ? {
+            type: 'scale',
+            application: 'active',
+            value: 1.15,
+          } : undefined,
         },
       };
 
@@ -438,7 +480,7 @@ export class TimelineService {
           type: 'Caption',
           accepts: ['caption', 'Caption'],
           languageCode: langCode,
-          visible: isPrimary,
+          visible: isVisible,
           config: defaultCaptionConfig,
           clipIds: [],
         };
@@ -446,7 +488,8 @@ export class TimelineService {
         capTrack = newCapTrack;
       } else {
         capTrack.languageCode = langCode;
-        if (!capTrack.config) capTrack.config = defaultCaptionConfig;
+        capTrack.visible = isVisible;
+        capTrack.config = defaultCaptionConfig;
         if (!Array.isArray(capTrack.clipIds)) capTrack.clipIds = [];
       }
 
@@ -580,20 +623,37 @@ export class TimelineService {
                 metadata: {
                   sourceClipId: targetSourceClipId,
                 },
-                wordsPerLine: 'multiple',
+                wordsPerLine,
+                textCase,
                 timing: {
                   display: { from: cueFromUs, to: cueToUs },
                   trim: { from: 0, to: cueDurUs },
                   duration: cueDurUs,
                   playbackRate: 1,
                 },
-                visible: isPrimary,
+                visible: isVisible,
                 caption: {
                   words: cueWords,
+                  colors: {
+                    active: { color: activeColor },
+                    keyword: { color: activeColor },
+                  },
+                  wordAnimation: capSettings?.highlight_animate !== false ? {
+                    type: 'scale',
+                    application: 'active',
+                    value: 1.15,
+                  } : undefined,
                 },
                 style: {
-                  color: '#ffffff',
-                  align: 'center',
+                  fontFamily,
+                  fontSize,
+                  color: textColor,
+                  align: textAlign,
+                  textAlign,
+                  textCase,
+                  fontUrl,
+                  stroke: outlineWeight > 0 ? { color: outlineColor, width: outlineWeight } : undefined,
+                  backgroundColor: bgBox ? bgColor : undefined,
                 },
                 locked: false,
                 effects: [],

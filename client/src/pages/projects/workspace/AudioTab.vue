@@ -115,11 +115,11 @@ const activeTrackCodes = computed(() => seriesStore.dubbingLanguages);
 // Dubbing settings hydration from active episode
 watch(() => seriesStore.activeEpisode?.dubbing_settings, (settings) => {
   if (settings) {
-    if (settings.isEnableDubbing !== undefined) isEnableDubbing.value = settings.isEnableDubbing;
-    if (settings.autoDucking !== undefined) autoDucking.value = settings.autoDucking;
-    if (settings.selectedVoicePreset) selectedVoicePreset.value = settings.selectedVoicePreset;
-    if (settings.voiceIntensity !== undefined) voiceIntensity.value = settings.voiceIntensity;
-    if (settings.voicePacing !== undefined) voicePacing.value = settings.voicePacing;
+    if (settings?.enable_dubbing !== undefined) isEnableDubbing.value = settings.enable_dubbing;
+    if (settings?.auto_ducking !== undefined) autoDucking.value = settings.auto_ducking;
+    if (settings?.voice_preset) selectedVoicePreset.value = settings.voice_preset;
+    if (settings?.voice_intensity !== undefined) voiceIntensity.value = settings.voice_intensity;
+    if (settings?.voice_pacing !== undefined) voicePacing.value = settings.voice_pacing;
   }
 }, { immediate: true, deep: true });
 
@@ -128,11 +128,11 @@ function persistDubbingSettings() {
   const sId = seriesStore.currentSeries?.id;
   if (!epId) return;
   seriesStore.updateEpisodeDubbingSettings(epId, {
-    isEnableDubbing: isEnableDubbing.value,
-    autoDucking: autoDucking.value,
-    selectedVoicePreset: selectedVoicePreset.value,
-    voiceIntensity: voiceIntensity.value,
-    voicePacing: voicePacing.value,
+    enable_dubbing: isEnableDubbing.value,
+    auto_ducking: autoDucking.value,
+    voice_preset: selectedVoicePreset.value,
+    voice_intensity: voiceIntensity.value,
+    voice_pacing: voicePacing.value,
   });
   if (sId) seriesStore.saveEpisodeScenes(sId, epId);
 }

@@ -291,37 +291,37 @@ export interface DubbingSettings {
   voice_name?: string;
   voice_id?: string;
   speed?: number;
-  target_languages?: string[];
+  languages?: string[];
   primary_language?: string;
-  is_enable_bubbing?: boolean;
+  enable_dubbing?: boolean;
   auto_ducking?: boolean;
-  selected_voice_preset?: string;
+  voice_preset?: string;
   voice_intensity?: number;
   voice_pacing?: number;
-  [key: string]: any;
+  // [key: string]: any;
 }
 
 export interface CaptionSettings {
   languages?: string[];
   burn_in?: boolean;
-  style_preset?: string;
-  is_enable_caption?: boolean;
-  selected_caption_style?: string;
-  selected_font_family?: string;
-  caption_font_size?: number;
-  caption_text_color?: string;
-  active_word_highlight_color?: string;
-  caption_outline_color?: string;
-  caption_outline_weight?: number;
-  caption_vertical_pos?: number;
-  selected_vertical_align?: string;
-  selected_text_align?: string;
-  selected_words_per_line?: number;
-  selected_text_case?: string;
+  enable_caption?: boolean;
+  caption_style?: 'pop' | 'minimal' | 'comic' | 'neon' | 'karaoke';
+  font_family?: string;
+  font_size?: number;
+  font_url?: string;
+  text_color?: string;
+  word_highlight_color?: string;
+  outline_color?: string;
+  outline_weight?: number;
+  vertical_pos?: number;
+  vertical_align?: 'top' | 'center' | 'bottom';
+  text_align?: 'left' | 'center' | 'right';
+  words_per_line?: 'multiple' | 'single';
+  text_case?: 'none' | 'uppercase' | 'lowercase';
   enable_background_box?: boolean;
-  caption_bg_color?: string;
-  ai_highlight_animate?: boolean;
-  [key: string]: any;
+  bg_color?: string;
+  highlight_animate?: boolean;
+  // [key: string]: any;
 }
 
 export interface Episode {
